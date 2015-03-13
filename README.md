@@ -14,7 +14,7 @@
 - [openvim API](http://github.com/nfvlabs/openmano/raw/master/docs/openvim-api-0.5.pdf "openvim API")
 
 #License
-Check the [License](http://github.com/nfvlabs/openmano/blob/master/LICENSE.txt) file.
+Check the [License](https://github.com/nfvlabs/openmano/blob/master/LICENSE "license") file.
 
 #Contact
 For bug reports or clarification, contact [nfvlabs@tid.es](mailto:nfvlabs@tid.es "nfvlabs")
