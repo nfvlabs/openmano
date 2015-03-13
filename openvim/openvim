@@ -1,0 +1,882 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# PYTHON_ARGCOMPLETE_OK
+
+##
+# Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
+# This file is part of openmano
+# All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# For those usages not covered by the Apache License, Version 2.0 please
+# contact with: nfvlabs@tid.es
+##
+
+'''
+This is a client for managing the openvim server.
+Useful for human CLI management of items at openvim  
+'''
+__author__="Alfonso Tierno, Gerardo Garcia"
+__date__ ="$26-nov-2014 19:09:29$"
+__version__="0.1.04-r355"
+version_date="Mar 2015"
+name="openvim"
+
+from argcomplete.completers import FilesCompleter
+import os
+import argparse
+import argcomplete
+import requests
+import json
+import yaml
+from jsonschema import validate as js_v, exceptions as js_e
+
+global vim_config
+config_items=("HOST", "PORT", "ADMIN_PORT", "TENANT")
+show_at_verbose1=('status', 'created', 'path', 'last_error','description','hostId','progress',
+                 'ram','vcpus','type','shared','admin_state_up', 'enabled', 'ip_name')
+
+#template for creating new items
+template={
+    "port":{
+        "${}":[
+            "${name} provide a port name",
+            "${net_id} provide the network uuid (null):",
+            "${vlan} provide the vlan if any (null):",
+            "${port} provide the attached switch port (Te0/47)",
+            "${mac} provide the mac of external device if known (null):"
+        ],
+        "port":{
+            "name": "${name}",
+            "network_id": "${net_id null}",
+            "type": "external",
+            "binding:vlan": "${vlan null-int}",
+            "binding:switch_port": "${port}",
+            "mac_address": "${mac null}"
+        },
+    },
+    "network":{
+        "${}":[
+            "${name} provide a network name",
+            "${type} provide a type: bridge_data,bridge_man,data,ptp (data)",
+            "${shared} external network: true,false (true)",
+            "${phy} conected to: bridge:name,macvtap:iface,default (null)"
+        ],
+        "network":{
+            "name": "${name}",
+            "type": "${type}",
+            "provider:physical": "${phy null}",
+            "shared": "${shared bool}"
+        }
+    },
+    "host": {
+        "${}":[
+            "${name} host name",
+            "${user} host user (n2)",
+            "${ip_name} host access IP or name (${name}.hi.inet)",
+            "${description} host description (${name})"
+        ],
+    
+        "host":{
+            "name": "${name}",
+            "user": "${user}",
+            "ip_name": "${ip_name}",
+            "description": "${description}"
+        }
+    },
+    "flavor":{
+        "${}":[
+            "${name} flavor name",
+            "${description} flavor description (${name})",
+            "${processor_ranking} processor ranking (100)",
+            "${memory} memory in GB (2)",
+            "${threads} threads needed (2)"
+        ],
+        "flavor":{
+            "name":"${name}",
+            "description":"${description}",
+            "extended":{
+                "processor_ranking":"${processor_ranking int}",
+                "numas":[
+                    {
+                        "memory":"${memory int}",
+                        "threads":"${threads int}"
+                    }
+                ]
+            }
+        }
+    },
+    "tenant":{
+        "${}":[
+            "${name} tenant name",
+            "${description} tenant description (${name})"
+        ],
+        "tenant":{
+            "name": "${name}",
+            "description": "${description}"
+        }
+    },
+    "image":{
+        "${}":[
+            "${name} image name",
+            "${path} image path (/mnt/powervault/virtualization/vnfs/os/US1404user.qcow2)",
+            "${description} image description (${name})"
+        ],
+        "image":{
+            "name":"${name}",
+            "description":"${description}",
+            "path":"${path}"
+        }
+    },
+    "server":{
+        "${}":[
+            "${name} provide a name (VM)",
+            "${description} provide a description (${name})",
+            "${image_id} provide image_id uuid",
+            "${flavor_id} provide flavor_id uuid",
+            "${network0} provide a bridge network id; enter='default' (00000000-0000-0000-0000-000000000000)",
+            "${network1} provide a bridge network id; enter='virbrMan' (60f5227e-195f-11e4-836d-52540030594e)"
+        ],
+        "server":{
+            "networks":[
+                {
+                    "name":"mgmt0",
+                    "vpci": "0000:00:0a.0",
+                    "uuid":"${network0}"
+                },
+                {
+                    "name":"ge0",
+                    "vpci": "0000:00:0b.0",
+                    "uuid":"${network1}"
+                }
+            ],
+            "name":"${name}",
+            "description":"${description}",
+            "imageRef":  "${image_id}",
+            "flavorRef": "${flavor_id}"
+        }
+    }
+}
+
+def check_configuration(exception=() ):
+    '''
+    Check that the configuration variables are present.
+    exception can contain variables that are not tested, normally because is not used for the command
+    '''
+    for item in config_items:
+        if item not in exception and vim_config[item]==None:
+            print "OPENVIM_"+item+" variable not defined. Try '" + name + " config file_cfg' or 'export OPENVIM_"+item+"=something'"
+            exit();
+
+def check_valid_uuid(uuid):
+    '''
+    Determines if the param uuid is a well formed uuid. Otherwise it is consider a name
+    '''
+    id_schema = {"type" : "string", "pattern": "^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$"}
+    try:
+        js_v(uuid, id_schema)
+        return True
+    except js_e.ValidationError:
+        return False
+
+def vim_read(url):
+    '''
+    Send a GET http to VIM
+    '''
+    headers_req = {'content-type': 'application/json'}
+    try:
+        vim_response = requests.get(url, headers = headers_req)
+        if vim_response.status_code == 200:
+        #print vim_response.json()
+        #print json.dumps(vim_response.json(), indent=4)
+            content = vim_response.json()
+            return 1, content
+            #print http_content
+        else:
+            #print " Error. VIM response '%s': not possible to GET %s, error %s" % (vim_response.status_code, url, vim_response.text)
+            return -vim_response.status_code, vim_response.text
+    except requests.exceptions.RequestException, e:
+        return -1, " Exception GET at '"+url+"' " + str(e.message)
+
+def vim_delete(url):
+    '''
+    Send a DELETE http to VIM
+    '''
+    headers_req = {'content-type': 'application/json'}
+    try:
+        vim_response = requests.delete(url, headers = headers_req)
+        if vim_response.status_code != 200:
+            #print " Error. VIM response '%s': not possible to DELETE %s, error %s" % (vim_response.status_code, url, vim_response.text)
+            return -vim_response.status_code, vim_response.text
+    except requests.exceptions.RequestException, e:
+        return -1, " Exception DELETE at '"+url+"' " + str(e.message)
+    return 1, None
+
+def vim_action(url, payload):
+    '''
+    Send a POST http to VIM
+    '''
+    headers_req = {'content-type': 'application/json'}
+    try:
+        vim_response = requests.post(url, data=json.dumps(payload), headers = headers_req)
+        if vim_response.status_code != 200:
+            #print " Error. VIM response '%s': not possible to POST %s, error %s" % (vim_response.status_code, url, vim_response.text)
+            return -vim_response.status_code, vim_response.text
+    except requests.exceptions.RequestException, e:
+        return -1, " Exception POST at '"+url+"' " + str(e.message)
+    return 1, vim_response.json()
+
+def vim_edit(url, payload):
+    headers_req = {'content-type': 'application/json'}
+    try:
+        vim_response = requests.put(url, data=json.dumps(payload), headers = headers_req)
+        if vim_response.status_code != 200:
+            #print " Error. VIM response '%s': not possible to PUT %s, error %s" % (vim_response.status_code, url, vim_response.text)
+            return -vim_response.status_code, vim_response.text
+    except requests.exceptions.RequestException, e:
+        return -1, " Exception PUT at '"+url+"' " + str(e.message)
+    return 1, vim_response.json()
+
+def vim_create(url, payload):
+    headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
+    #print str(payload)
+    try:
+        vim_response = requests.post(url, data=json.dumps(payload), headers=headers_req)
+        if vim_response.status_code != 200:
+            #print " Error. VIM response '%s': not possible to POST %s, error %s" % (vim_response.status_code, url, vim_response.text)
+            return -vim_response.status_code, vim_response.text
+    except requests.exceptions.RequestException, e:
+        return -1, " Exception POST at '"+url+"' " + str(e.message)
+    return 1, vim_response.json()
+
+def parse_yaml_json(text):
+    try:
+        data = yaml.load(text)
+        return 0, data
+    except yaml.YAMLError, exc:
+        error_pos = ""
+        if hasattr(exc, 'problem_mark'):
+            mark = exc.problem_mark
+            error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
+        return -1, " Error yaml/json format error at " + error_pos
+
+def change_string(text, var_list):
+    '''
+    See change_var_recursively help
+    Used for changed any '${var format}' content inside the 'text' string 
+    into the corresponding value at 'var_list'[var]
+    'format' is optional, string by default. Contain a - separated formats,ej, int-null
+    '''
+    end=0
+    type_=None
+    while True:
+        ini = text.find("${", end)
+        if ini<0: return text
+        end = text.find("}", ini) 
+        if end<0: return text
+        end+=1
+        
+        var = text[ini:end]
+        if ' ' in var:
+            kk=var.split(" ")
+            var=kk[0]+"}"
+            type_=kk[-1][:-1]
+        var = var_list.get(var, None)
+        if var==None: return text
+        
+        text =  text[:ini] + var + text[end:]
+        if type_ != None:
+            if 'null' in type_ and text=="null":
+                return None
+            if 'int' in type_ : #and text.isnumeric():
+                return int(text)
+            if 'bool' in type_ : #and text.isnumeric():
+                if text.lower()=="true": return True
+                elif text.lower()=="false": return False
+                else:
+                    print "input boolean paramter must be 'true' or 'false'"
+                    exit(1)
+    return text
+
+def chage_var_recursively(data, var_list):
+    '''
+    Check recursively the content of 'data', and look for "*${*}*" variables and changes  
+    It assumes that this variables are not in the key of dictionary,
+    The overall target is having json/yaml templates with this variables in the text. 
+    The user is asked for a value that is replaced wherever appears 
+    Attributes:
+        'data': dictionary, or list. None or empty is considered valid
+        'var_list': dictionary (name:change) pairs
+    Return:
+        None, data is modified
+    '''
+        
+    if type(data) is dict:
+        for k in data.keys():
+            if type(data[k]) is dict or type(data[k]) is tuple or type(data[k]) is list:
+                chage_var_recursively(data[k], var_list)
+            elif type(data[k]) is str:
+                data[k] = change_string(data[k], var_list)
+    if type(data) is list:
+        for k in range(0,len(data)):
+            if type(data[k]) is dict or type(data[k]) is list:
+                chage_var_recursively(data[k], var_list)
+            elif type(data[k]) is str:
+                data[k] = change_string(data[k], var_list)
+
+def change_var(data):
+    ''' Look for a text "${}" key at 'data' that indicates that this json contains 
+    variables that must be ask for values to the user and changes in the text of 
+    the dictionary
+    Useful for creating templates
+    "${}" entry contain a list with the text:
+        ${var-name} prompt text to show user (Default value to allocate if user type CR)
+    '''
+    if type(data) is not dict:
+        return -1, "Format error, not a object (dictionary)"
+    if "${}" not in data:
+        return 0, data
+
+    var_list={}
+    for var in data["${}"]:
+        r = var.find("}",) + 1
+        if r<=2 or var[:2] != '${':
+            return -1, "Format error at '${}':" + var
+        #change variables inside description text
+        if "${" in var[r:]:
+            var = var[:r] + change_string(var[r:], var_list)
+        d_start = var.rfind("(",) + 1
+        d_end   = var.rfind(")",) 
+        if d_start>0 and d_end>=d_start:
+            default = var[d_start:d_end]
+        else: default=None
+        v = raw_input(var[r:] + "? ")
+        if v=="":
+            if default != None:
+                v = default
+            else:
+                v = raw_input("  empty string? try again: ")
+        var_list[ var[:r] ] = str(v) 
+    
+    del data["${}"]
+    chage_var_recursively(data, var_list)
+    return 0, data
+
+def load_file(file_, parse=False):
+    try:
+        f = open(file_, 'r')
+        read_data = f.read()
+        f.close()
+        if not parse:
+            return 0, read_data
+    except IOError, e:
+        return -1, " Error opening file '" + file_ + "': " + e.args[1]
+    
+    try:
+        data = yaml.load(read_data)
+        return change_var(data)
+    except yaml.YAMLError, exc:
+        error_pos = ""
+        if hasattr(exc, 'problem_mark'):
+            mark = exc.problem_mark
+            error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
+        return -2, " Error yaml/json format error at '"+ file_ +"'"+error_pos
+
+def load_file_or_yaml(content):
+    '''
+    'content' can be or a yaml/json file or a text containing a yaml/json text format
+    This function autodetect, trying to load and parse the file,
+    if fails trying to parse the 'content' text
+    Returns the dictionary once parsed, or print an error and finish the program
+    '''
+    r,payload = load_file(content, parse=True)
+    if r<0:
+        if r==-1 and "{" in content or ":" in content:
+            #try to parse directly
+            r,payload = parse_yaml_json(content)
+            if r<0:
+                #print payload
+                exit (-1)
+        else:
+            #print payload
+            exit (-1)
+    return payload
+
+def config(args):
+    #print "config-list",args
+    if args.file != None:
+        try:
+            f = open(args.file, 'r')
+            read_data = f.read()
+            f.close()
+        except IOError, e:
+            print " Error opening file '" + args.file + "': " + e.args[1]
+            return
+        try:
+            data = yaml.load(read_data)
+            #print data
+            if "http_host" in data:
+                print "  export OPENVIM_HOST="+ data["http_host"]
+            if "http_port" in data:
+                print "  export OPENVIM_PORT="+ str(data["http_port"])
+                #vim_config[item] = data["OPENVIM_"+item]  #TODO find the way to change envioronment
+                #os.setenv('OPENVIM_'+item, vim_config[item])
+            if "http_admin_port" in data:
+                print "  export OPENVIM_ADMIN_PORT="+ str(data["http_admin_port"])
+            if "tenant_id" in data:
+                print "  export OPENVIM_TENANT="+ data["tenant_id"]
+            return
+        except yaml.YAMLError, exc:
+            error_pos = ""
+            if hasattr(exc, 'problem_mark'):
+                mark = exc.problem_mark
+                error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
+                print " Error yaml/json format error at '"+ args.file +"'"+error_pos
+            return
+
+        
+        print args.file
+    print "OPENVIM_HOST: %s" %vim_config["HOST"]
+    print "OPENVIM_PORT: %s" %vim_config["PORT"]
+    print "OPENVIM_ADMIN_PORT: %s" %vim_config["ADMIN_PORT"]
+    print "OPENVIM_TENANT: %s" %vim_config["TENANT"]
+
+def element_new(args):
+    #print args
+    tenant=""
+    if args.element in ('flavors','images','servers'):
+        check_configuration( ("ADMIN_PORT", "TENANT") )
+        tenant="/"+vim_config["TENANT"]
+    else:
+        check_configuration("ADMIN_PORT", )
+        tenant=""
+        
+    if args.file==None:
+        payload= template[args.element[:-1] ]
+        payload = yaml.load(str(payload))  #with this trik we make a completey copy of the data, so to not modified the original one
+        r,c= change_var(payload)
+        if r<0:
+            print "Template error", c
+            return 
+        payload=c
+    else:
+        payload=load_file_or_yaml(args.file)
+    #print payload
+    if args.element[:-1] not in payload:
+        payload = {args.element[:-1]: payload }
+    item = payload[args.element[:-1]]
+        
+    url = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["PORT"], tenant, args.element)
+    if "ADMIN_PORT" in vim_config:
+        url_admin = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["ADMIN_PORT"], tenant, args.element)
+    else:
+        url_admin = None
+        
+    if args.name != None:
+        item["name"] = args.name
+    if args.description != None:
+        item["description"] = args.name
+    
+
+    r,c = vim_create(url, payload)
+    if r==-401 and url_admin!=None and url != url_admin: #Unauthorized, try with admin privileges
+        url=url_admin
+        r,c = vim_create(url, payload)
+    if r<0:
+        print c
+    else:
+        #print c
+        item=c[ args.element[:-1] ]
+        uuid=item.get('id', None)
+        if uuid is None:
+            uuid=item.get('uuid', 'uuid-not-found?')
+        name = item.get('name', '')
+        print " " + uuid +"   "+ name + "   Created"
+    return
+
+def element_action(args):
+    filter_qs = ""
+    tenant=""
+    if args.element in ('flavors','images','servers'):
+        check_configuration( ("ADMIN_PORT", "TENANT") )
+        tenant="/"+vim_config["TENANT"]
+    else:
+        check_configuration("ADMIN_PORT", )
+        tenant=""
+    url = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["PORT"], tenant, args.element)
+    if "ADMIN_PORT" in vim_config:
+        url_admin = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["ADMIN_PORT"], tenant, args.element)
+    else:
+        url_admin = None
+
+    if args.filter:
+        filter_qs += "?" + args.filter
+    if args.name!=None:
+        if check_valid_uuid(args.name):
+            if len(filter_qs) > 0:  filter_qs += "&" + "id=" + str(args.name)
+            else:                   filter_qs += "?" + "id=" + str(args.name)
+        else:
+            if len(filter_qs) > 0:  filter_qs += "&" + "name=" + str(args.name)
+            else:                   filter_qs += "?" + "name=" + str(args.name)
+    
+
+    r,c = vim_read(url + filter_qs)
+    if r<0:           
+        print "Error:", c
+        return
+    if args.action=='createImage':
+        payload={ args.action: {"name":args.name} }
+        if args.description != None:
+            payload[args.action]["description"]=args.description
+        if args.path != None:
+            payload[args.action]["path"]=args.path
+    else:
+        payload={ args.action: None}
+    #print json.dumps(c, indent=4)
+    item_list = c[ args.element ]
+    if len(item_list)==0:
+        print  " Not found " + args.element + " " + args.name
+        return
+    for item in item_list:
+        uuid=item.get('id', None)
+        if uuid is None:
+            uuid=item.get('uuid', None)
+        if uuid is None:
+            print "Id not found"
+            continue
+        name = item.get('name', '')
+        if not args.force:
+            r = raw_input(" Action over " + args.element + " " + uuid + " " + name + " (y/N)? ")
+            if  len(r)>0  and r[0].lower()=="y":
+                pass
+            else:
+                continue
+        r,c = vim_action(url + "/" + uuid + "/action", payload)
+        if r==-401 and url_admin!=None and url != url_admin: #Unauthorized, try with admin privileges
+            url=url_admin
+            r,c = vim_action(url + "/" + uuid + "/action", payload)
+        if r<0:
+            print " " + uuid +"   "+ name + "   " + c
+        else:
+            print " " + uuid +"   "+ name + "   "+ args.action
+    return
+
+def element_edit(args):
+    filter_qs = ""
+    tenant=""
+    if args.element in ('flavors','images','servers'):
+        check_configuration( ("ADMIN_PORT", "TENANT") )
+        tenant="/"+vim_config["TENANT"]
+    else:
+        check_configuration("ADMIN_PORT", )
+        tenant=""
+
+    url = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["PORT"], tenant, args.element)
+    if "ADMIN_PORT" in vim_config:
+        url_admin = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["ADMIN_PORT"], tenant, args.element)
+    else:
+        url_admin = None
+    
+    if args.filter:
+        filter_qs += "?" + args.filter
+    if args.name!=None:
+        if check_valid_uuid(args.name):
+            if len(filter_qs) > 0:  filter_qs += "&" + "id=" + str(args.name)
+            else:                   filter_qs += "?" + "id=" + str(args.name)
+        else:
+            if len(filter_qs) > 0:  filter_qs += "&" + "name=" + str(args.name)
+            else:                   filter_qs += "?" + "name=" + str(args.name)
+    
+
+    r,c = vim_read(url + filter_qs)
+    if r<0:           
+        print "Error:", c
+        return
+
+    payload=load_file_or_yaml(args.file)
+    if args.element[:-1] not in payload:
+        payload = {args.element[:-1]: payload }
+
+    #print json.dumps(c, indent=4)
+    item_list = c[ args.element ]
+    if len(item_list)==0:
+        print  " Not found " + args.element + " " + args.name
+        return
+    for item in item_list:
+        uuid=item.get('id', None)
+        if uuid is None:
+            uuid=item.get('uuid', None)
+        if uuid is None:
+            print "Id not found"
+            continue
+        name = item.get('name', '')
+        if not args.force or (args.name==None and args.filer==None):
+            r = raw_input(" Edit " + args.element + " " + uuid + " " + name + " (y/N)? ")
+            if  len(r)>0  and r[0].lower()=="y":
+                pass
+            else:
+                continue
+        r,c = vim_edit(url + "/" + uuid, payload)
+        if r==-401 and url_admin!=None and url != url_admin: #Unauthorized, try with admin privileges
+            url=url_admin
+            r,c = vim_edit(url + "/" + uuid, payload)
+        if r<0:
+            print " " + uuid +"   "+ name + "   " + c
+        else:
+            print " " + uuid +"   "+ name + "   edited"
+    return
+
+def element_action_edit(args):
+    #print args
+    if args.element=='ports':
+        if args.action=='attach':
+            args.file='network_id: ' + args.network_id
+        else: #args.action=='detach'
+            args.file='network_id: null'
+    if args.action=='up':
+        args.file='admin_state_up: true'
+    if args.action=='down':
+        args.file='admin_state_up: false'
+    element_edit(args)
+    
+def element_delete(args):
+    filter_qs = ""
+    tenant=""
+    if args.element in ('flavors','images','servers'):
+        check_configuration( ("ADMIN_PORT", "TENANT") )
+        tenant="/"+vim_config["TENANT"]
+    else:
+        check_configuration("ADMIN_PORT", )
+        tenant=""
+
+    url = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["PORT"], tenant, args.element)
+    if "ADMIN_PORT" in vim_config:
+        url_admin = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["ADMIN_PORT"], tenant, args.element)
+    else:
+        url_admin = None
+
+    if args.filter:
+        filter_qs += "?" + args.filter
+    if args.name!=None:
+        if check_valid_uuid(args.name):
+            if len(filter_qs) > 0:  filter_qs += "&" + "id=" + str(args.name)
+            else:                   filter_qs += "?" + "id=" + str(args.name)
+        else:
+            if len(filter_qs) > 0:  filter_qs += "&" + "name=" + str(args.name)
+            else:                   filter_qs += "?" + "name=" + str(args.name)
+    
+
+    r,c = vim_read(url + filter_qs)
+    if r<0:           
+        print "Error:", c
+        return
+
+    #print json.dumps(c, indent=4)
+    item_list = c[ args.element ]
+    if len(item_list)==0:
+        print  " Not found " + args.element + " " + args.name
+        return
+    for item in item_list:
+        uuid=item.get('id', None)
+        if uuid is None:
+            uuid=item.get('uuid', None)
+        if uuid is None:
+            print "Id not found"
+            continue
+        name = item.get('name', '')
+        if not args.force:
+            r = raw_input(" Delete " + args.element + " " + uuid + " " + name + " (y/N)? ")
+            if  len(r)>0  and r[0].lower()=="y":
+                pass
+            else:
+                continue
+        r,c = vim_delete(url + "/" + uuid)
+        if r==-401 and url_admin!=None and url != url_admin: #Unauthorized, try with admin privileges
+            url=url_admin
+            r,c = vim_delete(url + "/" + uuid)
+        if r<0:
+            print " " + uuid +"   "+ name + "   " + c
+        else:
+            print " " + uuid +"   "+ name + "   deleted"
+    return
+
+def element_list(args):
+    #print "element_list", args
+    filter_qs = ""
+    tenant=""
+    if args.element in ('flavors','images','servers'):
+        check_configuration( ("ADMIN_PORT", "TENANT") )
+        tenant="/"+vim_config["TENANT"]
+    else:
+        check_configuration("ADMIN_PORT", )
+        tenant=""
+    #if args.name:
+    #    what += "/" + args.name
+    url = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["PORT"], tenant, args.element)
+    #print " get", what, "     >>>>>>>> ",
+    if args.filter:
+        filter_qs += "?" + args.filter
+    if args.name!=None:
+        if check_valid_uuid(args.name):
+            if len(filter_qs) > 0:  filter_qs += "&" + "id=" + str(args.name)
+            else:                   filter_qs += "?" + "id=" + str(args.name)
+        else:
+            if len(filter_qs) > 0:  filter_qs += "&" + "name=" + str(args.name)
+            else:                   filter_qs += "?" + "name=" + str(args.name)
+    
+
+    r,c = vim_read(url + filter_qs)
+    if r<0:           
+        print "Error:", c
+    else:
+        #print json.dumps(c, indent=4)
+        item_list = c[ args.element ]
+        verbose=0
+        if args.name!=None and len(item_list)==1:
+            verbose+=1
+        if args.verbose!=None:
+            verbose += args.verbose
+        for item in item_list:
+            extra=""
+            if args.element=="servers": extra = "   "+item['status']
+            if args.element in ("hosts","networks","ports") and not item['admin_state_up']: extra = "   admin_status_up=false"
+            print item['id']+"   "+item['name'] + extra
+            if verbose>0:
+                r2,c2 = vim_read(url + "/"+ item['id'])
+                if r2>0:
+                    data = c2[ args.element[:-1] ]
+                    if verbose==1 or verbose==2:
+                        data2= dict((k,v) for (k,v) in data.iteritems() if k in show_at_verbose1 and v!=None)
+                        if 'image' in data and 'id' in data['image']:
+                            data2['image'] = data['image']['id']
+                        if 'flavor' in data and 'id' in data['flavor']:
+                            data2['flavor'] = data['flavor']['id']
+                        if verbose==2:
+                            #TODO add more intems in a digest mode, extended, numas ...
+                            pass
+                            #if "numas" in data
+                            #if "extended" in data
+                    else:
+                        data2= data
+                    #print json.dumps(c2, indent=4)
+#                     keys = data.keys()
+#                     for key in keys:
+#                         if data[key]==None: del data[key]
+#                         elif key=='id' or key=='name' or key=='links': del data[key]
+                        
+                    print json.dumps(data2, indent=4)
+    return
+
+if __name__=="__main__":
+    
+    item_dict={'vm':'servers','host':'hosts','tenant':'tenants','image':'images','flavor':'flavors','net':'networks','port':'ports'}
+    
+    vim_config={}
+    vim_config["HOST"] =       os.getenv('OPENVIM_HOST', 'localhost')
+    vim_config["PORT"] =       os.getenv('OPENVIM_PORT', '9080')
+    vim_config["ADMIN_PORT"] = os.getenv('OPENVIM_ADMIN_PORT', '9085')
+    vim_config["TENANT"] =     os.getenv('OPENVIM_TENANT', None)
+    
+   
+    main_parser = argparse.ArgumentParser(description='User program to interact with OPENVIM-SERVER (openvimd)')
+    main_parser.add_argument('--version', action='version', version='%(prog)s ' + __version__ + ' '+version_date)
+    
+    subparsers = main_parser.add_subparsers(help='commands')
+    
+    config_parser = subparsers.add_parser('config', help="prints configuration values")
+    config_parser.add_argument("file", nargs='?', help="configuration file to extract the configuration").completer = FilesCompleter
+    config_parser.set_defaults(func=config)
+    #HELP
+    for item in item_dict:
+        #LIST
+        element_list_parser = subparsers.add_parser(item+'-list', help="lists information about "+item_dict[item])
+        element_list_parser.add_argument("name", nargs='?', help="name or ID of the " + item)
+        element_list_parser.add_argument("-F","--filter", action="store", help="filter query string")
+        element_list_parser.add_argument('--verbose', '-v', action='count', help="increment the verbosity")
+        element_list_parser.set_defaults(func=element_list, element=item_dict[item])
+        #NEW
+        element_new_parser = subparsers.add_parser(item+'-create', help="creates a new "+item_dict[item][:-1])
+        element_new_parser.add_argument("file", nargs='?', help="json/yaml text or file with content").completer = FilesCompleter
+        element_new_parser.add_argument("--name", action="store", help="Use this name")
+        element_new_parser.add_argument("--description", action="store", help="Use this descrition")
+        element_new_parser.set_defaults(func=element_new, element=item_dict[item])
+        #DELETE
+        element_del_parser = subparsers.add_parser(item+'-delete', help="deletes one or several "+item_dict[item])
+        element_del_parser.add_argument("name", nargs='?', help="name or ID of the "+item+", 'ALL' for all")
+        element_del_parser.add_argument("-F","--filter", action="store", help="filter query string")
+        element_del_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+        element_del_parser.set_defaults(func=element_delete, element=item_dict[item])
+        #EDIT
+        element_edit_parser = subparsers.add_parser(item+'-edit', help="edits one or several "+item_dict[item])
+        element_edit_parser.add_argument("name", help="name or ID of the "+item+", 'ALL' for all")
+        element_edit_parser.add_argument("file", help="json/yaml text or file with the changes").completer = FilesCompleter
+        element_edit_parser.add_argument("-F","--filter", action="store", help="filter query string")
+        element_edit_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+        element_edit_parser.set_defaults(func=element_edit, element=item_dict[item])
+        #ACTION
+        if item=='vm':
+            for item2 in ('shutdown', 'start', 'rebuild', 'reboot'):
+                vm_action_parser = subparsers.add_parser("vm-"+item2, help="performs this action over the virtual machine")
+                vm_action_parser.add_argument("name", nargs='?', help="name or ID of the server, 'ALL' for all")
+                vm_action_parser.add_argument("-F","--filter", action="store", help="filter query string")
+                vm_action_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+                vm_action_parser.set_defaults(func=element_action, element="servers", action=item2 )
+            vm_action_image_parser = subparsers.add_parser("vm-createImage", help="creates a snapshot of the virtual machine disk into a new image")
+            vm_action_image_parser.add_argument("name", help="name or ID of the server, 'ALL' for all")
+            vm_action_image_parser.add_argument("imageName", help="name or ID of the server, 'ALL' for all")
+            vm_action_image_parser.add_argument("--description", action="store", help="Provide a new image description")
+            vm_action_image_parser.add_argument("--path", action="store", help="Provide a new image complete path")
+            vm_action_image_parser.add_argument("-F","--filter", action="store", help="filter query string")
+            vm_action_image_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+            vm_action_image_parser.set_defaults(func=element_action, element="servers", action="createImage" )
+        #ACTION that are implemented with EDITION
+        if item=='port':
+            port_action_attach_parser = subparsers.add_parser("port-attach", help="connects a port to a network")
+            port_action_attach_parser.add_argument("name", help="name or ID of the port, 'ALL' for all")
+            port_action_attach_parser.add_argument("network_id", help="ID of the network")
+            port_action_attach_parser.add_argument("-F","--filter", action="store", help="filter query string")
+            port_action_attach_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+            port_action_attach_parser.set_defaults(func=element_action_edit, element="ports", action="attach")
+
+            port_action_detach_parser = subparsers.add_parser("port-detach", help="removes a port from a network")
+            port_action_detach_parser.add_argument("name", help="name or ID of the port, 'ALL' for all")
+            port_action_detach_parser.add_argument("-F","--filter", action="store", help="filter query string")
+            port_action_detach_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+            port_action_detach_parser.set_defaults(func=element_action_edit, element="ports", action="dettach")
+
+        if item=='net' or item=='host':
+            nethost_action_up_parser = subparsers.add_parser(item+"-up", help="puts admin_status_up of "+item_dict[item][:-1]+" to true")
+            nethost_action_up_parser.add_argument("name", help="name or ID of the "+item_dict[item][:-1]+", 'ALL' for all")
+            nethost_action_up_parser.add_argument("-F","--filter", action="store", help="filter query string")
+            nethost_action_up_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+            nethost_action_up_parser.set_defaults(func=element_action_edit, element=item_dict[item], action="up")
+        
+            nethost_action_down_parser = subparsers.add_parser(item+"-down", help="puts admin_status_up of "+item_dict[item][:-1]+" to false")
+            nethost_action_down_parser.add_argument("name", help="name or ID of the "+item_dict[item][:-1]+", 'ALL' for all")
+            nethost_action_down_parser.add_argument("-F","--filter", action="store", help="filter query string")
+            nethost_action_down_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+            nethost_action_down_parser.set_defaults(func=element_action_edit, element=item_dict[item], action="down")
+
+    argcomplete.autocomplete(main_parser)
+    args = main_parser.parse_args()
+    
+    try:
+        args.func(args)
+    except (requests.exceptions.ConnectionError):
+        print "Connection error: not possible to contact OPENVIM-SERVER (openvimd)"
+    except (KeyboardInterrupt, SystemExit):
+        print 'Exiting openVIM'
+    
+    exit()
+

@@ -1,0 +1,457 @@
+{
+    "host":{
+        "name": "fakehost0",
+        "user": "user", 
+        "password": "password", 
+        "ip_name": "nfv100.hi.inet" 
+    },
+"host-data":
+{
+    "name": "fakehost0",
+    "ranking": 300,
+    "description": "host-nfv100",
+    "ip_name": "nfv100.hi.inet",
+    "features": "lps,dioc,hwsv,ht,64b,tlbps",
+    "user": "user",
+    "password": "password",
+    "numas": [
+        {
+            "cores": [
+                {
+                    "core_id": 0,
+                    "thread_id": 12,
+                    "status": "noteligible"
+                },
+                {
+                    "core_id": 0,
+                    "thread_id": 36,
+                    "status": "noteligible"
+                },
+                {
+                    "core_id": 1,
+                    "thread_id": 13
+                },
+                {
+                    "core_id": 1,
+                    "thread_id": 37
+                },
+                {
+                    "core_id": 2,
+                    "thread_id": 14
+                },
+                {
+                    "core_id": 2,
+                    "thread_id": 38
+                },
+                {
+                    "core_id": 3,
+                    "thread_id": 15
+                },
+                {
+                    "core_id": 3,
+                    "thread_id": 39
+                },
+                {
+                    "core_id": 4,
+                    "thread_id": 16
+                },
+                {
+                    "core_id": 4,
+                    "thread_id": 40
+                },
+                {
+                    "core_id": 5,
+                    "thread_id": 17
+                },
+                {
+                    "core_id": 5,
+                    "thread_id": 41
+                },
+                {
+                    "core_id": 6,
+                    "thread_id": 18
+                },
+                {
+                    "core_id": 6,
+                    "thread_id": 42
+                },
+                {
+                    "core_id": 7,
+                    "thread_id": 19
+                },
+                {
+                    "core_id": 7,
+                    "thread_id": 43
+                },
+                {
+                    "core_id": 8,
+                    "thread_id": 20
+                },
+                {
+                    "core_id": 8,
+                    "thread_id": 44
+                },
+                {
+                    "core_id": 9,
+                    "thread_id": 21
+                },
+                {
+                    "core_id": 9,
+                    "thread_id": 45
+                },
+                {
+                    "core_id": 10,
+                    "thread_id": 22
+                },
+                {
+                    "core_id": 10,
+                    "thread_id": 46
+                },
+                {
+                    "core_id": 11,
+                    "thread_id": 23
+                },
+                {
+                    "core_id": 11,
+                    "thread_id": 47
+                }
+            ],
+            "numa_socket": 1,
+            "hugepages": 28,
+            "memory": 32
+        },
+        {
+            "cores": [
+                {
+                    "core_id": 0,
+                    "thread_id": 0,
+                    "status": "noteligible"
+                },
+                {
+                    "core_id": 0,
+                    "thread_id": 24,
+                    "status": "noteligible"
+                },
+                {
+                    "core_id": 1,
+                    "thread_id": 1
+                },
+                {
+                    "core_id": 1,
+                    "thread_id": 25
+                },
+                {
+                    "core_id": 2,
+                    "thread_id": 2
+                },
+                {
+                    "core_id": 2,
+                    "thread_id": 26
+                },
+                {
+                    "core_id": 3,
+                    "thread_id": 3
+                },
+                {
+                    "core_id": 3,
+                    "thread_id": 27
+                },
+                {
+                    "core_id": 4,
+                    "thread_id": 4
+                },
+                {
+                    "core_id": 4,
+                    "thread_id": 28
+                },
+                {
+                    "core_id": 5,
+                    "thread_id": 5
+                },
+                {
+                    "core_id": 5,
+                    "thread_id": 29
+                },
+                {
+                    "core_id": 6,
+                    "thread_id": 6
+                },
+                {
+                    "core_id": 6,
+                    "thread_id": 30
+                },
+                {
+                    "core_id": 7,
+                    "thread_id": 7
+                },
+                {
+                    "core_id": 7,
+                    "thread_id": 31
+                },
+                {
+                    "core_id": 8,
+                    "thread_id": 8
+                },
+                {
+                    "core_id": 8,
+                    "thread_id": 32
+                },
+                {
+                    "core_id": 9,
+                    "thread_id": 9
+                },
+                {
+                    "core_id": 9,
+                    "thread_id": 33
+                },
+                {
+                    "core_id": 10,
+                    "thread_id": 10
+                },
+                {
+                    "core_id": 10,
+                    "thread_id": 34
+                },
+                {
+                    "core_id": 11,
+                    "thread_id": 11
+                },
+                {
+                    "core_id": 11,
+                    "thread_id": 35
+                }
+            ],
+            "interfaces": [
+                {
+                    "source_name": "eth8",
+                    "Mbps": 10000,
+                    "pci": "0000:08:00.0",
+                    "sriovs": [
+                        {
+                            "mac": "a6:12:27:bd:2d:ef",
+                            "pci": "0000:08:10.0",
+                            "source_name": 0,
+                            "vlan": 106
+                        },
+                        {
+                            "mac": "be:8a:40:58:cf:de",
+                            "pci": "0000:08:10.2",
+                            "source_name": 1,
+                            "vlan": 107
+                        },
+                        {
+                            "mac": "c6:bf:7a:30:13:55",
+                            "pci": "0000:08:10.4",
+                            "source_name": 2,
+                            "vlan": 103
+                        },
+                        {
+                            "mac": "be:32:50:ef:ea:4e",
+                            "pci": "0000:08:10.6",
+                            "source_name": 3,
+                            "vlan": 105
+                        },
+                        {
+                            "mac": "ae:36:60:bc:41:78",
+                            "pci": "0000:08:11.0",
+                            "source_name": 4,
+                            "vlan": 102
+                        },
+                        {
+                            "mac": "52:22:3a:99:67:4e",
+                            "pci": "0000:08:11.2",
+                            "source_name": 5,
+                            "vlan": 104
+                        },
+                        {
+                            "mac": "0a:b8:00:2c:8a:b2",
+                            "pci": "0000:08:11.4",
+                            "source_name": 6,
+                            "vlan": 100
+                        },
+                        {
+                            "mac": "e2:f6:70:83:a3:ec",
+                            "pci": "0000:08:11.6",
+                            "source_name": 7,
+                            "vlan": 101
+                        }
+                    ],
+                    "mac": "90:e2:ba:0c:36:4c"
+                },
+                {
+                    "source_name": "eth17",
+                    "Mbps": 10000,
+                    "pci": "0000:08:00.1",
+                    "sriovs": [
+                        {
+                            "mac": "92:0e:27:0c:ad:eb",
+                            "pci": "0000:08:10.1",
+                            "source_name": 0,
+                            "vlan": 105
+                        },
+                        {
+                            "mac": "be:99:65:e8:98:a3",
+                            "pci": "0000:08:10.3",
+                            "source_name": 1,
+                            "vlan": 106
+                        },
+                        {
+                            "mac": "8a:3b:54:42:88:b2",
+                            "pci": "0000:08:10.5",
+                            "source_name": 2,
+                            "vlan": 101
+                        },
+                        {
+                            "mac": "c6:5d:8a:c5:05:f7",
+                            "pci": "0000:08:10.7",
+                            "source_name": 3,
+                            "vlan": 103
+                        },
+                        {
+                            "mac": "96:bd:61:02:4f:d6",
+                            "pci": "0000:08:11.1",
+                            "source_name": 4,
+                            "vlan": 102
+                        },
+                        {
+                            "mac": "22:5d:85:2c:1b:fd",
+                            "pci": "0000:08:11.3",
+                            "source_name": 5,
+                            "vlan": 104
+                        },
+                        {
+                            "mac": "e6:7f:8a:48:bc:26",
+                            "pci": "0000:08:11.5",
+                            "source_name": 6,
+                            "vlan": 100
+                        },
+                        {
+                            "mac": "2e:4a:e6:68:18:fa",
+                            "pci": "0000:08:11.7",
+                            "source_name": 7,
+                            "vlan": 107
+                        }
+                    ],
+                    "mac": "90:e2:ba:0c:36:4d"
+                },
+                {
+                    "source_name": "eth26",
+                    "Mbps": 10000,
+                    "pci": "0000:06:00.0",
+                    "sriovs": [
+                        {
+                            "mac": "02:79:15:02:ad:cc",
+                            "pci": "0000:06:10.0",
+                            "source_name": 0,
+                            "vlan": 104
+                        },
+                        {
+                            "mac": "06:81:ef:de:ec:6b",
+                            "pci": "0000:06:10.2",
+                            "source_name": 1,
+                            "vlan": 103
+                        },
+                        {
+                            "mac": "f2:4e:96:f3:8e:73",
+                            "pci": "0000:06:10.4",
+                            "source_name": 2,
+                            "vlan": 106
+                        },
+                        {
+                            "mac": "e2:86:91:23:c5:76",
+                            "pci": "0000:06:10.6",
+                            "source_name": 3,
+                            "vlan": 105
+                        },
+                        {
+                            "mac": "52:12:a0:77:cc:47",
+                            "pci": "0000:06:11.0",
+                            "source_name": 4,
+                            "vlan": 107
+                        },
+                        {
+                            "mac": "ca:17:4a:c4:cb:bf",
+                            "pci": "0000:06:11.2",
+                            "source_name": 5,
+                            "vlan": 102
+                        },
+                        {
+                            "mac": "de:13:4c:5d:70:e8",
+                            "pci": "0000:06:11.4",
+                            "source_name": 6,
+                            "vlan": 101
+                        },
+                        {
+                            "mac": "0a:5f:d2:db:7f:e2",
+                            "pci": "0000:06:11.6",
+                            "source_name": 7,
+                            "vlan": 100
+                        }
+                    ],
+                    "mac": "90:e2:ba:0b:6b:b4"
+                },
+                {
+                    "source_name": "eth35",
+                    "Mbps": 10000,
+                    "pci": "0000:06:00.1",
+                    "sriovs": [
+                        {
+                            "mac": "a2:08:55:fe:c5:db",
+                            "pci": "0000:06:10.1",
+                            "source_name": 0,
+                            "vlan": 104
+                        },
+                        {
+                            "mac": "7a:dd:c7:46:2a:91",
+                            "pci": "0000:06:10.3",
+                            "source_name": 1,
+                            "vlan": 103
+                        },
+                        {
+                            "mac": "92:a8:1d:4e:cc:a8",
+                            "pci": "0000:06:10.5",
+                            "source_name": 2,
+                            "vlan": 106
+                        },
+                        {
+                            "mac": "02:1a:d6:87:c4:cc",
+                            "pci": "0000:06:10.7",
+                            "source_name": 3,
+                            "vlan": 105
+                        },
+                        {
+                            "mac": "ea:1b:8b:2a:da:9a",
+                            "pci": "0000:06:11.1",
+                            "source_name": 4,
+                            "vlan": 107
+                        },
+                        {
+                            "mac": "aa:c3:fe:e5:f2:96",
+                            "pci": "0000:06:11.3",
+                            "source_name": 5,
+                            "vlan": 102
+                        },
+                        {
+                            "mac": "e2:66:1f:00:b3:45",
+                            "pci": "0000:06:11.5",
+                            "source_name": 6,
+                            "vlan": 101
+                        },
+                        {
+                            "mac": "da:3c:d8:a3:f4:e0",
+                            "pci": "0000:06:11.7",
+                            "source_name": 7,
+                            "vlan": 100
+                        }
+                    ],
+                    "mac": "90:e2:ba:0b:6b:b5"
+                }
+            ],
+            "numa_socket": 0,
+            "hugepages": 28,
+            "memory": 32
+        }
+    ]
+}
+}
+
