@@ -1,0 +1,885 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# PYTHON_ARGCOMPLETE_OK
+
+##
+# Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
+# This file is part of openmano
+# All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# For those usages not covered by the Apache License, Version 2.0 please
+# contact with: nfvlabs@tid.es
+##
+
+'''
+openmano client used to interact with openmano-server (openmanod) 
+'''
+__author__="Alfonso Tierno, Gerardo Garcia"
+__date__ ="$09-oct-2014 09:09:48$"
+__version__="0.1.1-r355"
+version_date="Mar 2015"
+
+from argcomplete.completers import FilesCompleter
+import os
+import argparse
+import argcomplete
+import requests
+import json
+import yaml
+
+class ArgumentParserError(Exception): pass
+
+class ThrowingArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        print "Error: %s" %message
+        print
+        self.print_help()
+        raise ArgumentParserError
+        
+
+def config(args):
+    print "OPENMANO_HOST: %s" %mano_host
+    print "OPENMANO_PORT: %s" %mano_port
+    print "OPENMANO_TENANT: %s" %mano_tenant
+    print "OPENMANO_DATACENTER: %s" %str (mano_datacenter)
+
+
+def _print_verbose(mano_response, verbose_level=0):
+    content = mano_response.json()
+    if type(content)!=dict or len(content)!=1:
+        #print "Non expected format output"
+        print str(content)
+        return
+    
+    val=content.values()[0]
+    if type(val)==str:
+        print val
+        return
+    elif type(val) == list:
+        content_list = val
+    elif type(val)==dict:
+        content_list = [val]
+    else:
+        #print "Non expected dict/list format output"
+        print str(content)
+        return
+    
+    #print content_list
+    if verbose_level==None:
+        verbose_level=0
+    if verbose_level >= 3:
+        print yaml.safe_dump(content, indent=4, default_flow_style=False)
+        return
+
+    if mano_response.status_code == 200:
+        for content in content_list:
+            myoutput = "%s %s" %(content['uuid'].ljust(38),content['name'].ljust(20))
+            if verbose_level >=1:
+                myoutput += " " + content['created_at'].ljust(20)
+                if verbose_level >=2:
+                    new_line='\n'
+                    if 'type' in content and content['type']!=None:
+                        myoutput += new_line + "  Type: " + content['type'].ljust(29)
+                        new_line=''
+                    if 'description' in content and content['description']!=None:
+                        myoutput += new_line + "  Description: " + content['description'].ljust(20)
+            print myoutput
+    else:
+        print content['error']['description']
+
+def parser_json_yaml(file_name):
+    #Check config file exists
+    if not os.path.isfile(file_name):
+        return (False, 'Error: file '+file_name+' does not exists.')
+    try:
+        f = file(file_name, "r")
+        text = f.read()
+        f.close()
+    except Exception,e:
+        return (False, str(e))
+           
+    #Read and parse file
+    if file_name[-5:]=='.yaml':
+        try:
+            config = yaml.load(text)
+        except yaml.YAMLError, exc:
+            error_pos = ""
+            if hasattr(exc, 'problem_mark'):
+                mark = exc.problem_mark
+                error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
+            return (False, "Error loading file '"+file_name+"'"+error_pos+": content format error: Failed to parse yaml format")
+    else: #json
+        try:
+            config = json.loads(text) 
+        except:
+            error_pos="todo: parsear donde esta el error"
+            return (False, "Error loading file '"+file_name+"'"+error_pos+": content format error: Failed to parse json format")
+
+    return True, config
+
+def _load_file_or_yaml(content):
+    '''
+    'content' can be or a yaml/json file or a text containing a yaml/json text format
+    This function autodetect, trying to load and parse the file,
+    if fails trying to parse the 'content' text
+    Returns the dictionary once parsed, or print an error and finish the program
+    '''
+    r,payload = parser_json_yaml(content)
+    if not r:
+        if "{" in content or ":" in content:
+            #try to parse directly
+            try:
+                payload = yaml.load(content)
+            except yaml.YAMLError, exc:
+                error_pos = ""
+                if hasattr(exc, 'problem_mark'):
+                    mark = exc.problem_mark
+                    error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
+                print "Error loading yaml/json text"+error_pos
+                exit (-1)
+        else:
+            print payload
+            exit (-1)
+    return payload
+
+def vnf_create(args):
+    #print "vnf-create",args
+    headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
+    r,myvnf = parser_json_yaml(args.file)
+    if not r:
+        print myvnf
+        return
+
+    if args.name or args.description:
+        #print args.name
+        if not 'vnf' in myvnf: 
+            print 'Wrong file. Not a VNF descriptor. Expecting the following text: "vnf"'
+            return
+        if args.name:
+            myvnf['vnf']['name'] = args.name
+        if args.description:
+            myvnf['vnf']['description'] = args.description
+    payload_req = json.dumps(myvnf)
+        
+    #print payload_req
+        
+    URLrequest = "http://%s:%s/openmano/%s/vnfs" %(mano_host, mano_port, mano_tenant)
+    mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
+    _print_verbose(mano_response, args.verbose)
+    return
+
+def vnf_list(args):
+    #print "vnf-list",args
+    if args.name:
+        URLrequest = "http://%s:%s/openmano/%s/vnfs/%s" %(mano_host, mano_port, mano_tenant, args.name)
+    else:
+        URLrequest = "http://%s:%s/openmano/%s/vnfs" %(mano_host, mano_port, mano_tenant)
+    mano_response = requests.get(URLrequest)
+    #print mano_response
+    content = mano_response.json()
+    #print json.dumps(content, indent=4)
+    if args.verbose==None:
+        args.verbose=0
+    if mano_response.status_code == 200:
+        if not args.name:
+            if args.verbose >= 3:
+                print yaml.safe_dump(content, indent=4, default_flow_style=False)
+                return
+            if len(content['vnfs']) == 0:
+                print "No VNFs were found."
+                return
+            for vnf in content['vnfs']:
+                myoutput = "%s %s" %(vnf['uuid'].ljust(38),vnf['name'].ljust(20))
+                if args.verbose >=1:
+                    myoutput = "%s %s" %(myoutput, vnf['created_at'].ljust(20))
+                print myoutput
+                if args.verbose >=2:
+                    print "  Description: %s" %vnf['description']
+                    print "  VNF descriptor file: %s" %vnf['path']
+        else:
+            if args.verbose:
+                print yaml.safe_dump(content, indent=4, default_flow_style=False)
+                return
+            vnf = content['vnf']
+            print "%s %s %s" %(vnf['uuid'].ljust(38),vnf['name'].ljust(20), vnf['created_at'].ljust(20))
+            print "  Description: %s" %vnf['description']
+            print "  VNF descriptor file: %s" %vnf['path']
+            print "    VMs:"
+            for vm in vnf['VNFC']:
+                #print "    %s %s %s" %(vm['name'].ljust(20), vm['uuid'].ljust(38), vm['description'].ljust(30))
+                print "        %s %s" %(vm['name'].ljust(20), vm['description'])
+            if len(vnf['nets'])>0:
+                print "    Internal nets:"
+                for net in vnf['nets']:
+                    print "        %s %s" %(net['name'].ljust(20), net['description'])
+            if len(vnf['external-connections'])>0:
+                print "    External interfaces:"
+                for interface in vnf['external-connections']:
+                    print "        %s %s %s %s" %(interface['external_name'].ljust(20), interface['vm_name'].ljust(20), interface['internal_name'].ljust(20), \
+                                                  interface['vpci'].ljust(14))
+    else:
+        print content['error']['description']
+        if args.verbose:
+            print yaml.safe_dump(content, indent=4, default_flow_style=False)
+    return
+
+def vnf_delete(args):
+    #print "vnf-delete",args
+    if not args.force:
+        r = raw_input("Delete VNF %s (y/N)? " %(args.name))
+        if  not (len(r)>0  and r[0].lower()=="y"):
+            return
+    URLrequest = "http://%s:%s/openmano/%s/vnfs/%s" %(mano_host, mano_port, mano_tenant, args.name)
+    mano_response = requests.delete(URLrequest)
+    #print mano_response
+    content = mano_response.json()
+    #print json.dumps(content, indent=4)
+    if mano_response.status_code == 200:
+        print content['result']
+    else:
+        print content['error']['description']
+    return
+
+def scenario_create(args):
+    #print "scenario-create",args
+    headers_req = {'content-type': 'application/yaml'}
+    f = file(args.file, "r")
+    payload_req = f.read()
+    f.close()
+
+    if args.name or args.description:
+        #print args.name
+        myscenario = yaml.load(payload_req)
+        if not 'topology' in myscenario: 
+            print 'Wrong file. Not a scenario descriptor. Expecting the following text: "topology"'
+            return
+        if args.name:
+            myscenario['name'] = args.name
+        if args.description:
+            myscenario['description'] = args.description
+        payload_req = yaml.safe_dump(myscenario, explicit_start=True, indent=4, default_flow_style=False, tags=False, encoding='utf-8', allow_unicode=True)
+    
+    #print payload_req
+        
+    URLrequest = "http://%s:%s/openmano/%s/scenarios" %(mano_host, mano_port, mano_tenant)
+    mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
+    _print_verbose(mano_response, args.verbose)
+    return
+
+def scenario_list(args):
+    #print "scenario-list",args
+    if args.name:
+        URLrequest = "http://%s:%s/openmano/%s/scenarios/%s" %(mano_host, mano_port, mano_tenant, args.name)
+    else:
+        URLrequest = "http://%s:%s/openmano/%s/scenarios" %(mano_host, mano_port, mano_tenant)
+    mano_response = requests.get(URLrequest)
+    #print mano_response
+    content = mano_response.json()
+    #print json.dumps(content, indent=4)
+    if args.verbose==None:
+        args.verbose=0
+
+    if mano_response.status_code == 200:
+        if not args.name:
+            if args.verbose >= 3:
+                print yaml.safe_dump(content, indent=4, default_flow_style=False)
+                return
+            if len(content['scenarios']) == 0:
+                print "No scenarios were found."
+                return
+            for scenario in content['scenarios']:
+                myoutput = "%s %s" %(scenario['uuid'].ljust(38),scenario['name'].ljust(20))
+                if args.verbose >=1:
+                    myoutput = "%s %s" %(myoutput, scenario['created_at'].ljust(20))
+                print myoutput
+                if args.verbose >=2:
+                    print "  Description: %s" %scenario['description']
+        else:
+            if args.verbose:
+                print yaml.safe_dump(content, indent=4, default_flow_style=False)
+                return
+            scenario = content
+            myoutput = "%s %s %s" %(scenario['uuid'].ljust(38),scenario['name'].ljust(20), scenario['created_at'].ljust(20))
+            print myoutput
+            print "  Description: %s" %scenario['description']
+            print "    VNFs:"
+            for vnf in scenario['vnfs']:
+                print "        %s %s %s" %(vnf['name'].ljust(20), vnf['vnf_id'].ljust(38), vnf['description'])
+            if len(scenario['nets'])>0:
+                print "    Internal nets:"
+                for net in scenario['nets']:
+                    if not net['external']:
+                        print "        %s %s %s" %(net['name'].ljust(20), net['uuid'].ljust(38), net['description'])
+                print "    External nets:"
+                for net in scenario['nets']:
+                    if net['external']:
+                        print "        %s %s %s vim-id:%s" %(net['name'].ljust(20), net['uuid'].ljust(38), net['description'].ljust(30), net['vim_id'])
+    else:
+        print content['error']['description']
+        if args.verbose:
+            print yaml.safe_dump(content, indent=4, default_flow_style=False)
+    return
+
+def scenario_delete(args):
+    #print "scenario-delete",args
+    if not args.force:
+        r = raw_input("Delete scenario %s (y/N)? " %(args.name))
+        if  not (len(r)>0  and r[0].lower()=="y"):
+            return
+    URLrequest = "http://%s:%s/openmano/%s/scenarios/%s" %(mano_host, mano_port, mano_tenant, args.name)
+    mano_response = requests.delete(URLrequest)
+    #print mano_response
+    content = mano_response.json()
+    #print json.dumps(content, indent=4)
+    if mano_response.status_code == 200:
+        print content['result']
+    else:
+        print content['error']['description']
+    return
+
+def scenario_deploy(args):
+    #print "scenario-deploy",args
+    headers_req = {'content-type': 'application/json'}
+    action = {}
+    actionCmd="start"
+    if args.nostart:
+        actionCmd="reserve"
+    action[actionCmd] = {}
+    action[actionCmd]["instance_name"] = args.name
+    if args.datacenter != None:
+        action[actionCmd]["datacenter"] = args.datacenter
+    elif mano_datacenter != None:
+        action[actionCmd]["datacenter"] = mano_datacenter
+        
+    if args.description:
+        action[actionCmd]["description"] = args.description
+    payload_req = json.dumps(action, indent=4)
+    #print payload_req
+
+    URLrequest = "http://%s:%s/openmano/%s/scenarios/%s/action" %(mano_host, mano_port, mano_tenant, args.scenario)
+    mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
+    if args.verbose==None:
+        args.verbose=0
+    
+    content = mano_response.json()
+    #print json.dumps(content, indent=4)
+    if args.verbose >= 3:
+        print yaml.safe_dump(content, indent=4, default_flow_style=False)
+        return
+
+    if mano_response.status_code == 200:
+        myoutput = "%s %s" %(content['uuid'].ljust(38),content['name'].ljust(20))
+        if args.verbose >=1:
+            myoutput = "%s %s" %(myoutput, content['created_at'].ljust(20))
+        if args.verbose >=2:
+            myoutput = "%s %s %s" %(myoutput, content['description'].ljust(30))
+        print myoutput
+        print ""
+        print "To check the status, run the following command:"
+        print "openmano instance-scenario-list <instance_id>"
+    else:
+        print content['error']['description']
+    return
+
+def scenario_verify(args):
+    #print "scenario-verify",args
+    headers_req = {'content-type': 'application/json'}
+    action = {}
+    action["verify"] = {}
+    action["verify"]["instance_name"] = "scen-verify-return5"
+    payload_req = json.dumps(action, indent=4)
+    #print payload_req
+
+    URLrequest = "http://%s:%s/openmano/%s/scenarios/%s/action" %(mano_host, mano_port, mano_tenant, args.scenario)
+    mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
+    
+    content = mano_response.json()
+    #print json.dumps(content, indent=4)
+    if mano_response.status_code == 200:
+        print content['result']
+    else:
+        print content['error']['description']
+    return
+
+def instance_scenario_list(args):
+    #print "instance-scenario-list",args
+    if args.name:
+        URLrequest = "http://%s:%s/openmano/%s/instances/%s" %(mano_host, mano_port, mano_tenant, args.name)
+    else:
+        URLrequest = "http://%s:%s/openmano/%s/instances" %(mano_host, mano_port, mano_tenant)
+    mano_response = requests.get(URLrequest)
+    #print mano_response
+    content = mano_response.json()
+    #print json.dumps(content, indent=4)
+    if args.verbose==None:
+        args.verbose=0
+
+    if mano_response.status_code == 200:
+        if not args.name:
+            if args.verbose >= 3:
+                print yaml.safe_dump(content, indent=4, default_flow_style=False)
+                return
+            if len(content['instances']) == 0:
+                print "No scenario instances were found."
+                return
+            for instance in content['instances']:
+                myoutput = "%s %s" %(instance['uuid'].ljust(38),instance['name'].ljust(20))
+                if args.verbose >=1:
+                    myoutput = "%s %s" %(myoutput, instance['created_at'].ljust(20))
+                print myoutput
+                if args.verbose >=2:
+                    print "Description: %s" %instance['description']
+        else:
+            if args.verbose:
+                print yaml.safe_dump(content, indent=4, default_flow_style=False)
+                return
+            instance = content
+            print "%s %s %s" %(instance['uuid'].ljust(38),instance['name'].ljust(20),instance['created_at'].ljust(20))
+            print "Description: %s" %instance['description']
+            print "Template scenario id: %s" %instance['scenario_id']
+            print "Template scenario name: %s" %instance['scenario_name']
+            print "---------------------------------------"
+            print "VNF instances: %d" %len(instance['vnfs'])
+            for vnf in instance['vnfs']:
+                #print "    %s %s Template vnf name: %s Template vnf id: %s" %(vnf['uuid'].ljust(38), vnf['name'].ljust(20), vnf['vnf_name'].ljust(20), vnf['vnf_id'].ljust(38))
+                print "    %s %s Template vnf id: %s" %(vnf['uuid'].ljust(38), vnf['vnf_name'].ljust(20), vnf['vnf_id'].ljust(38))
+            if len(instance['nets'])>0:
+                print "---------------------------------------"
+                print "Internal nets:"
+                for net in instance['nets']:
+                    if not net['external']:
+                        print "    %s %s VIM ID: %s" %(net['uuid'].ljust(38), net['status'].ljust(12), net['vim_net_id'])
+                print "---------------------------------------"
+                print "External nets:"
+                for net in instance['nets']:
+                    if net['external']:
+                        print "    %s %s VIM ID: %s" %(net['uuid'].ljust(38), net['status'].ljust(12), net['vim_net_id'])
+            print "---------------------------------------"
+            print "VM instances:"
+            for vnf in instance['vnfs']:
+                for vm in vnf['vms']:
+                    print "    %s %s %s %s VIM ID: %s" %(vm['uuid'].ljust(38), vnf['vnf_name'].ljust(20), vm['name'].ljust(20), vm['status'].ljust(12), vm['vim_vm_id'])
+    else:
+        print content['error']['description']
+        if args.verbose:
+            print yaml.safe_dump(content, indent=4, default_flow_style=False)
+    
+    return
+
+def instance_scenario_status(args):
+    print "instance-scenario-status"
+    return
+
+def instance_scenario_delete(args):
+    #print "instance-scenario-delete",args
+    if not args.force:
+        r = raw_input("Delete scenario instance %s (y/N)? " %(args.name))
+        if  not (len(r)>0  and r[0].lower()=="y"):
+            return
+    URLrequest = "http://%s:%s/openmano/%s/instances/%s" %(mano_host, mano_port, mano_tenant, args.name)
+    mano_response = requests.delete(URLrequest)
+    #print mano_response
+    content = mano_response.json()
+    #print json.dumps(content, indent=4)
+    if mano_response.status_code == 200:
+        print content['result']
+    else:
+        print content['error']['description']
+    return
+
+def instance_vnf_list(args):
+    print "instance-vnf-list"
+    return
+
+def instance_vnf_status(args):
+    print "instance-vnf-status"
+    return
+
+def tenant_create(args):
+    headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
+    tenant_dict={"name": args.name}
+    if args.description!=None:
+        tenant_dict["description"] = args.description 
+    payload_req = json.dumps( {"tenant": tenant_dict })
+    
+    #print payload_req
+        
+    URLrequest = "http://%s:%s/openmano/tenants" %(mano_host, mano_port)
+    mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
+    _print_verbose(mano_response, args.verbose)
+    return
+
+def tenant_list(args):
+    #print "tenant-list",args
+    if args.name:
+        URLrequest = "http://%s:%s/openmano/tenants/%s" %(mano_host, mano_port, args.name)
+    else:
+        URLrequest = "http://%s:%s/openmano/tenants" %(mano_host, mano_port)
+    mano_response = requests.get(URLrequest)
+    if args.verbose==None:
+        args.verbose=0
+    if args.name!=None:
+        args.verbose += 1
+    _print_verbose(mano_response, args.verbose)
+    return
+
+def tenant_delete(args):
+    #print "tenant-delete",args
+    if not args.force:
+        r = raw_input("Delete tenant %s (y/N)? " %(args.name))
+        if  not (len(r)>0  and r[0].lower()=="y"):
+            return
+    URLrequest = "http://%s:%s/openmano/tenants/%s" %(mano_host, mano_port, args.name)
+    mano_response = requests.delete(URLrequest)
+    #print mano_response
+    content = mano_response.json()
+    #print json.dumps(content, indent=4)
+    if mano_response.status_code == 200:
+        print content['result']
+    else:
+        print content['error']['description']
+    return
+
+def datacenter_attach(args):
+    headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
+    
+    datacenter_dict={}
+    if args.vim_tenant_id != None:
+        datacenter_dict['vim_tenant'] = args.vim_tenant_id
+    if args.vim_tenant_name != None:
+        datacenter_dict['vim_tenant_name'] = args.vim_tenant_name
+    payload_req = json.dumps( {"datacenter": datacenter_dict })
+    
+    #print payload_req
+        
+    URLrequest = "http://%s:%s/openmano/%s/datacenters/%s" %(mano_host, mano_port, mano_tenant, args.name)
+    mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
+    _print_verbose(mano_response, args.verbose)
+    #provide addional information if error
+    if mano_response.status_code != 200:
+        content = mano_response.json()
+        if "already in use for  'name'" in content['error']['description'] and \
+                "to database vim_tenants table" in content['error']['description']:
+            print "Try to specify a different name with --vim-tenant-name"
+
+def datacenter_detach(args):
+    headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
+    URLrequest = "http://%s:%s/openmano/%s/datacenters/%s" %(mano_host, mano_port, mano_tenant, args.name)
+    mano_response = requests.delete(URLrequest, headers=headers_req)
+    content = mano_response.json()
+    #print json.dumps(content, indent=4)
+    if mano_response.status_code == 200:
+        print content['result']
+    else:
+        print content['error']['description']
+    return
+
+def datacenter_create(args):
+    headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
+    datacenter_dict={"name": args.name, "vim_url": args.url}
+    if args.description!=None:
+        datacenter_dict["description"] = args.description 
+    if args.type!=None:
+        datacenter_dict["type"] = args.type 
+    if args.url!=None:
+        datacenter_dict["vim_url_admin"] = args.url_admin 
+    payload_req = json.dumps( {"datacenter": datacenter_dict })
+    
+    #print payload_req
+        
+    URLrequest = "http://%s:%s/openmano/datacenters" %(mano_host, mano_port)
+    mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
+    _print_verbose(mano_response, args.verbose)
+    return
+
+def datacenter_delete(args):
+    #print "datacenter-delete",args
+    if not args.force:
+        r = raw_input("Delete datacenter %s (y/N)? " %(args.name))
+        if  not (len(r)>0  and r[0].lower()=="y"):
+            return
+    URLrequest = "http://%s:%s/openmano/datacenters/%s" %(mano_host, mano_port, args.name)
+    mano_response = requests.delete(URLrequest)
+    #print mano_response
+    content = mano_response.json()
+    #print json.dumps(content, indent=4)
+    if mano_response.status_code == 200:
+        print content['result']
+    else:
+        print content['error']['description']
+    return
+
+def datacenter_list(args):
+    #print "datacenter-list",args
+    tenant='any' if args.all else mano_tenant
+    if args.name:
+        URLrequest = "http://%s:%s/openmano/%s/datacenters/%s" %(mano_host, mano_port, tenant, args.name)
+    else:
+        URLrequest = "http://%s:%s/openmano/%s/datacenters" %(mano_host, mano_port, tenant)
+    mano_response = requests.get(URLrequest)
+    if args.verbose==None:
+        args.verbose=0
+    if args.name!=None:
+        args.verbose += 1
+    _print_verbose(mano_response, args.verbose)
+    return
+
+def datacenter_net_list(args):
+    #print "datacenter-net-list",args
+    URLrequest = "http://%s:%s/openmano/datacenters/%s/networks" %(mano_host, mano_port, args.name)
+    mano_response = requests.get(URLrequest)
+    if args.verbose==None:
+        args.verbose=0
+    if args.name!=None:
+        args.verbose += 1
+    _print_verbose(mano_response, args.verbose)
+    return
+
+def datacenter_action(args):
+    #print "datacenter-net-update",args
+    headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
+    URLrequest = "http://%s:%s/openmano/datacenters/%s/action" %(mano_host, mano_port, args.datacenter)
+    if not args.force:
+        if args.action=="net-update":
+            r = raw_input(" Edit datacenter " + args.datacenter + " (y/N)? ")
+        else: 
+            r = raw_input(" Edit datacenter " + args.datacenter + " net " + args.net +" (y/N)? ")
+        if  len(r)>0  and r[0].lower()=="y":
+            pass
+        else:
+            return
+    if args.action=="net-update":
+        payload={args.action : None}
+    else:
+        payload = {args.action: {'net': args.net} }
+        if args.action=="net-edit":
+            payload[args.action].update(_load_file_or_yaml(args.file))
+
+    payload_req = json.dumps(payload)
+    #print payload_req
+    mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
+    if args.verbose==None:
+        args.verbose=0
+    #if args.datacenter!=None:
+    #    args.verbose += 1
+    _print_verbose(mano_response, args.verbose)
+    return
+
+def element_edit(args):
+    headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
+    URLrequest = "http://%s:%s/openmano/%s/%s" %(mano_host, mano_port, args.element, args.name)
+    payload=_load_file_or_yaml(args.file)
+    if args.element[:-1] not in payload:
+        payload = {args.element[:-1]: payload }
+    payload_req = json.dumps(payload)
+    
+    #print payload_req
+    if not args.force or (args.name==None and args.filer==None):
+        r = raw_input(" Edit " + args.element[:-1] + " " + args.name + " (y/N)? ")
+        if  len(r)>0  and r[0].lower()=="y":
+            pass
+        else:
+            return
+    mano_response = requests.put(URLrequest, headers=headers_req, data=payload_req)
+    if args.verbose==None:
+        args.verbose=0
+    if args.name!=None:
+        args.verbose += 1
+    _print_verbose(mano_response, args.verbose)
+    return
+
+
+global mano_host
+global mano_port
+global mano_tenant
+
+if __name__=="__main__":
+    
+    mano_tenant = os.getenv('OPENMANO_TENANT',"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    mano_host = os.getenv('OPENMANO_HOST',"localhost")
+    mano_port = os.getenv('OPENMANO_PORT',"9090")
+    mano_datacenter = os.getenv('OPENMANO_DATACENTER',None)
+    
+    main_parser = ThrowingArgumentParser(description='User program to interact with OPENMANO-SERVER (openmanod)')
+    main_parser.add_argument('--version', action='version', version='%(prog)s ' + __version__ )
+    
+    subparsers = main_parser.add_subparsers(help='commands')
+    
+    config_parser = subparsers.add_parser('config', help="prints configuration values")
+    config_parser.set_defaults(func=config)
+
+    vnf_create_parser = subparsers.add_parser('vnf-create', help="adds a vnf into the catalogue")
+    vnf_create_parser.add_argument("file", action="store", help="location of the JSON file describing the VNF").completer = FilesCompleter
+    vnf_create_parser.add_argument("--name", action="store", help="name of the VNF (if it exists in the VNF descriptor, it is overwritten)")
+    vnf_create_parser.add_argument("--description", action="store", help="description of the VNF (if it exists in the VNF descriptor, it is overwritten)")
+    vnf_create_parser.add_argument('--verbose', '-v', action='count')
+    vnf_create_parser.set_defaults(func=vnf_create)
+
+    vnf_list_parser = subparsers.add_parser('vnf-list', help="lists information about a vnf")
+    vnf_list_parser.add_argument("name", nargs='?', help="name of the VNF")
+    vnf_list_parser.add_argument('--verbose', '-v', action='count')
+    vnf_list_parser.add_argument('--details', action="store_true", help="prints details of the VNF (internal structure)")
+    #vnf_list_parser.add_argument('--descriptor', help="prints the VNF descriptor", action="store_true")
+    vnf_list_parser.set_defaults(func=vnf_list)
+    
+    vnf_delete_parser = subparsers.add_parser('vnf-delete', help="deletes a vnf from the catalogue")
+    vnf_delete_parser.add_argument("name", action="store", help="name or uuid of the VNF to be deleted")
+    vnf_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
+    vnf_delete_parser.set_defaults(func=vnf_delete)
+    
+    scenario_create_parser = subparsers.add_parser('scenario-create', help="adds a scenario into the OPENMANO DB")
+    scenario_create_parser.add_argument("file", action="store", help="location of the YAML file describing the scenario").completer = FilesCompleter
+    scenario_create_parser.add_argument("--name", action="store", help="name of the scenario (if it exists in the YAML scenario, it is overwritten)")
+    scenario_create_parser.add_argument("--description", action="store", help="description of the scenario (if it exists in the YAML scenario, it is overwritten)")
+    scenario_create_parser.add_argument('--verbose', '-v', action='count')
+    scenario_create_parser.set_defaults(func=scenario_create)
+
+    scenario_list_parser = subparsers.add_parser('scenario-list', help="lists information about a scenario")
+    scenario_list_parser.add_argument("name", nargs='?', help="name of the scenario")
+    scenario_list_parser.add_argument('--verbose', '-v', action='count')
+    scenario_list_parser.add_argument('--details', action="store_true", help="prints details of the scenario (internal structure)")
+    #scenario_list_parser.add_argument('--descriptor', help="prints the scenario descriptor", action="store_true")
+    scenario_list_parser.set_defaults(func=scenario_list)
+    
+    scenario_delete_parser = subparsers.add_parser('scenario-delete', help="deletes a scenario from the OPENMANO DB")
+    scenario_delete_parser.add_argument("name", action="store", help="name or uuid of the scenario to be deleted")
+    scenario_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
+    scenario_delete_parser.set_defaults(func=scenario_delete)
+
+    scenario_deploy_parser = subparsers.add_parser('scenario-deploy', help="deploys a scenario")
+    scenario_deploy_parser.add_argument("scenario", action="store", help="name or uuid of the scenario to be deployed")
+    scenario_deploy_parser.add_argument("name", action="store", help="name of the instance")
+    scenario_deploy_parser.add_argument("--nostart", action="store_true", help="does not start the vms, just reserve resources")
+    scenario_deploy_parser.add_argument("--datacenter", action="store", help="specifies the datacenter. Needed if several datacenters are available")
+    scenario_deploy_parser.add_argument("--description", action="store", help="description of the instance")
+    scenario_deploy_parser.add_argument('--verbose', '-v', action='count')
+    scenario_deploy_parser.set_defaults(func=scenario_deploy)
+    
+    scenario_deploy_parser = subparsers.add_parser('scenario-verify', help="verifies if a scenario can be deployed (deploys it and deletes it)")
+    scenario_deploy_parser.add_argument("scenario", action="store", help="name or uuid of the scenario to be verified")
+    scenario_deploy_parser.set_defaults(func=scenario_verify)
+    
+    instance_scenario_list_parser = subparsers.add_parser('instance-scenario-list', help="lists information about a scenario instance")
+    instance_scenario_list_parser.add_argument("name", nargs='?', help="name of the scenario instance")
+    instance_scenario_list_parser.add_argument('--verbose', '-v', action='count')
+    instance_scenario_list_parser.add_argument('--details', action="store_true", help="prints details of the scenario instance (internal structure)")
+    instance_scenario_list_parser.set_defaults(func=instance_scenario_list)
+
+    instance_scenario_delete_parser = subparsers.add_parser('instance-scenario-delete', help="deletes a scenario instance (and deletes all VM and net instances in VIM)")
+    instance_scenario_delete_parser.add_argument("name", action="store", help="name or uuid of the scenario instance to be deleted")
+    instance_scenario_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
+    instance_scenario_delete_parser.set_defaults(func=instance_scenario_delete)
+    
+    #instance_scenario_status_parser = subparsers.add_parser('instance-scenario-status', help="show the status of a scenario instance")
+    #instance_scenario_status_parser.add_argument("name", action="store", help="name or uuid of the scenario instance")
+    #instance_scenario_status_parser.set_defaults(func=instance_scenario_status)
+    
+    tenant_create_parser = subparsers.add_parser('tenant-create', help="create a new tenant")
+    tenant_create_parser.add_argument("name", action="store", help="name for the tenant")
+    tenant_create_parser.add_argument("--description", action="store", help="description of the tenant")
+    tenant_create_parser.add_argument('--verbose', '-v', action='count')
+    tenant_create_parser.set_defaults(func=tenant_create)
+
+    tenant_delete_parser = subparsers.add_parser('tenant-delete', help="deletes a tenant from the catalogue")
+    tenant_delete_parser.add_argument("name", action="store", help="name or uuid of the tenant to be deleted")
+    tenant_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
+    tenant_delete_parser.set_defaults(func=tenant_delete)
+
+    tenant_list_parser = subparsers.add_parser('tenant-list', help="lists information about a tenant")
+    tenant_list_parser.add_argument("name", nargs='?', help="name or uuid of the tenant")
+    tenant_list_parser.add_argument('--verbose', '-v', action='count')
+    tenant_list_parser.set_defaults(func=tenant_list)
+
+    datacenter_create_parser = subparsers.add_parser('datacenter-create', help="create a new datacenter")
+    datacenter_create_parser.add_argument("name", action="store", help="name for the datacenter")
+    datacenter_create_parser.add_argument("url", action="store", help="url for the datacenter")
+    datacenter_create_parser.add_argument("--url_admin", action="store", help="url for administration for the datacenter")
+    datacenter_create_parser.add_argument("--type", action="store", help="datacenter type: openstack or openvim (default)")
+    datacenter_create_parser.add_argument("--description", action="store", help="description of the datacenter")
+    datacenter_create_parser.add_argument('--verbose', '-v', action='count')
+    datacenter_create_parser.set_defaults(func=datacenter_create)
+
+    datacenter_delete_parser = subparsers.add_parser('datacenter-delete', help="deletes a datacenter from the catalogue")
+    datacenter_delete_parser.add_argument("name", action="store", help="name or uuid of the datacenter to be deleted")
+    datacenter_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
+    datacenter_delete_parser.set_defaults(func=datacenter_delete)
+
+    datacenter_list_parser = subparsers.add_parser('datacenter-list', help="lists information about a datacenter")
+    datacenter_list_parser.add_argument("name", nargs='?', help="name or uuid of the datacenter")
+    datacenter_list_parser.add_argument('--verbose', '-v', action='count')
+    datacenter_list_parser.add_argument("-a", "--all", action="store_true", help="show all datacenters, not only datacenters attached to tenant")
+    datacenter_list_parser.set_defaults(func=datacenter_list)
+
+    datacenter_net_list_parser = subparsers.add_parser('datacenter-net-list', help="lists external networks from a datacenter")
+    datacenter_net_list_parser.add_argument("name", help="name or uuid of the datacenter")
+    datacenter_net_list_parser.add_argument('--verbose', '-v', action='count')
+    datacenter_net_list_parser.set_defaults(func=datacenter_net_list)
+
+    item_dict={'datacenter':'datacenters','tenant':'tenants',}
+    for item in item_dict:
+        element_edit_parser = subparsers.add_parser(item+'-edit', help="edit one "+item_dict[item][:-1])
+        element_edit_parser.add_argument("name", help="name or uuid of the "+item)
+        element_edit_parser.add_argument("file", help="json/yaml text or file with the changes").completer = FilesCompleter
+        element_edit_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+        element_edit_parser.add_argument('--verbose', '-v', action='count')
+        element_edit_parser.set_defaults(func=element_edit, element=item_dict[item])
+
+    action_dict={'net-update': 'retrieves external networks from datacenter',
+                 'net-edit': 'edits an external network',
+                 'net-delete': 'deletes an external network',
+                 }
+    for item in action_dict:
+        datacenter_action_parser = subparsers.add_parser('datacenter-'+item, help=action_dict[item])
+        datacenter_action_parser.add_argument("datacenter", help="name or uuid of the datacenter")
+        if item=='net-edit' or item=='net-delete':
+            datacenter_action_parser.add_argument("net", help="name or uuid of the datacenter net")
+        if item=='net-edit':
+            datacenter_action_parser.add_argument("file", help="json/yaml text or file with the changes").completer = FilesCompleter
+        datacenter_action_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+        datacenter_action_parser.add_argument('--verbose', '-v', action='count')
+        datacenter_action_parser.set_defaults(func=datacenter_action, action=item)
+
+    datacenter_netmgmt_parser = subparsers.add_parser('datacenter-net'+item, help=action_dict[item])
+    datacenter_netmgmt_parser.add_argument("name", help="name or uuid of the datacenter")
+    datacenter_netmgmt_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+    datacenter_netmgmt_parser.add_argument('--verbose', '-v', action='count')
+    datacenter_netmgmt_parser.set_defaults(func=datacenter_action, action=item)
+
+    datacenter_attach_parser = subparsers.add_parser('datacenter-attach', help="associates a datacenter to the operating tenant")
+    datacenter_attach_parser.add_argument("name", help="name or uuid of the datacenter")
+    datacenter_attach_parser.add_argument('--vim-tenant-id', action='store', help="specify a datacenter tenant to use. A new one is created by default")
+    datacenter_attach_parser.add_argument('--vim-tenant-name', action='store', help="specify a datacenter tenant name.")
+    datacenter_attach_parser.add_argument('--verbose', '-v', action='count')
+    datacenter_attach_parser.set_defaults(func=datacenter_attach)
+
+    datacenter_detach_parser = subparsers.add_parser('datacenter-detach', help="removes the association between a datacenter and the operating tenant")
+    datacenter_detach_parser.add_argument("name", help="name or uuid of the datacenter")
+    datacenter_detach_parser.add_argument('--verbose', '-v', action='count')
+    datacenter_detach_parser.set_defaults(func=datacenter_detach)
+
+    argcomplete.autocomplete(main_parser)
+    
+    try:
+        args = main_parser.parse_args()
+        args.func(args)
+    except (requests.exceptions.ConnectionError):
+        print "Connection error: not possible to contact OPENMANO-SERVER (openmanod)"
+    except (KeyboardInterrupt):
+        print 'Exiting openmano'
+    except (SystemExit, ArgumentParserError):
+        pass
+        
+    exit()
+
