@@ -33,7 +33,7 @@ It loads the configuration file and launches the http_server thread that will li
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$26-aug-2014 11:09:29$"
-__version__="0.1.14-r355"
+__version__="0.2.0-r355"
 version_date="Mar 2015"
 
 import httpserver
