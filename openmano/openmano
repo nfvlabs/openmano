@@ -28,7 +28,7 @@ openmano client used to interact with openmano-server (openmanod)
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$09-oct-2014 09:09:48$"
-__version__="0.1.1-r355"
+__version__="0.2.0-r355"
 version_date="Mar 2015"
 
 from argcomplete.completers import FilesCompleter
