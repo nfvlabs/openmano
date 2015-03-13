@@ -10,8 +10,8 @@
 - [Getting started](https://github.com/nfvlabs/openmano/wiki/Getting-started "getting started")
 - [openmano usage manual](https://github.com/nfvlabs/openmano/wiki/openmano-usage "openmano usage manual")
 - [openvim usage manual](https://github.com/nfvlabs/openmano/wiki/openvim-usage  "openvim usage manual")
-- [openmano API](http://github.com/nfvlabs/openmano/raw/master/docs/openmano-api-0.1.pdf "openmano API")
-- [openvim API](http://github.com/nfvlabs/openmano/raw/master/docs/openvim-api-0.5.pdf "openvim API")
+- [openmano API](https://github.com/nfvlabs/openmano/raw/master/docs/openmano-api-0.1.pdf "openmano API")
+- [openvim API](https://github.com/nfvlabs/openmano/raw/master/docs/openvim-api-0.5.pdf "openvim API")
 
 #License
 Check the [License](https://github.com/nfvlabs/openmano/blob/master/LICENSE "license") file.
