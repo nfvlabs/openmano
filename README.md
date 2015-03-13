@@ -1,5 +1,4 @@
-# openmano
-![openmano](http://github.com/nfvlabs/openmano/blob/master/images/openmano.png)
+<img src="https://github.com/nfvlabs/openmano/blob/master/images/openmano.png" alt="openmano" height="200"/>
 
 **OpenMANO** is an open source project that provides a practical implementation of the reference architecture for Management & Orchestration under standardization at ETSI’s NFV ISG ([NFV MANO](http://www.etsi.org/deliver/etsi_gs/NFV/001_099/002/01.01.01_60/gs_NFV002v010101p.pdf)). It consists of three main SW components:
 
