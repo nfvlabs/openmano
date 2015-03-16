@@ -48,5 +48,6 @@ then
 fi
  
 #${DIRNAME}/quick_delete_db.sh $MUSER $MPASS $MDB $HOST $PORT
+echo "    loading ${DIRNAME}/${MDB}_structure.sql"
 mysql  -h $HOST -P $PORT -u $MUSER -p$MPASS  < ${DIRNAME}/${MDB}_structure.sql
 

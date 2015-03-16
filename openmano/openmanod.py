@@ -150,8 +150,12 @@ if __name__=="__main__":
         #print global_config
         
         if not os.path.exists(global_config['vnf_repository']):
-            print 'The folder for vnf_repository did not exist. Creating it.'
-            os.makedirs(global_config['vnf_repository'])
+            print "Creating folder vnf_repository folder: '%s'." % global_config['vnf_repository']
+            try:
+                os.makedirs(global_config['vnf_repository'])
+            except Exception,e:
+                print "Error '%s'. Ensure the path 'vnf_repository' is properly set at %s" %(e.args[1], config_file)
+                exit(-1)
         
         # Initialize DB connection
         mydb = nfvo_db.nfvo_db();

@@ -41,7 +41,7 @@ memory_schema={"type":"string", "pattern" : "^[0-9]+ *([MG]i?[Bb])?$"}
 integer0_schema={"type":"integer","minimum":0}
 integer1_schema={"type":"integer","minimum":1}
 #path_schema={"type":"string", "pattern":"^(/[a-zA-Z0-9 -.:!]*)+$"}
-path_schema={"type":"string", "pattern":"^(/[^/"":]+)+$"}
+path_schema={"type":"string", "pattern":"^~?(/[^/"":{}]+)+$"}
 vlan_schema={"type":"integer","minimum":1,"maximum":4095}
 vlan1000_schema={"type":"integer","minimum":1000,"maximum":4095}
 mac_schema={"type":"string", "pattern":"^[0-9a-fA-F][02468aceACE](:[0-9a-fA-F]{2}){5}$"}  #must be unicast LSB bit of MSB byte ==0 
