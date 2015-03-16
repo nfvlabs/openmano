@@ -1,5 +1,4 @@
-#!/bin/bash
-
+<!--
 ##
 # Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
 # This file is part of openmano
@@ -20,15 +19,20 @@
 # For those usages not covered by the Apache License, Version 2.0 please
 # contact with: nfvlabs@tid.es
 ##
+-->
 
-#launch floodlight, openmano and openvim
-
-DIRNAME=`dirname $0`
-
-$DIRNAME/start-openflow.sh
-sleep 10
-$DIRNAME/start-openvim.sh
-sleep 1
-$DIRNAME/start-openmano.sh
-
+<configuration scan="true">
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%level [%logger:%thread] %msg%n</pattern>
+    </encoder>
+  </appender>
+  <root level="DEBUG">
+    <appender-ref ref="STDOUT" />
+  </root>
+  <logger name="org" level="DEBUG"/>
+  <logger name="LogService" level="DEBUG"/> <!-- Restlet access logging -->
+  <logger name="net.floodlightcontroller" level="TRACE"/>
+  <logger name="net.floodlightcontroller.logging" level="DEBUG"/>
+</configuration>
 

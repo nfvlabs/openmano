@@ -21,14 +21,27 @@
 # contact with: nfvlabs@tid.es
 ##
 
-#launch floodlight, openmano and openvim
+
+#Launch openflow controller if installed.  
+#PARAM $1: directory where openflow controller is installed. By default ../../floodlight-0.90
 
 DIRNAME=`dirname $0`
+FLD=${DIRNAME}/../../floodlight-0.90
 
-$DIRNAME/start-openflow.sh
-sleep 10
-$DIRNAME/start-openvim.sh
+[ -n "$1" ] && FLD=$1
+
+#check directory exist and it is compiled
+[ ! -d ${FLD} ] &&
+     echo "Directory ${FLD} not found" && exit
+[ ! -r $FLD/target/floodlight.jar ] &&
+     echo "File 'target/floodlight.jar' not found" && exit
+
+screen -dmS flow bash
+#sleep 1
+#screen -S flow -p 0 -X stuff "cd ${FLD}\n"
+
 sleep 1
-$DIRNAME/start-openmano.sh
+screen -S flow -p 0 -X stuff "java  -Dlogback.configurationFile=${DIRNAME}/flow-logback.xml -jar ${FLD}/target/floodlight.jar -cf ${DIRNAME}/flow.properties\n"
 
+echo "openflow controller running. Execute 'screen -x flow' and 'Ctrl+c' to terminte"
 
