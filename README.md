@@ -1,4 +1,4 @@
-<img src="https://github.com/nfvlabs/openmano/blob/master/images/openmano.png" alt="openmano" height="200"/>
+<img src="https://github.com/nfvlabs/openmano/raw/master/images/openmano.png" alt="openmano" height="200"/>
 
 **OpenMANO** is an open source project that provides a practical implementation of the reference architecture for Management & Orchestration under standardization at ETSI’s NFV ISG ([NFV MANO](http://www.etsi.org/deliver/etsi_gs/NFV/001_099/002/01.01.01_60/gs_NFV002v010101p.pdf)). It consists of three main SW components:
 
@@ -6,8 +6,21 @@
 - **openmano**: reference implementation of an NFV-O (Network Functions Virtualisation Orchestrator). It interfaces with an NFV VIM through its API and offers a northbound interface, based on REST ([openmano API](http://github.com/nfvlabs/openmano/raw/master/docs/openmano-api-0.1.pdf "openmano API")), where NFV services are offered including the creation and deletion of VNF templates, VNF instances, network service templates and network service instances.
 - **openmano-gui**: web GUI to interact with openmano server, through its northbound API, in a friendly way. 
 
+<img src="https://github.com/nfvlabs/openmano/raw/master/images/openmano-nfv.png" align="middle" alt="openmano-nfv" height="400"/>
+
+#Quick installation
+
+- Download a VDI Ubuntu Server 14.10 LAMP image from [here](https://virtualboximages.com/Ubuntu+14.10+amd64+LAMP+Server+VirtualBox+VDI+Virtual+Computer "download VM image").
+- Start the VM and execute the following command in a terminal:
+
+        wget -q -O - https://github.com/nfvlabs/openmano/raw/master/scripts/install-openmano.sh | sudo bash root adminuser
+        #NOTE: **root adminuser** are the mysql user and password of this VM image
+
+Manual installation can be done following these [instructions](https://github.com/nfvlabs/openmano/wiki/Getting-started#manual-installation). 
+
 #Full documentation
 - [Getting started](https://github.com/nfvlabs/openmano/wiki/Getting-started "getting started")
+- [Compute node configuration](https://github.com/nfvlabs/openmano/wiki/Compute-node-configuration "compute node configuration")
 - [openmano usage manual](https://github.com/nfvlabs/openmano/wiki/openmano-usage "openmano usage manual")
 - [openvim usage manual](https://github.com/nfvlabs/openmano/wiki/openvim-usage  "openvim usage manual")
 - [openmano API](https://github.com/nfvlabs/openmano/raw/master/docs/openmano-api-0.1.pdf "openmano API")
