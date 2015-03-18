@@ -1,0 +1,39 @@
+---
+name:            insert a name for the scenario
+description:     insert a description for the scenario
+topology:
+  nodes:
+    vnf1:                     # vnf/net name in the scenario
+      type:      VNF          # VNF, network, external_network (if it is a datacenter network)
+      VNF model: vnf_model1   # VNF name as introduced in OPENMANO DB
+      # vnf_id:    519f03ee-8ab6-11e4-ab4c-52540056c317   # Optionally, instead of the VNF name, the VNF id in Openmano DB can be used
+    vnf2:
+      type:      VNF
+      VNF model: vnf_model2
+      # Optional information for display in the openmano-gui: graphical position of the node and its interfaces
+      graph:     {"y":399,"x":632,"ifaces":{"left":[["xe0","d"],["xe1","d"]],"bottom":[["eth0","v"],["eth1","m"]]}}
+    bridge1:                  # Bridge networks must be declared in this section if we want to interconnect VNFs using a Linux bridge
+      type:      network
+      model:     bridge_net   # 'bridge_net' or 'dataplane_net' for 'network' type
+    default:                  # External networks (datacenter nets) must be declared in this section if we want to interconnect VNFs to them
+      type:      external_network
+      model:     default      # datacenter net name, as introduced in OPENMANO DB
+  connections:                # In this section, connections between VNFs and networks are explicited
+    datanet:                  # name
+      # Data plane connections do not need to include a bridge since they are built through the Openflow Controller
+      nodes:                  # nodes that will be connected: one or several vnfs, and optionally one additional network declared in nodes section
+      -  vnf1: xe0            # First node and its interface to be connected (interfaces must match to one in the VNF descriptor)
+      -  vnf2: xe0            # Second node and its interface
+    control net:
+      # Control plane connections must include a bridge network in the list of nodes
+      nodes:
+      -   bridge1: null       # Bridge networks must be included if we want to interconnect the nodes to that network
+      -   vnf1: eth1
+      -   vnf2: eth1
+    external net:
+      # Connections based on external networks (datacenter nets) must include the external network in the list of nodes
+      nodes:
+      -   default: null       # Datacenter networks (external networks) must be included if we want to interconnect the nodes to that network
+      -   vnf1: eth0
+      -   vnf1: eth0
+

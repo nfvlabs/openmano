@@ -1,0 +1,161 @@
+---
+vnf:
+    name: TEMPLATE-2VM
+    # class: parent      # Optional. Used to organize VNFs
+    internal-connections:
+    -   name:        datanet
+        description: datanet
+        type:        data
+        elements:
+        -   VNFC:             VirtualMachine-1
+            local_iface_name: xe0
+        -   VNFC:             VirtualMachine-2
+            local_iface_name: xe0
+    -   name:        controlnet
+        description: controlnet
+        type:        bridge
+        elements:
+        -   VNFC:             VirtualMachine-1
+            local_iface_name: ge0
+        -   VNFC:             VirtualMachine-2
+            local_iface_name: ge0
+    external-connections:
+    -   name:              mgmt0
+        type:              mgmt              # "mgmt" (autoconnect to management net), "bridge", "data"
+        VNFC:              VirtualMachine-1  # Virtual Machine this interface belongs to
+        local_iface_name:  mgmt0             # interface name inside this Virtual Machine (must be defined in the VNFC section)
+        description:       Management interface 1
+    -   name:              mgmt1
+        type:              mgmt              # "mgmt" (autoconnect to management net), "bridge", "data"
+        VNFC:              VirtualMachine-2  # Virtual Machine this interface belongs to
+        local_iface_name:  mgmt0             # interface name inside this Virtual Machine (must be defined in the VNFC section)
+        description:       Management interface 2
+    -   name:              data0
+        type:              data              # "mgmt" (autoconnect to management net), "bridge", "data"
+        VNFC:              VirtualMachine-1  # Virtual Machine this interface belongs to
+        local_iface_name:  xe1               # interface name inside this Virtual Machine (must be defined in the VNFC section)
+        description:       Data interface 1
+    -   name:              data1
+        type:              data              # "mgmt" (autoconnect to management net), "bridge", "data"
+        VNFC:              VirtualMachine-2  # Virtual Machine this interface belongs to
+        local_iface_name:  xe1               # interface name inside this Virtual Machine (must be defined in the VNFC section)
+        description:       Data interface 2
+    VNFC:                              # Virtual machine array 
+    # First Virtual Machine
+    -   name:        VirtualMachine-1       # name of Virtual Machine
+        description: VM 1 in the MultiVM template
+        VNFC image: /path/to/imagefolder/TEMPLATE-2VM-VM1.qcow2
+        # image metadata: {"bus":"ide", "os_type":"windows", "use_incremental": "no" } #Optional
+        # processor:                     #Optional
+        #     model: Intel(R) Xeon(R) CPU E5-4620 0 @ 2.20GHz
+        #     features: ["64b", "iommu", "lps", "tlbps", "hwsv", "dioc", "ht"]
+        # hypervisor:                    #Optional
+        #     type: QEMU-kvm
+        #     version: "10002|12001|2.6.32-358.el6.x86_64"
+        # vcpus: 1          # Only for traditional cloud VMs. Number of virtual CPUs (oversubscription is allowed).
+        # ram: 1024         # Only for traditional cloud VMs. Memory in MBytes (not from hugepages, oversubscription is allowed)
+        numas: 
+        -   paired-threads: 5          # "cores", "paired-threads", "threads"
+            paired-threads-id: [ [0,1], [2,3], [4,5], [6,7], [8,9] ] # By default follows incremental order
+            memory: 14                 # GBytes
+            interfaces:
+            -   name:      xe0
+                vpci:      "0000:00:11.0"     
+                dedicated: "yes"         # "yes"(passthrough), "no"(sriov with vlan tags), "yes:sriov"(sriovi, but exclusive and without vlan tag)
+                bandwidth: 10 Gbps
+                #mac_address: '20:33:45:56:77:44' #avoid this option if possible
+            -   name:      xe1
+                vpci:      "0000:00:12.0"
+                dedicated: "yes"
+                bandwidth: 10 Gbps
+                #mac_address: '20:33:45:56:77:45' #avoid this option if possible
+        bridge-ifaces:
+        -   name:      mgmt0
+            vpci:      "0000:00:09.0"  # Optional. Virtual PCI address 
+            bandwidth: 1 Mbps          # Optional. Informative only
+            # mac_address: '20:33:45:56:77:46' #avoid this option if possible
+            # model:       'virtio'      # ("virtio","e1000","ne2k_pci","pcnet","rtl8139") By default, it is automatically filled by libvirt
+        -   name:      ge0
+            vpci:      "0000:00:10.0"
+            bandwidth: 1 Mbps
+            # mac_address: '20:33:45:56:77:47' # avoid this option if possible
+            # model:       'virtio'            # ("virtio","e1000","ne2k_pci","pcnet","rtl8139") By default, it is automatically filled by libvirt
+        devices:                       # Optional, order determines device letter asignation (hda, hdb, ...)
+        -   type:      disk            # "disk","cdrom","xml"
+            image:     /path/to/imagefolder/SECOND-DISK.qcow2
+            # image metadata: {"bus":"ide", "os_type":"windows", "use_incremental": "no" }
+            # vpci:      "0000:00:03.0"   # Optional, not for disk or cdrom
+        -   type:      cdrom
+            image:     /path/to/imagefolder/CDROM-IMAGE.qcow2
+            # image metadata: {"bus":"ide", "os_type":"windows", "use_incremental": "no" }
+        -   type:      xml
+            image:     /path/to/imagefolder/ADDITIONAL-DISK.qcow2   # Optional, depending on the device type
+            image metadata: {"bus":"ide", "os_type":"windows", "use_incremental": "no" }  # Optional, depending on the device type
+            vpci:      "0000:00:03.0"                          # Optional, depending on the device type (not needed for disk or cdrom)
+            xml:   '   xml text for XML described devices. Do not use single quotes inside
+                       The following words, if found, will be replaced:
+                       __file__    by image path, (image must be provided)
+                       __format__  by qcow2 or raw (image must be provided)
+                       __dev__     by device letter (b, c, d ...) 
+                       __vpci__    by vpci (vpci must be provided)
+                   '
+    # Second Virtual Machine
+    -   name:        VirtualMachine-2       # name of Virtual Machine
+        description: VM 2 in the MultiVM template
+        VNFC image: /path/to/imagefolder/TEMPLATE-2VM-VM1.qcow2   # In this case, it is the same as VirtualMachine-1, but it could have been different
+        # image metadata: {"bus":"ide", "os_type":"windows", "use_incremental": "no" } #Optional
+        # processor:                     #Optional
+        #     model: Intel(R) Xeon(R) CPU E5-4620 0 @ 2.20GHz
+        #     features: ["64b", "iommu", "lps", "tlbps", "hwsv", "dioc", "ht"]
+        # hypervisor:                    #Optional
+        #     type: QEMU-kvm
+        #     version: "10002|12001|2.6.32-358.el6.x86_64"
+        # vcpus: 1          # Only for traditional cloud VMs. Number of virtual CPUs (oversubscription is allowed).
+        # ram: 1024         # Only for traditional cloud VMs. Memory in MBytes (not from hugepages, oversubscription is allowed)
+        numas:
+        -   paired-threads: 5          # "cores", "paired-threads", "threads"
+            paired-threads-id: [ [0,1], [2,3], [4,5], [6,7], [8,9] ] # By default follows incremental order
+            memory: 14                 # GBytes
+            interfaces:
+            -   name:      xe0
+                vpci:      "0000:00:11.0"
+                dedicated: "yes"         # "yes"(passthrough), "no"(sriov with vlan tags), "yes:sriov"(sriovi, but exclusive and without vlan tag)
+                bandwidth: 10 Gbps
+                #mac_address: '20:33:45:56:77:44' #avoid this option if possible
+            -   name:      xe1
+                vpci:      "0000:00:12.0"
+                dedicated: "yes"
+                bandwidth: 10 Gbps
+                #mac_address: '20:33:45:56:77:45' #avoid this option if possible
+        bridge-ifaces:
+        -   name:      mgmt0
+            vpci:      "0000:00:09.0"    # Optional
+            bandwidth: 1 Mbps          # Optional, informative only
+            # mac_address: '20:33:45:56:77:46' #avoid this option if possible
+            # model:       'virtio'      # ("virtio","e1000","ne2k_pci","pcnet","rtl8139") By default, it is automatically filled by libvirt
+        -   name:      ge0
+            vpci:      "0000:00:10.0"
+            bandwidth: 1 Mbps
+            # mac_address: '20:33:45:56:77:47' #avoid this option if possible
+            # model:       'virtio'      # ("virtio","e1000","ne2k_pci","pcnet","rtl8139") By default, it is automatically filled by libvirt
+        devices:                       # Optional, order determines device letter asignation (hda, hdb, ...)
+        -   type:      disk            # "disk","cdrom","xml"
+            image:     /path/to/imagefolder/SECOND-DISK.qcow2
+            # image metadata: {"bus":"ide", "os_type":"windows", "use_incremental": "no" }
+            # vpci:      "0000:00:03.0"   # Optional, not for disk or cdrom
+        -   type:      cdrom
+            image:     /path/to/imagefolder/CDROM-IMAGE.qcow2
+            #image metadata: {"bus":"ide", "os_type":"windows", "use_incremental": "no" }
+        -   type:      xml
+            image:     /path/to/imagefolder/ADDITIONAL-DISK.qcow2   # Optional, depending on the device type
+            image metadata: {"bus":"ide", "os_type":"windows", "use_incremental": "no" }  # Optional, depending on the device type
+            vpci:      "0000:00:03.0"                          # Optional, depending on the device type (not needed for disk or cdrom)
+            xml:   '   xml text for XML described devices. Do not use single quotes inside
+                       The following words, if found, will be replaced:
+                       __file__    by image path, (image must be provided)
+                       __format__  by qcow2 or raw (image must be provided)
+                       __dev__     by device letter (b, c, d ...)
+                       __vpci__    by vpci (vpci must be provided)
+                   '
+    # Additional Virtual Machines can be included here
+

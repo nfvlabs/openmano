@@ -1,0 +1,17 @@
+---
+name:            simple
+description:     Simple network scenario consisting of a single VNF connected to an external network
+topology: 
+  nodes: 
+    linux1:                   # vnf/net name in the scenario
+      type:      VNF          # VNF, network, external_network (if it is a datacenter network)
+      VNF model: linux        # VNF name as introduced in OPENMANO DB
+    default: 
+      type:      external_network # Datacenter net
+      model:     default
+  connections: 
+    conn1:                   # provide a name for this net or connection
+      nodes: 
+      -   default: null      # Datacenter net
+      -   linux1: eth0       # Node and its interface
+

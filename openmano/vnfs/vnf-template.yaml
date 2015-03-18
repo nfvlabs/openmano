@@ -1,0 +1,85 @@
+---
+vnf:
+    name: TEMPLATE
+    # class: parent      # Optional. Used to organize VNFs
+    external-connections:
+    -   name:              mgmt0
+        type:              mgmt        # "mgmt" (autoconnect to management net), "bridge", "data"
+        VNFC:              TEMPLATE-VM # Virtual Machine this interface belongs to
+        local_iface_name:  mgmt0       # interface name inside this Virtual Machine (must be defined in the VNFC section)
+        description:       Management interface
+    -   name:              xe0
+        type:              data
+        VNFC:              TEMPLATE-VM
+        local_iface_name:  xe0
+        description:       Data interface 1
+    -   name:              xe1
+        type:              data
+        VNFC:              TEMPLATE-VM
+        local_iface_name:  xe1
+        description:       Data interface 2
+    -   name:              ge0
+        type:              bridge
+        VNFC:              TEMPLATE-VM
+        local_iface_name:  ge0
+        description:       Bridge interface
+    VNFC:                              # Virtual machine array 
+    -   name:        TEMPLATE-VM       # name of Virtual Machine
+        description: TEMPLATE description
+        VNFC image: /path/to/imagefolder/TEMPLATE-VM.qcow2
+        # image metadata: {"bus":"ide", "os_type":"windows", "use_incremental": "no" } #Optional
+        # processor:                     #Optional
+        #     model: Intel(R) Xeon(R) CPU E5-4620 0 @ 2.20GHz
+        #     features: ["64b", "iommu", "lps", "tlbps", "hwsv", "dioc", "ht"]
+        # hypervisor:                    #Optional
+        #     type: QEMU-kvm
+        #     version: "10002|12001|2.6.32-358.el6.x86_64"
+        # vcpus: 1          # Only for traditional cloud VMs. Number of virtual CPUs (oversubscription is allowed).
+        # ram: 1024         # Only for traditional cloud VMs. Memory in MBytes (not from hugepages, oversubscription is allowed)
+        numas: 
+        -   paired-threads: 5          # "cores", "paired-threads", "threads"
+            paired-threads-id: [ [0,1], [2,3], [4,5], [6,7], [8,9] ] # By default follows incremental order
+            memory: 14                 # GBytes
+            interfaces:
+            -   name:      xe0
+                vpci:      "0000:00:11.0"     
+                dedicated: "yes"         # "yes"(passthrough), "no"(sriov with vlan tags), "yes:sriov"(sriovi, but exclusive and without vlan tag)
+                bandwidth: 10 Gbps
+                # mac_address: '20:33:45:56:77:44' #avoid this option if possible
+            -   name:      xe1
+                vpci:      "0000:00:12.0"
+                dedicated: "yes"
+                bandwidth: 10 Gbps
+                # mac_address: '20:33:45:56:77:45' #avoid this option if possible
+        bridge-ifaces:
+        -   name:      mgmt0
+            vpci:      "0000:00:09.0"    # Optional. Virtual PCI address
+            bandwidth: 1 Mbps            # Optional. Informative only
+            # mac_address: '20:33:45:56:77:46' #avoid this option if possible
+            # model:       'virtio'      # ("virtio","e1000","ne2k_pci","pcnet","rtl8139") By default, it is automatically filled by libvirt
+        -   name:      ge0
+            vpci:      "0000:00:10.0"
+            bandwidth: 1 Mbps
+            # mac_address: '20:33:45:56:77:47' #avoid this option if possible
+            # model:       'virtio'      # ("virtio","e1000","ne2k_pci","pcnet","rtl8139") By default, it is automatically filled by libvirt
+        devices:                       # Optional, order determines device letter asignation (hda, hdb, ...)
+        -   type:      disk            # "disk","cdrom","xml"
+            image:     /path/to/imagefolder/SECOND-DISK.qcow2
+            # image metadata: {"bus":"ide", "os_type":"windows", "use_incremental": "no" }
+            # vpci:      "0000:00:03.0"   # Optional, not for disk or cdrom
+        -   type:      cdrom
+            image:     /path/to/imagefolder/CDROM-IMAGE.qcow2
+            # image metadata: {"bus":"ide", "os_type":"windows", "use_incremental": "no" }
+        -   type:      xml
+            image:     /path/to/imagefolder/ADDITIONAL-DISK.qcow2   # Optional, depending on the device type
+            image metadata: {"bus":"ide", "os_type":"windows", "use_incremental": "no" }  # Optional, depending on the device type
+            vpci:      "0000:00:03.0"                          # Optional, depending on the device type (not needed for disk or cdrom)
+            xml:   '   xml text for XML described devices. Do not use single quotes inside
+                       The following words, if found, will be replaced:
+                       __file__    by image path, (image must be provided)
+                       __format__  by qcow2 or raw (image must be provided)
+                       __dev__     by device letter (b, c, d ...) 
+                       __vpci__    by vpci (vpci must be provided)
+                   '
+    # Additional Virtual Machines would be included here
+
