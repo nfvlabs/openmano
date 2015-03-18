@@ -210,6 +210,7 @@ class vim_db():
         Return: (result, uuid) where result can be 0 if error, or 1 if ok
         '''
         for retry_ in range(0,2):
+            cmd=""
             inserted=-1
             try:
                 #create uuid if not provided
@@ -276,6 +277,7 @@ class vim_db():
         Return: (result, uuid) where result can be 0 if error, or 1 if ok
         '''
         for retry_ in range(0,2):
+            cmd=""
             try:
                 if add_uuid:
                     #create uuid if not provided
@@ -343,6 +345,7 @@ class vim_db():
         '''
         self.__remove_quotes(UPDATE)
         for retry_ in range(0,2):
+            cmd=""
             try:
                 #gettting uuid 
                 uuid = WHERE['uuid'] if 'uuid' in WHERE else None
@@ -469,6 +472,7 @@ class vim_db():
     def edit_host(self, host_id, host_dict):
         #get next port index
         for retry_ in range(0,2):
+            cmd=""
             try:
                 with self.con:
                     self.cur = self.con.cursor()
@@ -496,6 +500,7 @@ class vim_db():
     def new_host(self, host_dict):
         #get next port index
         for retry_ in range(0,2):
+            cmd=""
             try:
                 with self.con:
                     self.cur = self.con.cursor()
@@ -618,6 +623,7 @@ class vim_db():
             1, inserted, data contain inserted uuid flavor
         '''
         for retry_ in range(0,2):
+            cmd=""
             try:
                 with self.con:
                     self.cur = self.con.cursor()
@@ -672,6 +678,7 @@ class vim_db():
             deleted = -1
             deleted_flavor = -1
             result = (-HTTP_Internal_Server_Error, "internal error")
+            cmd=""
             try:
                 with self.con:
                     self.cur = self.con.cursor()
@@ -725,6 +732,7 @@ class vim_db():
             1, inserted, data contain inserted uuid image
         '''
         for retry_ in range(0,2):
+            cmd=""
             try:
                 with self.con:
                     self.cur = self.con.cursor()
@@ -776,6 +784,7 @@ class vim_db():
             deleted = -1
             deleted_image = -1
             result = (-HTTP_Internal_Server_Error, "internal error")
+            cmd=""
             try:
                 with self.con:
                     self.cur = self.con.cursor()
@@ -821,6 +830,7 @@ class vim_db():
             
     def delete_row(self, table, uuid):
         for retry_ in range(0,2):
+            cmd=""
             try:
                 with self.con:
                     #delete host
@@ -850,6 +860,7 @@ class vim_db():
 
     def delete_row_by_key(self, table, key, value):
         for retry_ in range(0,2):
+            cmd=""
             try:
                 with self.con:
                     #delete host
@@ -870,6 +881,7 @@ class vim_db():
     
     def get_instance(self, instance_id):
         for retry_ in range(0,2):
+            cmd=""
             try:
                 with self.con:
                     self.cur = self.con.cursor(mdb.cursors.DictCursor)
@@ -992,6 +1004,7 @@ class vim_db():
         '''
          
         for retry_ in range(0,2):
+            cmd=""
             try:
                 with self.con:              
 #                     #Find numas of prefered host
@@ -1182,6 +1195,7 @@ class vim_db():
 
     def new_instance(self, instance_dict, nets):
         for retry_ in range(0,2):
+            cmd=""
             try:
                 with self.con:
                     self.cur = self.con.cursor()
@@ -1310,6 +1324,7 @@ class vim_db():
 
     def delete_instance(self, instance_id, tenant_id, net_list, logcause="requested by http"):
         for retry_ in range(0,2):
+            cmd=""
             try:
                 with self.con:
                     self.cur = self.con.cursor()
@@ -1366,6 +1381,7 @@ class vim_db():
         Return: a list with dictionarys at each row
         '''
         for retry_ in range(0,2):
+            cmd=""
             try:
                 with self.con:
 
@@ -1402,6 +1418,7 @@ class vim_db():
             (negative,string-error) if error
         '''
         for retry_ in range(0,2):
+            cmd=""
             try:
                 with self.con:
                     self.cur = self.con.cursor(mdb.cursors.DictCursor)

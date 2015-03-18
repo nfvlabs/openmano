@@ -1,0 +1,68 @@
+
+##
+# Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
+# This file is part of openmano
+# All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# For those usages not covered by the Apache License, Version 2.0 please
+# contact with: nfvlabs@tid.es
+##
+
+flavor:
+    name:           flavor-name
+    description:    flavor-description
+
+    # Cloud resources, shared with Host operating system
+    # Ignored if provided at 'extended', needed if not
+    ram:            1024                  #MBytes
+    vcpus:          2
+
+    # allocating EXCLUSIVE resoureces in the same NUMA node
+    extended:                             # optional
+        processor_ranking: 100            # minimal processor family. Not used in current version
+        numas:                            # list of numa set. Only one supported in current version
+        -  memory:         8              # GByte of huge pages at this numa
+
+           #Choose among one of "cores", "paired-threads", "threads"
+           paired-threads: 5              # Cores with two paired hyper threads
+           #paired-threads-id: [[0,1],[2,3],[4,5],[6,7],[8,9]] # Guess pinning. By default follows incremental order
+           #threads:       10             # threads awereness of the hyperthreading
+           ##threads-id: [0,1,2,3,4,5,6,7,8,9] #Optional. Guess pinning
+           #cores:         5              # Complete cores, without hyperthreading. VIM ensures the other paired thread is idle
+           ##cores-id:      [0,1,2,3,4]   # Optional. Guess pinning of cores
+
+           #Optional: Dataplane needed interfaces
+           interfaces:                    
+           -   name:       xe0            # Optional. User friendly name
+               vpci:       "0000:00:10.0" # Optional. Guess PCI 
+               bandwidth:  10 Gbps        # Needed minimun bandwidth
+               dedicated:  "yes"          # "yes"(passthrough), "no"(sriov with vlan tags), "yes:sriov"(sriovi, but exclusive and without vlan tag)
+           -   name:       xe1
+               vpci:       "0000:00:11.0"
+               bandwidth:  10 Gbps
+               dedicated:  "yes"
+           
+           #Optional: List of devices needed
+        devices:                       # order determines device letter asignation (hda, hdb, ...)
+        -   type:      disk            # "disk","cdrom","xml","usb"
+            imageRef:  37598e34-ccb3-11e4-a996-52540030594e # UUID of an image, only for disk,cdrom,xml
+            # vpci:      "0000:00:03.0"   # Optional, not for disk or cdrom
+            # xml:     'Only for type xml: a XML described device xml text. Do not use single quotes inside
+            #        The following words, if found, will be replaced:
+            #        __file__    by image path, (imageiRef must be provided)
+            #        __format__  by qcow2 or raw (imageRef must be provided)
+            #        __dev__     by device letter (b, c, d ...)
+            #        __vpci__    by vpci (vpci must be provided)
+

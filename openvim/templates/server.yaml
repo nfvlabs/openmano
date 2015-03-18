@@ -1,0 +1,77 @@
+
+##
+# Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
+# This file is part of openmano
+# All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# For those usages not covered by the Apache License, Version 2.0 please
+# contact with: nfvlabs@tid.es
+##
+
+server:
+    name:         vm-name         # name 
+    description:  vm-description  # Optional user description
+    imageRef:     24640fe0-8a9e-11e4-a236-52540056c317   # valid image uuid 
+    flavorRef:    e22dd8a8-9ca5-11e4-99b6-52540056c317   # valid flavor uuid
+    networks:  # List of control plane interfaces, Optional
+    -   name:     mgmt0          #friendly user name
+        vpci:     "0000:00:0a.0" #Optional guess PCI
+        uuid:     c09b2f1a-8a9e-11e4-a236-52540056c317   # valid network uuid
+        #mac_address:  #guess concrete mac address, by default one is asigned
+        #model:        "virtio","e1000","ne2k_pci","pcnet","rtl8139", By default auto, normally virtio
+    start:    "yes"    # "yes","no","paused".  By default it is started upon creted
+    hostId:   ec656bc4-9ca5-11e4-99b6-52540056c317      #prefered host where to allocate
+   
+    # allocating EXCLUSIVE resoureces in the same NUMA node. 
+    # If provided, it overrides extended values at flavor
+    extended:                             # optional
+        processor_ranking: 100            # minimal processor family. Not used in current version
+        numas:                            # list of numa set. Only one supported in current version
+        -  memory:         8              # GByte of huge pages at this numa
+
+           #Choose among one of "cores", "paired-threads", "threads"
+           paired-threads: 5              # Cores with two paired hyper threads
+           #paired-threads-id: [[0,1],[2,3],[4,5],[6,7],[8,9]] # Guess pinning. By default follows incremental order
+           #threads:       10             # threads awereness of the hyperthreading
+           ##threads-id: [0,1,2,3,4,5,6,7,8,9] #Optional. Guess pinning
+           #cores:         5              # Complete cores, without hyperthreading. VIM ensures the other paired thread is idle
+           ##cores-id:      [0,1,2,3,4]   # Optional. Guess pinning of cores
+
+           #Optional: Dataplane needed interfaces
+           interfaces:                    
+           -   name:       xe0            # Optional. User friendly name
+               vpci:       "0000:00:10.0" # Optional. Guess PCI 
+               bandwidth:  10 Gbps        # Needed minimun bandwidth
+               dedicated:  "yes"          # "yes"(passthrough), "no"(sriov with vlan tags), "yes:sriov"(sriovi, but exclusive and without vlan tag)
+               # you can attach this inteface to a network at server creation or later with a port attach
+               #uuid:       41bcac58-9be9-11e4-b1b6-52540056c317 # Attach the interface to this network uuid
+           -   name:       xe1
+               vpci:       "0000:00:11.0"
+               bandwidth:  10 Gbps
+               dedicated:  "no"
+               #mac_address:  #guess concrete mac address, by default one is asigned. Not possible for dedicated: "yes"
+           
+           #Optional: List of extra devices
+        devices:                       # order determines device letter asignation (hda, hdb, ...)
+        -   type:      disk            # "disk","cdrom","xml","usb"
+            imageRef:  37598e34-ccb3-11e4-a996-52540030594e # UUID of an image, only for disk,cdrom,xml
+            # vpci:      "0000:00:03.0"   # Optional, not for disk or cdrom
+            # xml:     'Only for type xml: a XML described device xml text. Do not use single quotes inside
+            #        The following words, if found, will be replaced:
+            #        __file__    by image path, (imageiRef must be provided)
+            #        __format__  by qcow2 or raw (imageRef must be provided)
+            #        __dev__     by device letter (b, c, d ...)
+            #        __vpci__    by vpci (vpci must be provided)
+

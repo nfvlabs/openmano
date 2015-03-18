@@ -28,7 +28,7 @@ openmano client used to interact with openmano-server (openmanod)
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$09-oct-2014 09:09:48$"
-__version__="0.2.0-r355"
+__version__="0.2.0-r365"
 version_date="Mar 2015"
 
 from argcomplete.completers import FilesCompleter
@@ -45,7 +45,10 @@ class ThrowingArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         print "Error: %s" %message
         print
-        self.print_help()
+        self.print_usage()
+        #self.print_help()
+        print
+        print "Type 'openmano -h' for help"
         raise ArgumentParserError
         
 
@@ -636,44 +639,40 @@ def datacenter_list(args):
     _print_verbose(mano_response, args.verbose)
     return
 
-def datacenter_net_list(args):
-    #print "datacenter-net-list",args
-    URLrequest = "http://%s:%s/openmano/datacenters/%s/networks" %(mano_host, mano_port, args.name)
-    mano_response = requests.get(URLrequest)
+
+def datacenter_net_action(args):
+    #print "datacenter-net-action",args
     if args.verbose==None:
         args.verbose=0
-    if args.name!=None:
-        args.verbose += 1
-    _print_verbose(mano_response, args.verbose)
-    return
-
-def datacenter_action(args):
-    #print "datacenter-net-update",args
-    headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
-    URLrequest = "http://%s:%s/openmano/datacenters/%s/action" %(mano_host, mano_port, args.datacenter)
-    if not args.force:
-        if args.action=="net-update":
-            r = raw_input(" Edit datacenter " + args.datacenter + " (y/N)? ")
-        else: 
-            r = raw_input(" Edit datacenter " + args.datacenter + " net " + args.net +" (y/N)? ")
-        if  len(r)>0  and r[0].lower()=="y":
-            pass
-        else:
-            return
-    if args.action=="net-update":
-        payload={args.action : None}
+    if args.action=="net-list":
+        URLrequest = "http://%s:%s/openmano/datacenters/%s/networks" %(mano_host, mano_port, args.datacenter)
+        mano_response = requests.get(URLrequest)
+        if args.datacenter!=None:
+            args.verbose += 1
     else:
-        payload = {args.action: {'net': args.net} }
-        if args.action=="net-edit":
-            payload[args.action].update(_load_file_or_yaml(args.file))
+        headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
+        URLrequest = "http://%s:%s/openmano/datacenters/%s/action" %(mano_host, mano_port, args.datacenter)
+        if not args.force:
+            if args.action=="net-update":
+                r = raw_input(" Edit datacenter " + args.datacenter + " (y/N)? ")
+            elif args.action=="net-delete":
+                r = raw_input(" Delete datacenter " + args.datacenter + " net " + args.net +" (y/N)? ")
+            else: 
+                r = raw_input(" Edit datacenter " + args.datacenter + " net " + args.net +" (y/N)? ")
+            if  len(r)>0  and r[0].lower()=="y":
+                pass
+            else:
+                return
+        if args.action=="net-update":
+            payload={args.action : None}
+        else:
+            payload = {args.action: {'net': args.net} }
+            if args.action=="net-edit":
+                payload[args.action].update(_load_file_or_yaml(args.file))
 
-    payload_req = json.dumps(payload)
-    #print payload_req
-    mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
-    if args.verbose==None:
-        args.verbose=0
-    #if args.datacenter!=None:
-    #    args.verbose += 1
+        payload_req = json.dumps(payload)
+        #print payload_req
+        mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
     _print_verbose(mano_response, args.verbose)
     return
 
@@ -712,7 +711,7 @@ if __name__=="__main__":
     mano_port = os.getenv('OPENMANO_PORT',"9090")
     mano_datacenter = os.getenv('OPENMANO_DATACENTER',None)
     
-    main_parser = ThrowingArgumentParser(description='User program to interact with OPENMANO-SERVER (openmanod)')
+    main_parser = ThrowingArgumentParser(description='User program to interact with OPENVIM-SERVER (openvimd)')
     main_parser.add_argument('--version', action='version', version='%(prog)s ' + __version__ )
     
     subparsers = main_parser.add_subparsers(help='commands')
@@ -786,7 +785,7 @@ if __name__=="__main__":
     #instance_scenario_status_parser.add_argument("name", action="store", help="name or uuid of the scenario instance")
     #instance_scenario_status_parser.set_defaults(func=instance_scenario_status)
     
-    tenant_create_parser = subparsers.add_parser('tenant-create', help="create a new tenant")
+    tenant_create_parser = subparsers.add_parser('tenant-create', help="creates a new tenant")
     tenant_create_parser.add_argument("name", action="store", help="name for the tenant")
     tenant_create_parser.add_argument("--description", action="store", help="description of the tenant")
     tenant_create_parser.add_argument('--verbose', '-v', action='count')
@@ -802,7 +801,16 @@ if __name__=="__main__":
     tenant_list_parser.add_argument('--verbose', '-v', action='count')
     tenant_list_parser.set_defaults(func=tenant_list)
 
-    datacenter_create_parser = subparsers.add_parser('datacenter-create', help="create a new datacenter")
+    item_list=('tenant','datacenter') #put tenant before so that help appear in order
+    for item in item_list:
+        element_edit_parser = subparsers.add_parser(item+'-edit', help="edits one "+item)
+        element_edit_parser.add_argument("name", help="name or uuid of the "+item)
+        element_edit_parser.add_argument("file", help="json/yaml text or file with the changes").completer = FilesCompleter
+        element_edit_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+        element_edit_parser.add_argument('--verbose', '-v', action='count')
+        element_edit_parser.set_defaults(func=element_edit, element=item + 's')
+
+    datacenter_create_parser = subparsers.add_parser('datacenter-create', help="creates a new datacenter")
     datacenter_create_parser.add_argument("name", action="store", help="name for the datacenter")
     datacenter_create_parser.add_argument("url", action="store", help="url for the datacenter")
     datacenter_create_parser.add_argument("--url_admin", action="store", help="url for administration for the datacenter")
@@ -819,43 +827,8 @@ if __name__=="__main__":
     datacenter_list_parser = subparsers.add_parser('datacenter-list', help="lists information about a datacenter")
     datacenter_list_parser.add_argument("name", nargs='?', help="name or uuid of the datacenter")
     datacenter_list_parser.add_argument('--verbose', '-v', action='count')
-    datacenter_list_parser.add_argument("-a", "--all", action="store_true", help="show all datacenters, not only datacenters attached to tenant")
+    datacenter_list_parser.add_argument("-a", "--all", action="store_true", help="shows all datacenters, not only datacenters attached to tenant")
     datacenter_list_parser.set_defaults(func=datacenter_list)
-
-    datacenter_net_list_parser = subparsers.add_parser('datacenter-net-list', help="lists external networks from a datacenter")
-    datacenter_net_list_parser.add_argument("name", help="name or uuid of the datacenter")
-    datacenter_net_list_parser.add_argument('--verbose', '-v', action='count')
-    datacenter_net_list_parser.set_defaults(func=datacenter_net_list)
-
-    item_dict={'datacenter':'datacenters','tenant':'tenants',}
-    for item in item_dict:
-        element_edit_parser = subparsers.add_parser(item+'-edit', help="edit one "+item_dict[item][:-1])
-        element_edit_parser.add_argument("name", help="name or uuid of the "+item)
-        element_edit_parser.add_argument("file", help="json/yaml text or file with the changes").completer = FilesCompleter
-        element_edit_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
-        element_edit_parser.add_argument('--verbose', '-v', action='count')
-        element_edit_parser.set_defaults(func=element_edit, element=item_dict[item])
-
-    action_dict={'net-update': 'retrieves external networks from datacenter',
-                 'net-edit': 'edits an external network',
-                 'net-delete': 'deletes an external network',
-                 }
-    for item in action_dict:
-        datacenter_action_parser = subparsers.add_parser('datacenter-'+item, help=action_dict[item])
-        datacenter_action_parser.add_argument("datacenter", help="name or uuid of the datacenter")
-        if item=='net-edit' or item=='net-delete':
-            datacenter_action_parser.add_argument("net", help="name or uuid of the datacenter net")
-        if item=='net-edit':
-            datacenter_action_parser.add_argument("file", help="json/yaml text or file with the changes").completer = FilesCompleter
-        datacenter_action_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
-        datacenter_action_parser.add_argument('--verbose', '-v', action='count')
-        datacenter_action_parser.set_defaults(func=datacenter_action, action=item)
-
-    datacenter_netmgmt_parser = subparsers.add_parser('datacenter-net'+item, help=action_dict[item])
-    datacenter_netmgmt_parser.add_argument("name", help="name or uuid of the datacenter")
-    datacenter_netmgmt_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
-    datacenter_netmgmt_parser.add_argument('--verbose', '-v', action='count')
-    datacenter_netmgmt_parser.set_defaults(func=datacenter_action, action=item)
 
     datacenter_attach_parser = subparsers.add_parser('datacenter-attach', help="associates a datacenter to the operating tenant")
     datacenter_attach_parser.add_argument("name", help="name or uuid of the datacenter")
@@ -868,6 +841,23 @@ if __name__=="__main__":
     datacenter_detach_parser.add_argument("name", help="name or uuid of the datacenter")
     datacenter_detach_parser.add_argument('--verbose', '-v', action='count')
     datacenter_detach_parser.set_defaults(func=datacenter_detach)
+
+    action_dict={'net-update': 'retrieves external networks from datacenter',
+                 'net-edit': 'edits an external network',
+                 'net-delete': 'deletes an external network',
+                 'net-list': 'lists external networks from a datacenter'
+                 }
+    for item in action_dict:
+        datacenter_action_parser = subparsers.add_parser('datacenter-'+item, help=action_dict[item])
+        datacenter_action_parser.add_argument("datacenter", help="name or uuid of the datacenter")
+        if item=='net-edit' or item=='net-delete':
+            datacenter_action_parser.add_argument("net", help="name or uuid of the datacenter net")
+        if item=='net-edit':
+            datacenter_action_parser.add_argument("file", help="json/yaml text or file with the changes").completer = FilesCompleter
+        if item!='net-list':
+            datacenter_action_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+        datacenter_action_parser.add_argument('--verbose', '-v', action='count')
+        datacenter_action_parser.set_defaults(func=datacenter_net_action, action=item)
 
     argcomplete.autocomplete(main_parser)
     

@@ -25,7 +25,7 @@
 This is thread that interact with the host and the libvirt to manage VM
 One thread will be launched per host 
 '''
-__author__="Alfonso Tierno, Pablo Montes"
+__author__="Pablo Montes, Alfonso Tierno"
 __date__ ="$10-jul-2014 12:07:15$"
 
 

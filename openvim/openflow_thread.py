@@ -21,11 +21,12 @@
 # For those usages not covered by the Apache License, Version 2.0 please
 # contact with: nfvlabs@tid.es
 ##
+
 '''
 This thread interacts with a openflow floodligth controller to create dataplane connections
 '''
 
-__author__="Alfonso Tierno"
+__author__="Pablo Montes, Alfonso Tierno"
 __date__ ="$28-oct-2014 12:07:15$"
 
 

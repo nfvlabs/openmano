@@ -29,7 +29,7 @@ Useful for human CLI management of items at openvim
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$26-nov-2014 19:09:29$"
-__version__="0.1.04-r355"
+__version__="0.1.04-r365"
 version_date="Mar 2015"
 name="openvim"
 
@@ -41,6 +41,18 @@ import requests
 import json
 import yaml
 from jsonschema import validate as js_v, exceptions as js_e
+
+class ArgumentParserError(Exception): pass
+
+class ThrowingArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        print "Error: %s" %message
+        print
+        self.print_usage()
+        #self.print_help()
+        print
+        print "Type 'openvim -h' for help"
+        raise ArgumentParserError
 
 global vim_config
 config_items=("HOST", "PORT", "ADMIN_PORT", "TENANT")
@@ -83,7 +95,7 @@ template={
     "host": {
         "${}":[
             "${name} host name",
-            "${user} host user (n2)",
+            "${user} host user (user)",
             "${ip_name} host access IP or name (${name}.hi.inet)",
             "${description} host description (${name})"
         ],
@@ -169,11 +181,12 @@ template={
     }
 }
 
-def check_configuration(exception=() ):
+def check_configuration(*exception ):
     '''
     Check that the configuration variables are present.
     exception can contain variables that are not tested, normally because is not used for the command
     '''
+    #print exception
     for item in config_items:
         if item not in exception and vim_config[item]==None:
             print "OPENVIM_"+item+" variable not defined. Try '" + name + " config file_cfg' or 'export OPENVIM_"+item+"=something'"
@@ -409,7 +422,7 @@ def load_file_or_yaml(content):
                 #print payload
                 exit (-1)
         else:
-            #print payload
+            print payload
             exit (-1)
     return payload
 
@@ -456,10 +469,10 @@ def element_new(args):
     #print args
     tenant=""
     if args.element in ('flavors','images','servers'):
-        check_configuration( ("ADMIN_PORT", "TENANT") )
+        check_configuration( "ADMIN_PORT" )
         tenant="/"+vim_config["TENANT"]
     else:
-        check_configuration("ADMIN_PORT", )
+        check_configuration("ADMIN_PORT", "TENANT")
         tenant=""
         
     if args.file==None:
@@ -478,7 +491,7 @@ def element_new(args):
     item = payload[args.element[:-1]]
         
     url = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["PORT"], tenant, args.element)
-    if "ADMIN_PORT" in vim_config:
+    if "ADMIN_PORT" in vim_config and vim_config["ADMIN_PORT"]!=None:
         url_admin = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["ADMIN_PORT"], tenant, args.element)
     else:
         url_admin = None
@@ -509,13 +522,13 @@ def element_action(args):
     filter_qs = ""
     tenant=""
     if args.element in ('flavors','images','servers'):
-        check_configuration( ("ADMIN_PORT", "TENANT") )
+        check_configuration( "ADMIN_PORT")
         tenant="/"+vim_config["TENANT"]
     else:
-        check_configuration("ADMIN_PORT", )
+        check_configuration("ADMIN_PORT", "TENANT")
         tenant=""
     url = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["PORT"], tenant, args.element)
-    if "ADMIN_PORT" in vim_config:
+    if "ADMIN_PORT" in vim_config and vim_config["ADMIN_PORT"]!=None:
         url_admin = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["ADMIN_PORT"], tenant, args.element)
     else:
         url_admin = None
@@ -576,14 +589,14 @@ def element_edit(args):
     filter_qs = ""
     tenant=""
     if args.element in ('flavors','images','servers'):
-        check_configuration( ("ADMIN_PORT", "TENANT") )
+        check_configuration( "ADMIN_PORT")
         tenant="/"+vim_config["TENANT"]
     else:
-        check_configuration("ADMIN_PORT", )
+        check_configuration("ADMIN_PORT", "TENANT")
         tenant=""
 
     url = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["PORT"], tenant, args.element)
-    if "ADMIN_PORT" in vim_config:
+    if "ADMIN_PORT" in vim_config and vim_config["ADMIN_PORT"]!=None:
         url_admin = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["ADMIN_PORT"], tenant, args.element)
     else:
         url_admin = None
@@ -654,14 +667,14 @@ def element_delete(args):
     filter_qs = ""
     tenant=""
     if args.element in ('flavors','images','servers'):
-        check_configuration( ("ADMIN_PORT", "TENANT") )
+        check_configuration("ADMIN_PORT" )
         tenant="/"+vim_config["TENANT"]
     else:
-        check_configuration("ADMIN_PORT", )
+        check_configuration("ADMIN_PORT", "TENANT")
         tenant=""
 
     url = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["PORT"], tenant, args.element)
-    if "ADMIN_PORT" in vim_config:
+    if "ADMIN_PORT" in vim_config and vim_config["ADMIN_PORT"]!=None:
         url_admin = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["ADMIN_PORT"], tenant, args.element)
     else:
         url_admin = None
@@ -716,10 +729,10 @@ def element_list(args):
     filter_qs = ""
     tenant=""
     if args.element in ('flavors','images','servers'):
-        check_configuration( ("ADMIN_PORT", "TENANT") )
+        check_configuration( "ADMIN_PORT" )
         tenant="/"+vim_config["TENANT"]
     else:
-        check_configuration("ADMIN_PORT", )
+        check_configuration( "ADMIN_PORT", "TENANT" )
         tenant=""
     #if args.name:
     #    what += "/" + args.name
@@ -789,7 +802,8 @@ if __name__=="__main__":
     vim_config["TENANT"] =     os.getenv('OPENVIM_TENANT', None)
     
    
-    main_parser = argparse.ArgumentParser(description='User program to interact with OPENVIM-SERVER (openvimd)')
+    main_parser = ThrowingArgumentParser(description='User program to interact with OPENMANO-SERVER (openvimd)')
+    #main_parser = argparse.ArgumentParser(description='User program to interact with OPENVIM-SERVER (openvimd)')
     main_parser.add_argument('--version', action='version', version='%(prog)s ' + __version__ + ' '+version_date)
     
     subparsers = main_parser.add_subparsers(help='commands')
@@ -806,13 +820,19 @@ if __name__=="__main__":
         element_list_parser.add_argument('--verbose', '-v', action='count', help="increment the verbosity")
         element_list_parser.set_defaults(func=element_list, element=item_dict[item])
         #NEW
-        element_new_parser = subparsers.add_parser(item+'-create', help="creates a new "+item_dict[item][:-1])
+        if item=='host':
+            element_new_parser = subparsers.add_parser(item+'-add', help="adds a new compute node")
+        else:
+            element_new_parser = subparsers.add_parser(item+'-create', help="creates a new "+item_dict[item][:-1])
         element_new_parser.add_argument("file", nargs='?', help="json/yaml text or file with content").completer = FilesCompleter
         element_new_parser.add_argument("--name", action="store", help="Use this name")
         element_new_parser.add_argument("--description", action="store", help="Use this descrition")
         element_new_parser.set_defaults(func=element_new, element=item_dict[item])
         #DELETE
-        element_del_parser = subparsers.add_parser(item+'-delete', help="deletes one or several "+item_dict[item])
+        if item=='host':
+            element_del_parser = subparsers.add_parser(item+'-remove', help="removes a compute node")
+        else:
+            element_del_parser = subparsers.add_parser(item+'-delete', help="deletes one or several "+item_dict[item])
         element_del_parser.add_argument("name", nargs='?', help="name or ID of the "+item+", 'ALL' for all")
         element_del_parser.add_argument("-F","--filter", action="store", help="filter query string")
         element_del_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
@@ -869,14 +889,16 @@ if __name__=="__main__":
             nethost_action_down_parser.set_defaults(func=element_action_edit, element=item_dict[item], action="down")
 
     argcomplete.autocomplete(main_parser)
-    args = main_parser.parse_args()
     
     try:
+        args = main_parser.parse_args()
         args.func(args)
     except (requests.exceptions.ConnectionError):
         print "Connection error: not possible to contact OPENVIM-SERVER (openvimd)"
-    except (KeyboardInterrupt, SystemExit):
+    except (KeyboardInterrupt):
         print 'Exiting openVIM'
+    except (SystemExit, ArgumentParserError):
+        pass
     
     exit()
 
