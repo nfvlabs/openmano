@@ -50,7 +50,7 @@ class ThrowingArgumentParser(argparse.ArgumentParser):
         print
         print "Type 'openmano -h' for help"
         raise ArgumentParserError
-        
+
 
 def config(args):
     print "OPENMANO_HOST: %s" %mano_host

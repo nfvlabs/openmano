@@ -1,6 +1,7 @@
 ---
 vnf:
     name: TEMPLATE
+    description: This is a template to help in the creation of your own VNFs
     # class: parent      # Optional. Used to organize VNFs
     external-connections:
     -   name:              mgmt0
