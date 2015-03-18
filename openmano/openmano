@@ -45,9 +45,12 @@ class ThrowingArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         print "Error: %s" %message
         print
-        self.print_help()
+        self.print_usage()
+        #self.print_help()
+        print
+        print "Type 'openmano -h' for help"
         raise ArgumentParserError
-        
+
 
 def config(args):
     print "OPENMANO_HOST: %s" %mano_host

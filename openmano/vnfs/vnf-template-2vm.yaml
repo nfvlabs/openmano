@@ -1,6 +1,7 @@
 ---
 vnf:
     name: TEMPLATE-2VM
+    description: This is a template to help in the creation of multi-VM VNFs
     # class: parent      # Optional. Used to organize VNFs
     internal-connections:
     -   name:        datanet
