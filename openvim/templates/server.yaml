@@ -1,4 +1,3 @@
-
 ##
 # Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
 # This file is part of openmano
@@ -63,7 +62,7 @@ server:
                dedicated:  "no"
                #mac_address:  #guess concrete mac address, by default one is asigned. Not possible for dedicated: "yes"
            
-           #Optional: List of extra devices
+        #Optional: List of extra devices
         devices:                       # order determines device letter asignation (hda, hdb, ...)
         -   type:      disk            # "disk","cdrom","xml","usb"
             imageRef:  37598e34-ccb3-11e4-a996-52540030594e # UUID of an image, only for disk,cdrom,xml

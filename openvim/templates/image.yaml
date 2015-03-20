@@ -1,0 +1,33 @@
+##
+# Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
+# This file is part of openmano
+# All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# For those usages not covered by the Apache License, Version 2.0 please
+# contact with: nfvlabs@tid.es
+##
+
+
+image:
+    name:         image-name
+    description:  image-description
+    path:         /image-path/at/the/compute-node/storage/image 
+    metadata:     # Optional extra metadata of the image. All fields are optional
+        use_incremental: "yes"          # "yes" by default, "no" Deployed using a incremental qcow2 image
+        vpci:            "0000:10:00.0" #requiered PCI at guess
+        os_distro:       win            # operating system distribution
+        os_type:         windows        # operating system type "linux" by default, "windows"
+        os_version:      "7"            # operating system version
+        bus:            "ide"           # By default "virtio" for linux, "ide" for windows

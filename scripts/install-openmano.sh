@@ -47,6 +47,7 @@ apt-get install -y apache2 mysql-server php5 php-pear php5-mysql
 while [ -z "$DBPASSWD" ] || !  echo "" | mysql -u$DBUSER -p"$DBPASSWD" 
 do
         [ -n "$logintry" ] &&  echo -e "\nInvalid database credentials!!!. Try again (Ctrl+c to abort)"
+        [ -z "$logintry" ] &&  echo -e "\nProvide database credentials"
         read -p "mysql user($DBUSER): " DBUSER_
         [ -n "$DBUSER_" ] && DBUSER=$DBUSER_
         read -p "mysql password: " DBPASSWD
@@ -59,7 +60,7 @@ echo '
 #################################################################'
 apt-get update -y
 apt-get install -y apache2 mysql-server php5 php-pear php5-mysql
-apt-get -y install python-yaml python-libvirt python-bottle python-mysqldb python-jsonschema python-paramiko git screen
+apt-get install -y python-yaml python-libvirt python-bottle python-mysqldb python-jsonschema python-paramiko python-bs4 git screen
 
 
 echo '
@@ -98,7 +99,7 @@ if [ "$KK" == "y" -o   "$KK" == "yes" ]
 then
 
     echo "downloading v0.90 from the oficial page"
-    #ALFsu $SUDO_USER -c 'wget http://floodlight-download.projectfloodlight.org/files/floodlight-source-0.90.tar.gz'
+    su $SUDO_USER -c 'wget http://floodlight-download.projectfloodlight.org/files/floodlight-source-0.90.tar.gz'
     su $SUDO_USER -c 'tar xvzf floodlight-source-0.90.tar.gz'
     
     #Install Java JDK and Ant packages at the VM 
@@ -119,5 +120,5 @@ else
     echo "skipping!"
 fi
 echo
-echo "Done!   Run './scripts/start-all.sh' for starting ${OPENFLOW_INSTALED}openvim and openmano in a screen"
+echo "Done!   Run './openmano/scripts/start-all.sh' for starting ${OPENFLOW_INSTALED}openvim and openmano in a screen"
 

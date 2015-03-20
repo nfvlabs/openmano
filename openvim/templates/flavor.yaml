@@ -1,4 +1,3 @@
-
 ##
 # Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
 # This file is part of openmano
@@ -20,16 +19,16 @@
 # contact with: nfvlabs@tid.es
 ##
 
+
 flavor:
-    name:           flavor-name
-    description:    flavor-description
+    name:        flavor-name
+    description: flavor-description
+    # cloud type requirements
+    ram:         1024                    # Memory in MB. Ignored if provided 'memory' at 'extended'
+    vcpus:       2                       # Number of cpus.  Ignored if provided at 'extended' 
 
-    # Cloud resources, shared with Host operating system
-    # Ignored if provided at 'extended', needed if not
-    ram:            1024                  #MBytes
-    vcpus:          2
-
-    # allocating EXCLUSIVE resoureces in the same NUMA node
+    # NFV type requirements
+    # allocating EXCLUSIVE resoureces in the same NUMA node. 
     extended:                             # optional
         processor_ranking: 100            # minimal processor family. Not used in current version
         numas:                            # list of numa set. Only one supported in current version
@@ -52,9 +51,9 @@ flavor:
            -   name:       xe1
                vpci:       "0000:00:11.0"
                bandwidth:  10 Gbps
-               dedicated:  "yes"
+               dedicated:  "no"
            
-           #Optional: List of devices needed
+        #Optional: List of extra devices
         devices:                       # order determines device letter asignation (hda, hdb, ...)
         -   type:      disk            # "disk","cdrom","xml","usb"
             imageRef:  37598e34-ccb3-11e4-a996-52540030594e # UUID of an image, only for disk,cdrom,xml
