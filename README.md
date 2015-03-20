@@ -13,7 +13,7 @@
 - Download a VDI Ubuntu Server 14.10 LAMP image from [here](https://virtualboximages.com/Ubuntu+14.10+amd64+LAMP+Server+VirtualBox+VDI+Virtual+Computer "download VM image").
 - Start the VM and execute the following command in a terminal:
 
-        wget -q -O - https://github.com/nfvlabs/openmano/raw/master/scripts/install-openmano.sh
+        wget https://github.com/nfvlabs/openmano/raw/master/scripts/install-openmano.sh
         chmod +x install-openmano.sh 
         sudo ./install-openmano.sh root adminuser
         #NOTE: **root adminuser** are the mysql user and password of this VM image
