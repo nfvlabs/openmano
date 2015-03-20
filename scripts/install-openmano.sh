@@ -22,26 +22,43 @@
 ##
 
 #Get needed packets, source code and configure to run openvim, openmano and floodlight
-#PARAMS: $1: database utins
+#Ask for database user and password if not provided
+#        $1: database user
 #        $2: database password 
 
 
 if [ $EUID -ne 0  -o -z "$SUDO_USER" ]; then
         echo "Needed root privileges"
-        echo "usage: sudo $0 db_user db_passwd\n  Install source code in ./openmano"
-        exit 1
-fi
-if [ -z "$1" -o -z "$2" ]; then
-        echo "provide database user and password"
-        echo "usage: sudo $0 db_user db_passwd\n  Install source code in ./openmano"
+        echo  -e "usage: sudo $0 [db-user db-passwd]\n  Install source code in ./openmano"
         exit 1
 fi
 
 echo '
 #################################################################
-#####        INSTALL PACKETS                                #####
+#####        INSTALL LAMP   PACKETS                         #####
 #################################################################'
 apt-get update -y
+apt-get install -y apache2 mysql-server php5 php-pear php5-mysql
+
+#check and ask for database user password. Must be done after MYSQL instalation
+[ -n "$1" ] && DBUSER=$1
+[ -z "$1" ] && DBUSER=root
+[ -n "$2" ] && DBPASSWD=$2
+while [ -z "$DBPASSWD" ] || !  echo "" | mysql -u$DBUSER -p"$DBPASSWD" 
+do
+        [ -n "$logintry" ] &&  echo -e "\nInvalid database credentials!!!. Try again (Ctrl+c to abort)"
+        read -p "mysql user($DBUSER): " DBUSER_
+        [ -n "$DBUSER_" ] && DBUSER=$DBUSER_
+        read -p "mysql password: " DBPASSWD
+        logintry="yes"
+done
+
+echo '
+#################################################################
+#####        INSTALL PYTHON PACKETS                         #####
+#################################################################'
+apt-get update -y
+apt-get install -y apache2 mysql-server php5 php-pear php5-mysql
 apt-get -y install python-yaml python-libvirt python-bottle python-mysqldb python-jsonschema python-paramiko git screen
 
 
@@ -55,13 +72,13 @@ echo '
 #################################################################
 #####        CREATE DATABASE                                #####
 #################################################################'
-mysqladmin -u$1 -p$2 create vim_db
-mysqladmin -u$1 -p$2 create mano_db
+mysqladmin -u$DBUSER -p$DBPASSWD create vim_db
+mysqladmin -u$DBUSER -p$DBPASSWD create mano_db
 
-echo "CREATE USER 'vim'@'localhost' identified by 'vimpw';"  | mysql -u$1 -p$2
-echo "GRANT ALL PRIVILEGES ON vim_db.* TO 'vim'@'localhost';" | mysql -u$1 -p$2
-echo "CREATE USER 'mano'@'localhost' identified by 'manopw';" | mysql -u$1 -p$2
-echo "GRANT ALL PRIVILEGES ON mano_db.* TO 'mano'@'localhost';" | mysql -u$1 -p$2
+echo "CREATE USER 'vim'@'localhost' identified by 'vimpw';"     | mysql -u$DBUSER -p$DBPASSWD
+echo "GRANT ALL PRIVILEGES ON vim_db.* TO 'vim'@'localhost';"   | mysql -u$DBUSER -p$DBPASSWD
+echo "CREATE USER 'mano'@'localhost' identified by 'manopw';"   | mysql -u$DBUSER -p$DBPASSWD
+echo "GRANT ALL PRIVILEGES ON mano_db.* TO 'mano'@'localhost';" | mysql -u$DBUSER -p$DBPASSWD
 
 echo "vim database"
 su $SUDO_USER -c './openmano/openvim/database_utils/init_vim_db.sh vim vimpw vim_db'
