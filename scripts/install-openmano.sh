@@ -119,6 +119,17 @@ then
 else
     echo "skipping!"
 fi
+
+
+echo '
+#################################################################
+#####        CONFIGURE OPENMANO-GUI WEB                     #####
+#################################################################'
+#allow apache user (www-data) grant access to the files, changing user owner
+chown -R www-data ./openmano/openmano-gui
+#create a link 
+ln -s ./openmano/openmano-gui /var/www/html/mano
+
 echo
 echo "Done!   Run './openmano/scripts/start-all.sh' for starting ${OPENFLOW_INSTALED}openvim and openmano in a screen"
 
