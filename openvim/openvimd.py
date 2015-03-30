@@ -51,7 +51,7 @@ global config_dic
 
 def load_configuration(configuration_file):
     default_tokens ={'http_port':9080, 'http_host':'localhost', 
-                     'test_mode':False, 'of_controller_nets_with_same_vlan':True,
+                     'of_controller_nets_with_same_vlan':True,
                      'image_path':'/opt/VNF/images'
             }
     try:
@@ -150,10 +150,16 @@ if __name__=="__main__":
         if port is not None: config_dic['http_port'] = port
         if port_admin is not None: config_dic['http_admin_port'] = port_admin
         
-        
-        if config_dic['test_mode']:
-            print '!!!!!!!!!!!!!!!!!!!!!!!!vers!!!!!!!!!!!'
-            print '!! Warning, openvimd in TEST mode  !!'
+        #check mode
+        if 'mode' not in config_dic:
+            config_dic['mode'] = 'normal'
+            #allow backward compatibility of test_mode option
+            if 'test_mode' in config_dic and config_dic['test_mode']==True:
+                config_dic['mode'] = 'test' 
+            
+        if config_dic['mode'] != 'normal':
+            print '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
+            print "!! Warning, openvimd in TEST mode '%s'" % config_dic['mode']
             print '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
         config_dic['version'] = __version__
 
@@ -165,8 +171,9 @@ if __name__=="__main__":
         config_dic['db_lock'] = db_lock
 
     #create openflow thread
+        of_test_mode = False if config_dic['mode']=='normal' else True
         thread = oft.openflow_thread(of_url = "http://"+str(config_dic['of_controller_ip']) + ":"+ str(config_dic['of_controller_port']),
-                        of_test=config_dic['test_mode'],
+                        of_test=of_test_mode,
                         of_dpid=config_dic['of_controller_dpid'],
                         db=db_of,  db_lock=db_lock,
                         pmp_with_same_vlan=config_dic['of_controller_nets_with_same_vlan'])
@@ -195,6 +202,7 @@ if __name__=="__main__":
     
         
     #Create one thread for each host
+        host_test_mode = True if config_dic['mode']=='test' else False
         config_dic['host_threads'] = {}
         r,c = db_of.get_table(SELECT=('name','ip_name','user','uuid'), FROM='hosts', WHERE={'status':'ok'})
         if r<0:
@@ -204,7 +212,7 @@ if __name__=="__main__":
             for host in c:
                 host['image_path'] = '/opt/VNF/images/openvim'
                 thread = ht.host_thread(name=host['name'], user=host['user'], host=host['ip_name'], db=db_of, db_lock=db_lock,
-                        test=config_dic['test_mode'], image_path=config_dic['image_path'], version=config_dic['version'],
+                        test=host_test_mode, image_path=config_dic['image_path'], version=config_dic['version'],
                         host_id=host['uuid']  )
                 thread.start()
                 config_dic['host_threads'][ host['uuid'] ] = thread

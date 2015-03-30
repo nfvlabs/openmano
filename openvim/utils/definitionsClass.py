@@ -55,7 +55,9 @@ class definitionsClass():
                       'Red Hat Enterprise Linux Server release 6.6 (Santiago)',
                       'CentOS release 6.5 (Final)',
                       'CentOS release 6.6 (Final)',
-                      'Red Hat Enterprise Linux Server release 7.0 (Maipo)']
+                      'Red Hat Enterprise Linux Server release 7.0 (Maipo)',
+                      'Red Hat Enterprise Linux Server release 7.1 (Maipo)',
+                    ]
     os_possible_types = ['GNU/Linux']
     os_possible_architectures = ['x86_64']
     hypervisor_possible_composed_versions = ['QEMU-kvm']

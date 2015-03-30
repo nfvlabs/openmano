@@ -68,7 +68,8 @@ config_schema = {
         "of_controller_port": port_schema,
         "of_controller_dpid": nameshort_schema,
         "of_controller_nets_with_same_vlan": {"type" : "boolean"},
-        "test_mode": {"type" : "boolean"},
+        "test_mode": {"type": "boolean"}, #leave for backward compatibility
+        "mode": {"type":"string", "enum":["normal", "host only", "development", "test"] },
         "tenant_id": {"type" : "string"},
         "image_path": path_schema,
         "bridge_ifaces": {

@@ -487,6 +487,7 @@ def http_post_hosts():
     change_keys_http2db(http_content['host'], http2db_host)
 
     host = http_content['host']
+    warning_text=""
     if 'host-data' in http_content:
         host.update(http_content['host-data'])
         ip_name=http_content['host-data']['ip_name']
@@ -506,6 +507,7 @@ def http_post_hosts():
             print 'http_post_hosts ERROR obtaining RAD', code
             bottle.abort(HTTP_Bad_Request, code)
             return
+        warning_text=code
         rad_structure = yaml.load(rad.to_text())
         print 'rad_structure\n---------------------'
         print json.dumps(rad_structure, indent=4)
@@ -518,8 +520,11 @@ def http_post_hosts():
         if result > 0:
             host['ranking'] = content[0]['ranking']
         else:
-            bottle.abort(HTTP_Bad_Request, "Host " + str(WHERE_)+ " not found in ranking table. Not valid for VIM management")
-            return
+            #error_text= "Host " + str(WHERE_)+ " not found in ranking table. Not valid for VIM management"
+            #bottle.abort(HTTP_Bad_Request, error_text)
+            #return
+            warning_text += "Host " + str(WHERE_)+ " not found in ranking table. Assuming lowest value 100\n"
+            host['ranking'] = 100 #TODO: as not used in this version, set the lowest value
     
         features = rad_structure['processor'].get('features', ())
         host['features'] = ",".join(features)
@@ -572,14 +577,17 @@ def http_post_hosts():
     if result >= 0:
         if content['admin_state_up']:
             #create thread
+            host_test_mode = True if config_dic['mode']=='test' else False
             thread = ht.host_thread(name=host.get('name',ip_name), user=user, host=ip_name, db=config_dic['db'], db_lock=config_dic['db_lock'], 
-                test=config_dic['test_mode'], image_path=config_dic['image_path'],
+                test=host_test_mode, image_path=config_dic['image_path'],
                 version=config_dic['version'], host_id=content['uuid']  )
             thread.start()
             config_dic['host_threads'][ content['uuid'] ] = thread
 
         #return host data
         change_keys_http2db(content, http2db_host, reverse=True)
+        if len(warning_text)>0:
+            content["warning"]= warning_text
         data={'host' : content}
         return format_out(data)
     else:

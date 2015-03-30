@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import code
 
 ##
 # Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
@@ -59,7 +60,9 @@ class RADclass():
         self.ports_list = list()            #List containing all network ports in the node. This is used to avoid having defined multiple times the same port in the system
         
     def obtain_RAD(self, user, password, machine):
-        """This function obtains the RAD information from the remote server. Returns (True, None) in case of success and (False, <error>) in case of error"""
+        """This function obtains the RAD information from the remote server.
+        Returns (True, Warning) in case of success and (False, <error>) in case of error"""
+        warning_text=""
         try:
             #Get virsh and ssh connection
             (return_status, code) = get_ssh_connection(machine, user, password)
@@ -81,18 +84,21 @@ class RADclass():
             (return_status, code) = self.set_name(machine_name)
             if not return_status:
                 return (return_status, 'Error at self.set_name in '+machine+': '+code)
+            warning_text += code
             
             #Get the server processors information
             processors = dict()
             (return_status, code) = get_processor_information(ssh_conn, virsh_conn, processors)
             if not return_status:
                 return (return_status, 'Error at get_processor_information in '+machine+': '+code)
+            warning_text += code
             
             #Get the server memory information
             memory_nodes = dict()
             (return_status, code) = get_memory_information(ssh_conn, virsh_conn, memory_nodes)
             if not return_status:
                 return (return_status, 'Error at get_memory_information in '+machine+': '+code)
+            warning_text += code
             
             #Get nics information
             nic_topology = dict()
@@ -100,6 +106,7 @@ class RADclass():
             (return_status, code) = get_nic_information(ssh_conn, virsh_conn, nic_topology)
             if not return_status:
                 return (return_status, 'Error at get_nic_informationin '+machine+': '+code)
+            warning_text += code
             
             #Pack each processor, memory node  and nics in a node element
             #and add the node to the RAD element
@@ -113,32 +120,37 @@ class RADclass():
     #                 (return_status, code) = node.set(processor, memory_nodes[socket_id])
                 if not return_status:
                     return (return_status, 'Error at node.set in '+machine+': '+code)
+                warning_text += code
                 (return_status, code) = self.insert_node(node)
                 if not return_status:
                     return (return_status, 'Error at self.insert_node in '+machine+': '+code)
+                if code not in warning_text:
+                    warning_text += code
             
             #Fill os data
             os = OpSys()
             (return_status, code) = get_os_information(ssh_conn, os)
             if not return_status:
                 return (return_status, 'Error at get_os_information in '+machine+': '+code)
+            warning_text += code
             (return_status, code) = self.set_os(os)
             if not return_status:
                 return (return_status, 'Error at self.set_os in '+machine+': '+code)
+            warning_text += code
             
             #Fill hypervisor data
             hypervisor = Hypervisor()
             (return_status, code) = get_hypervisor_information(virsh_conn, hypervisor)
             if not return_status:
                 return (return_status, 'Error at get_hypervisor_information in '+machine+': '+code)
-            
+            warning_text += code
             (return_status, code) = self.set_hypervisor(hypervisor)
             if not return_status:
                 return (return_status, 'Error at self.set_hypervisor in '+machine+': '+code)
-            
+            warning_text += code
             ssh_conn.close()
                 
-            return (True, None)
+            return (True, warning_text)
         except libvirt.libvirtError, e:
             text = e.get_error_message()
             print 'RADclass.obtain_RAD() exception:', text
@@ -149,14 +161,16 @@ class RADclass():
             return False, text
 
     def set_name(self,name):
-        """Sets the machine name. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+        """Sets the machine name. 
+        Returns (True,Waring) in case of success and ('False',<error description>) in case of error"""
         if not isinstance(name,str):
             return (False, 'The variable \'name\' must be text')
         self.name = name
-        return (True, None)
+        return (True, "")
     
     def set_connection_info(self, machine, user, password):
-        """Sets the connection information. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+        """Sets the connection information. 
+        Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
         if not isinstance(machine,str):
             return (False, 'The variable \'machine\' must be text')
         if not isinstance(user,str):
@@ -164,14 +178,15 @@ class RADclass():
 #         if not isinstance(password,str):
 #             return (False, 'The variable \'password\' must be text')
         (self.machine, self.user, self.password) = (machine, user, password)
-        return (True, None)
+        return (True, "")
         
     def insert_node(self,node):
-        """Inserts a new node and updates class variables. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+        """Inserts a new node and updates class variables. 
+        Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
         if not isinstance(node,Node):
             return (False, 'The variable \'node\' must be a Node element')
         
-        if node.id in self.nodes:
+        if node.id_ in self.nodes:
             return (False, 'The node is already present in the nodes list.')
         
         #Check if network ports have not been inserted previously as part of another node
@@ -181,15 +196,17 @@ class RADclass():
             self.ports_list.append(port_key)
         
         #Insert the new node
-        self.nodes[node.id] = node
+        self.nodes[node.id_] = node
         
         #update variables
         self.update_variables()
         
-        return (True, None)
+        return (True, "")
     
     def update_variables(self):
-        """Updates class variables. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+        """Updates class variables. 
+        Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
+        warning_text=""
         #The number of processors and nodes is the same
         self.nr_processors = len(self.nodes)
         
@@ -242,25 +259,27 @@ class RADclass():
         if different_memory_type:
             self.memory_type = None
         if different_memory_hugepage_sz:
-            return (False, 'Detected differen hugepages size in different sockets')
+            warning_text += 'Detected different hugepages size in different sockets\n'
             
-        return (True, None)
+        return (True, warning_text)
         
     def set_hypervisor(self,hypervisor):
-        """Sets the hypervisor. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+        """Sets the hypervisor. 
+        Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
         if not isinstance(hypervisor,Hypervisor):
             return (False, 'The variable \'hypervisor\' must be of class Hypervisor')
         
         self.hypervisor.assign(hypervisor) 
-        return (True, None)
+        return (True, "")
     
     def set_os(self,os):
-        """Sets the operating system. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+        """Sets the operating system. 
+        Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
         if not isinstance(os,OpSys):
             return (False, 'The variable \'os\' must be of class OpSys')
         
         self.os.assign(os)
-        return (True, None)
+        return (True, "")
     
     def to_text(self):
         text= 'name: '+self.name+'\n'
@@ -292,7 +311,7 @@ class RADclass():
     
 class Node():
     def __init__(self):
-        self.id = None                      #Integer. Node id. Unique in the system
+        self.id_ = None                      #Integer. Node id. Unique in the system
         self.processor = ProcessorNode()    #Information about the processor in the node
         self.memory = MemoryNode()          #Information about the memory in the node
         self.nic_list = list()              #List of Nic() containing information about the nics associated to the node
@@ -307,7 +326,7 @@ class Node():
         return self.memory.get_info()
     
 #     def set(self, *args):
-#         """Sets the node information. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+#         """Sets the node information. Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
 #         if len(args)==2:
 #             processor = args[0]
 #             memory = args[1]
@@ -325,7 +344,7 @@ class Node():
         if not status:
             return (status, return_code)
         
-        self.id = processor.id
+        self.id_ = processor.id_
         
         (status, return_code) = self.memory.assign(memory)
         if not status:
@@ -341,10 +360,12 @@ class Node():
                     return (False, 'Network port '+port_key+'defined multiple times in the same node')
                 self.ports_list.append(port_key)
             
-        return (True,None)
+        return (True,"")
    
     def assign(self, node):
-        """Sets the node information. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+        """Sets the node information. 
+        Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
+        warning_text=""
         processor = node.processor
         memory = node.memory
         nic_list = node.nic_list
@@ -352,11 +373,12 @@ class Node():
         if not status:
             return (status, return_code)
         
-        self.id = processor.id
+        self.id_ = processor.id_
         
         (status, return_code) = self.memory.assign(memory)
         if not status:
             return (status, return_code)
+        warning_text += code
         
         for nic in nic_list:
             if not isinstance(nic,Nic):
@@ -367,10 +389,10 @@ class Node():
                     return (False, 'Network port '+port_key+'defined multiple times in the same node')
                 self.ports_list.append(port_key)
             
-        return (True,None)
+        return (True,warning_text)
    
     def to_text(self):
-        text= '            id: '+str(self.id)+'\n'
+        text= '            id: '+str(self.id_)+'\n'
         text+= '            cpu:\n'
         text += self.processor.to_text()
         text+= '            memory:\n'
@@ -392,7 +414,7 @@ class ProcessorNode():
     possible_versions = definitionsClass.processor_possible_versions
     
     def __init__(self):
-        self.id = None              #Integer. Numeric identifier of the socket
+        self.id_ = None              #Integer. Numeric identifier of the socket
         self.family = None          #Text. Family name of the processor
         self.manufacturer = None    #Text. Manufacturer of the processor
         self.version = None         #Text. Model version of the processor
@@ -403,11 +425,12 @@ class ProcessorNode():
         #self.shared_cores -> this should also contain information to know if cores are being used
         
     def assign(self, processor):
-        """Sets the processor information. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+        """Sets the processor information. 
+        Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
         if not isinstance(processor,ProcessorNode):
             return (False, 'The variable \'processor\' must be of class ProcessorNode')
         
-        self.id = processor.id
+        self.id_ = processor.id_
         self.family = processor.family
         self.manufacturer = processor.manufacturer
         self.version = processor.version
@@ -415,12 +438,15 @@ class ProcessorNode():
         self.cores = processor.cores
         self.eligible_cores = processor.eligible_cores
         
-        return (True, None)
+        return (True, "")
     
-    def set(self, id, family, manufacturer, version, features, cores):
-        """Sets the processor information. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
-        if not isinstance(id,int):
-            return (False, 'The processor id must be of type int')  
+    def set(self, id_, family, manufacturer, version, features, cores):
+        """Sets the processor information. 
+        Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
+        warning_text = ""
+
+        if not isinstance(id_,int):
+            return (False, 'The processor id_ must be of type int')  
         if not isinstance(family,str):
             return (False, 'The processor family must be of type str')
         if not isinstance(manufacturer,str):
@@ -432,18 +458,18 @@ class ProcessorNode():
         if not isinstance(cores,list):
             return (False, 'The processor cores must be of type list')
  
-        (self.id, self.family, self.manufacturer, self.version) = (id, family, manufacturer, version)
+        (self.id_, self.family, self.manufacturer, self.version) = (id_, family, manufacturer, version)
  
         if not manufacturer in self.possible_manufacturers:
-            return (False, 'The manufacturer must be one of these: '+str(self.possible_manufacturers))     
+            warning_text += "processor manufacturer '%s' not among: %s\n" %(manufacturer, str(self.possible_manufacturers))     
         if not family in self.possible_families:
-            return (False, 'The family must be one of these: '+str(self.possible_families))
+            warning_text += "family '%s' not among: %s\n" % (family, str(self.possible_families))
 #        if not version in self.possible_versions:
-#            return (False, 'The version must be one of these: '+str(self.possible_versions))
+#            warning_text += 'The version %s is not one of these: %s\n' % (version, str(self.possible_versions))
         
         for feature in features:
             if not feature in self.possible_features:
-                return (False, 'The features must be among these possible ones: '+str(self.possible_versions))
+                warning_text += "processor feature '%s' not among: %s\n" % (feature, str(self.possible_versions))
             self.features.append(feature)
         
         #If hyperthreading is active cores must be coupled in the form of [[a,b],[c,d],...]
@@ -461,7 +487,7 @@ class ProcessorNode():
         
         self.set_eligible_cores()
         
-        return (True,None)
+        return (True,warning_text)
            
     def set_eligible_cores(self):
         """Set the default eligible cores, this is all cores non used by the host operating system"""
@@ -478,7 +504,7 @@ class ProcessorNode():
         return (self.family, self.manufacturer, self.version, self.features)
     
     def to_text(self):
-        text= '                id: '+str(self.id)+'\n'
+        text= '                id: '+str(self.id_)+'\n'
         text+= '                family: '+self.family+'\n'
         text+= '                manufacturer: '+self.manufacturer+'\n'
         text+= '                version: '+self.version+'\n'
@@ -496,7 +522,7 @@ class MemoryNode():
         self.hugepage_sz = None             #Integer. Size in KiB of hugepages
         self.hugepage_nr = None             #Integer. Number of hugepages allocated in the module
         self.eligible_hugepage_nr = None    #Integer. Number of eligible hugepages in the node
-        self.type = None                    #Text. Type of memory modules. If modules have a different value keep it as None
+        self.type_ = None                    #Text. Type of memory modules. If modules have a different value keep it as None
         self.freq = None                    #Integer. Frequency of the modules in MHz. If modules have a different value keep it as None
         self.module_size = None             #Integer. Size of the modules in KiB. If modules have a different value keep it as None
         self.form_factor = None             #Text. Form factor of the modules. If modules have a different value keep it as None
@@ -505,7 +531,8 @@ class MemoryNode():
         return self.set(memory_node.modules, memory_node.hugepage_sz, memory_node.hugepage_nr)
          
     def set(self, modules, hugepage_sz, hugepage_nr):
-        """Set the memory node information. hugepage_sz must be expressed in KiB. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+        """Set the memory node information. hugepage_sz must be expressed in KiB. 
+        Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
         if not isinstance(modules, list):
             return (False, 'The modules must be a list of elements of class MemoryModule')
         if not isinstance(hugepage_sz,int):
@@ -522,10 +549,10 @@ class MemoryNode():
             if not isinstance(iterator,MemoryModule):
                 return (False, 'The modules must be a list of elements of class MemoryModule')
             self.modules.append(iterator)
-            (self.type, self.freq, self.module_size, self.form_factor) = (iterator.type, iterator.freq, iterator.size, iterator.form_factor)
+            (self.type_, self.freq, self.module_size, self.form_factor) = (iterator.type_, iterator.freq, iterator.size, iterator.form_factor)
             self.node_size += self.module_size
             self.nr_channels += 1
-            if prev_type != None and prev_type != self.type:
+            if prev_type != None and prev_type != self.type_:
                 different_type = True
             if prev_freq != None and prev_freq != self.freq:
                 different_freq = True
@@ -533,10 +560,10 @@ class MemoryNode():
                 different_module_size = True
             if prev_form_factor != None and prev_form_factor != self.form_factor:
                 different_form_factor = True
-            (prev_type, prev_freq, prev_module_size, prev_form_factor) = (self.type, self.freq, self.module_size, self.form_factor)
+            (prev_type, prev_freq, prev_module_size, prev_form_factor) = (self.type_, self.freq, self.module_size, self.form_factor)
         
         if different_type:
-            self.type = None
+            self.type_ = None
         if different_freq:
             self.freq = None
         if different_module_size:
@@ -548,7 +575,7 @@ class MemoryNode():
         if not return_value:
             return (return_value, error_code)
         
-        return (True, None)
+        return (True, "")
     
     def set_eligible_memory(self):
         """Sets the default eligible_memory and eligible_hugepage_nr. This is all memory but 2GiB and all hugepages"""
@@ -557,11 +584,11 @@ class MemoryNode():
             return (False, "There is less than 2GiB of memory in the module")
         
         self.eligible_hugepage_nr = self.hugepage_nr 
-        return (True,None)
+        return (True,"")
     
     def get_info(self):
-        """Return memory information (self.freq, self.nr_channels, self.type, self.node_size)"""
-        return (self.freq, self.nr_channels, self.type, self.node_size, self.hugepage_sz)
+        """Return memory information (self.freq, self.nr_channels, self.type_, self.node_size)"""
+        return (self.freq, self.nr_channels, self.type_, self.node_size, self.hugepage_sz)
         
     def to_text(self):
         text= '                node_size: '+str(self.node_size)+'\n'
@@ -570,7 +597,7 @@ class MemoryNode():
         text+= '                hugepage_sz: '+str(self.hugepage_sz)+'\n'
         text+= '                hugepage_nr: '+str(self.hugepage_nr)+'\n'
         text+= '                eligible_hugepage_nr: '+str(self.eligible_hugepage_nr)+'\n'
-        text+= '                type: '+self.type+'\n'
+        text+= '                type: '+self.type_+'\n'
         text+= '                freq: '+str(self.freq)+'\n'
         text+= '                module_size: '+str(self.module_size)+'\n'
         text+= '                form_factor: '+self.form_factor+'\n'
@@ -586,17 +613,20 @@ class MemoryModule():
     
     def __init__(self):
         self.locator = None     #Text. Name of the memory module
-        self.type = None        #Text. Type of memory module
+        self.type_ = None        #Text. Type of memory module
         self.freq = None        #Integer. Frequency of the module in MHz
         self.size = None        #Integer. Size of the module in KiB
         self.form_factor = None #Text. Form factor of the module
         
-    def set(self, locator, type, freq, size, form_factor):
-        """Sets the memory module information. Frequency must be expressed in MHz and size in KiB. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+    def set(self, locator, type_, freq, size, form_factor):
+        """Sets the memory module information. 
+        Frequency must be expressed in MHz and size in KiB.
+        Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
+        warning_text=""
         if not isinstance(locator, str):
             return (False, "The type of the variable locator must be str")
-        if not isinstance(type, str):
-            return (False, "The type of the variable type must be str")
+        if not isinstance(type_, str):
+            return (False, "The type of the variable type_ must be str")
         if not isinstance(form_factor, str):
             return (False, "The type of the variable form_factor must be str")
         if not isinstance(freq, int):
@@ -605,16 +635,16 @@ class MemoryModule():
             return (False, "The type of the variable size must be int")
         
         if not form_factor in self.possible_form_factors:
-            return (False, "The form_factor must be one of these: "+str(self.possible_form_factors))
-        if not type in self.possible_types:
-            return (False, "The type must be one of these: "+str(self.possible_types))
+            warning_text += "memory form_factor '%s' not among: %s\n" %(form_factor, str(self.possible_form_factors))
+        if not type_ in self.possible_types:
+            warning_text += "memory type '%s' not among: %s\n" %(type_, str(self.possible_types))
         
-        (self.locator, self.type, self.freq, self.size, self.form_factor) = (locator, type, freq, size, form_factor)
-        return (True,None)   
+        (self.locator, self.type_, self.freq, self.size, self.form_factor) = (locator, type_, freq, size, form_factor)
+        return (True, warning_text)   
     
     def to_text(self):
         text= '                    '+self.locator+':\n'
-        text+= '                        type: '+self.type+'\n'
+        text+= '                        type: '+self.type_+'\n'
         text+= '                        freq: '+str(self.freq)+'\n'
         text+= '                        size: '+str(self.size)+'\n'
         text+= '                        form factor: '+self.form_factor+'\n'
@@ -626,15 +656,15 @@ class Nic():
         self.ports = dict()     #Dictionary of ports. Keys are the port name, value are Port() elements
     
     def set_model(self, model):
-        """Sets the model of the nic. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+        """Sets the model of the nic. Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
         if not isinstance(model,str):
             return (False, 'The \'model\' must be of type str')
            
         self.model = model
-        return (True, None)
+        return (True, "")
    
     def add_port(self, port):
-        """Adds a port to the nic. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+        """Adds a port to the nic. Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
         if not isinstance(port,Port):
             return (False, 'The \'port\' must be of class Port')
        
@@ -648,7 +678,7 @@ class Nic():
 #             return (False, 'The \'port\' is duplicated in the nic')
        
         self.ports[port_id] = port
-        return (True, None)
+        return (True, "")
    
     def to_text(self):
         text= '                    model: '+ str(self.model)+'\n'
@@ -672,7 +702,7 @@ class Port():
         self.PF_pci_device_id = None
         
 #     def set(self, name, virtual, enabled, speed, mac, pci_device_id, pci_device_id_split):
-#         """Sets the port information. The variable speed indicates the speed in Mbps. Returns (True,None) in case of success and ('False',<error description>) in case of error"""
+#         """Sets the port information. The variable speed indicates the speed in Mbps. Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
 #         if not isinstance(name,str):
 #             return (False, 'The variable \'name\' must be of type str')
 #         if not isinstance(virtual,bool):
@@ -721,14 +751,15 @@ class Hypervisor():
     possible_domain_types = definitionsClass.hypervisor_possible_domain_types
 
     def __init__(self):
-        self.type = None            #Text. Hypervisor type
+        self.type_ = None            #Text. Hypervisor type_
         self.version = None         #int. Hypervisor version
         self.lib_version = None     #int. Libvirt version used to compile hypervisor
         self.domains = list()       #list. List of all the available domains
         
     def set(self, hypervisor, version, lib_version, domains):
+        warning_text=""
         if not isinstance(hypervisor,str):
-            return (False, 'The variable type must be of type str')
+            return (False, 'The variable type_ must be of type str')
         if not isinstance(version,int):
             return (False, 'The variable version must be of type int')
         if not isinstance(lib_version,int):
@@ -737,7 +768,7 @@ class Hypervisor():
             return (False, 'Domains must be a list of the possible domains as str')
         
         if not hypervisor in self.possible_types:
-            return (False, 'Value ' +hypervisor+ ' not of type:'+str(self.possible_types))
+            warning_text += "Hyperpivor '%s' not among: %s\n" % (hypervisor, str(self.possible_types))
         
         valid_domain_found = False
         for domain in domains:
@@ -748,20 +779,20 @@ class Hypervisor():
                 self.domains.append(domain)
                 
         if not valid_domain_found:
-            return (False, 'Possible values for domains are: '+str(self.possible_domain_types))
+            warning_text += 'No valid domain found among: %s\n' % str(self.possible_domain_types)
             
         
-        (self.version, self.lib_version, self.type) = (version, lib_version, hypervisor)
-        return (True, None)
+        (self.version, self.lib_version, self.type_) = (version, lib_version, hypervisor)
+        return (True, warning_text)
      
     def assign(self, hypervisor):
-        (self.version, self.lib_version, self.type) = (hypervisor.version, hypervisor.lib_version, hypervisor.type)
+        (self.version, self.lib_version, self.type_) = (hypervisor.version, hypervisor.lib_version, hypervisor.type_)
         for domain in hypervisor.domains:
             self.domains.append(domain)
         return
            
     def to_text(self):
-        text= '    type: '+self.type+'\n'
+        text= '    type: '+self.type_+'\n'
         text+= '    version: '+str(self.version)+'\n'
         text+= '    libvirt version: '+ str(self.lib_version)+'\n'
         text+= '    domains: '+str(self.domains)+'\n'
@@ -774,35 +805,36 @@ class OpSys():
     possible_architectures = definitionsClass.os_possible_architectures
 
     def __init__(self):
-        self.id = None                   #Text. Identifier of the OS. Formed by <Distibutor ID>-<Release>-<Codename>. In linux this can be obtained using lsb_release -a
-        self.type = None                 #Text. Type of operating system
+        self.id_ = None                   #Text. Identifier of the OS. Formed by <Distibutor ID>-<Release>-<Codename>. In linux this can be obtained using lsb_release -a
+        self.type_ = None                 #Text. Type of operating system
         self.bit_architecture = None     #Integer. Architecture
         
-    def set(self, id, type, bit_architecture):
-        if not isinstance(type,str):
-            return (False, 'The variable type must be of type str')
-        if not isinstance(id,str):
-            return (False, 'The variable id must be of type str')
+    def set(self, id_, type_, bit_architecture):
+        warning_text=""
+        if not isinstance(type_,str):
+            return (False, 'The variable type_ must be of type str')
+        if not isinstance(id_,str):
+            return (False, 'The variable id_ must be of type str')
         if not isinstance(bit_architecture,str):
             return (False, 'The variable bit_architecture must be of type str')
         
-        if not type in self.possible_types:
-            return (False, "type '" + type + "' not among: "+str(self.possible_types))
-        if not id in self.possible_id:
-            return (False, "Release '"+id+"' not among: " + str(self.possible_id))
+        if not type_ in self.possible_types:
+            warning_text += "os type '%s' not among: %s\n" %(type_, str(self.possible_types))
+        if not id_ in self.possible_id:
+            warning_text += "os release '%s' not among: %s\n" %(id_, str(self.possible_id))
         if not bit_architecture in self.possible_architectures:
-            return (False, "bit_architecture '"+bit_architecture+"' not among: " +str(self.possible_architectures))
+            warning_text += "os bit_architecture '%s' not among: %s\n" % (bit_architecture, str(self.possible_architectures))
         
-        (self.id, self.type, self.bit_architecture) = (id, type, bit_architecture)
-        return (True, None)
+        (self.id_, self.type_, self.bit_architecture) = (id_, type_, bit_architecture)
+        return (True, warning_text)
     
     def assign(self,os):
-        (self.id, self.type, self.bit_architecture) = (os.id, os.type, os.bit_architecture)
+        (self.id_, self.type_, self.bit_architecture) = (os.id_, os.type_, os.bit_architecture)
         return
     
     def to_text(self):
-        text= '    id: '+self.id+'\n'
-        text+= '    type: '+self.type+'\n'
+        text= '    id: '+self.id_+'\n'
+        text+= '    type: '+self.type_+'\n'
         text+= '    bit_architecture: '+self.bit_architecture+'\n'
         return text
      
@@ -812,7 +844,7 @@ def get_hostname(virsh_conn):
 def get_hugepage_size(ssh_conn):
     command = 'sudo hugeadm --page-sizes'
 #  command = 'hugeadm --page-sizes-all'
-    (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+    (_, stdout, stderr) = ssh_conn.exec_command(command)
     error = stderr.read()
     if len(error)>0:
         raise paramiko.ssh_exception.SSHException(command +' : '+ error)
@@ -823,7 +855,7 @@ def get_hugepage_size(ssh_conn):
 
 def get_hugepage_nr(ssh_conn,hugepage_sz, node_id):
     command = 'cat /sys/devices/system/node/node'+str(node_id)+'/hugepages/hugepages-'+str(hugepage_sz/1024)+'kB/nr_hugepages'
-    (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+    (_, stdout, _) = ssh_conn.exec_command(command)
     #print command, 
     #text = stdout.read()
     #print "'"+text+"'"
@@ -836,10 +868,12 @@ def get_hugepage_nr(ssh_conn,hugepage_sz, node_id):
     return value
 
 def get_memory_information(ssh_conn, virsh_conn, memory_nodes):
+    warning_text=""
     tree=ElementTree.fromstring(virsh_conn.getSysinfo(0))
     memory_dict = dict()
     for target in tree.findall("memory_device"):
         locator_f = size_f = freq_f = type_f = formfactor_f = False
+        module_form_factor = ""
         for entry in target.findall("entry"):
             if entry.get("name") == 'size':
                 size_f = True
@@ -871,34 +905,41 @@ def get_memory_information(ssh_conn, virsh_conn, memory_nodes):
                 formfactor_f = True
                 module_form_factor = entry.text  
                    
-            elif entry.get("name") == 'locator':
-                if not locator_f: # other case, it is obtained by bank_locator that we give priority to 
+            elif entry.get("name") == 'locator' and not locator_f:
+                # other case, it is obtained by bank_locator that we give priority to
+                locator = entry.text
+                pos = locator.find(module_form_factor)
+                if module_form_factor == locator[0:len(module_form_factor) ]:
+                    pos = len(module_form_factor) +1 
+                else:
+                    pos = 0
+                if locator[pos] in "ABCDEFGH":  
                     locator_f = True
-                    locator = entry.text
-                    node_id = ord(entry.text[len(module_form_factor)+1])-ord('A')
+                    node_id = ord(locator[pos])-ord('A')
                     #print entry.text, node_id
 
             elif entry.get("name") == 'bank_locator':
                 locator = entry.text
                 pos = locator.find("NODE ")
-                if pos >= 0:
+                if pos >= 0 and len(locator)>pos+5:
                     if locator[pos+5] in ("01234567"): #len("NODE ") is 5
                         node_id = int(locator[pos+5])
                         locator_f = True
              
-            #When all module fields have been found add a new module to the list 
-            if locator_f and size_f and freq_f and type_f and formfactor_f:
-                #If the memory node has not yet been created create it
-                if node_id not in memory_dict:
-                    memory_dict[node_id] = []
-                    
-                #Add a new module to the memory node
-                module = MemoryModule()
-                (return_status, code) = module.set(locator, module_type, module_freq, module_size, module_form_factor)
-                if not return_status:
-                    return (return_status, code)
-                memory_dict[node_id].append(module)
-                break
+        #When all module fields have been found add a new module to the list 
+        if locator_f and size_f and freq_f and type_f and formfactor_f:
+            #If the memory node has not yet been created create it
+            if node_id not in memory_dict:
+                memory_dict[node_id] = []
+                
+            #Add a new module to the memory node
+            module = MemoryModule()
+            (return_status, code) = module.set(locator, module_type, module_freq, module_size, module_form_factor)
+            if not return_status:
+                return (return_status, code)
+            memory_dict[node_id].append(module)
+            if code not in warning_text:
+                warning_text += code
     
     #Fill memory nodes
     #Hugepage size is constant for all nodes
@@ -908,11 +949,11 @@ def get_memory_information(ssh_conn, virsh_conn, memory_nodes):
         memory_node.set(modules, hugepage_sz, get_hugepage_nr(ssh_conn,hugepage_sz, node_id))
         memory_nodes[node_id] = memory_node
         
-    return (True, None)
+    return (True, warning_text)
 
 def get_cpu_topology_ht(ssh_conn, topology):
     command = 'cat /proc/cpuinfo'
-    (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+    (_, stdout, stderr) = ssh_conn.exec_command(command)
     error = stderr.read()
     if len(error)>0:
         raise paramiko.ssh_exception.SSHException(command +' : '+ error)
@@ -950,9 +991,10 @@ def get_cpu_topology_ht(ssh_conn, topology):
             hyperthreaded_cores.append(core_map[(s,c)])
         topology[s] = hyperthreaded_cores
       
-    return (True, None)
+    return (True, "")
 
 def get_processor_information(ssh_conn, vish_conn, processors):
+    warning_text=""
     #Processor features are the same for all processors
     #TODO (at least using virsh capabilities)nr_numa_nodes
     capabilities = list()
@@ -972,7 +1014,7 @@ def get_processor_information(ssh_conn, vish_conn, processors):
         capabilities.append('64b')
       
     command = 'cat /proc/cpuinfo | grep flags'
-    (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+    (_, stdout, stderr) = ssh_conn.exec_command(command)
     error = stderr.read()
     if len(error)>0:
         raise paramiko.ssh_exception.SSHException(command +' : '+ error)
@@ -982,7 +1024,7 @@ def get_processor_information(ssh_conn, vish_conn, processors):
     
     #Find out if IOMMU is enabled
     command = 'dmesg |grep -e Intel-IOMMU'
-    (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+    (_, stdout, stderr) = ssh_conn.exec_command(command)
     error = stderr.read()
     if len(error)>0:
         raise paramiko.ssh_exception.SSHException(command +' : '+ error)
@@ -991,7 +1033,7 @@ def get_processor_information(ssh_conn, vish_conn, processors):
       
     #Equivalent for AMD
     command = 'dmesg |grep -e AMD-Vi'
-    (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+    (_, stdout, stderr) = ssh_conn.exec_command(command)
     error = stderr.read()
     if len(error)>0:
         raise paramiko.ssh_exception.SSHException(command +' : '+ error)
@@ -1005,6 +1047,8 @@ def get_processor_information(ssh_conn, vish_conn, processors):
         (return_status, code) = get_cpu_topology_ht(ssh_conn, topology)
         if not return_status:
             return (return_status, code)
+        warning_text += code
+
     #Otherwise it is possible to do it using virsh capabilities
     else:
         for target in tree.findall("host/topology/cells/cell"):
@@ -1062,13 +1106,16 @@ def get_processor_information(ssh_conn, vish_conn, processors):
         (return_status, code) = processor.set(socket_id, family, manufacturer, version, capabilities, topology[socket_id])
         if not return_status:
             return (return_status, code)
+        if code not in warning_text:
+            warning_text += code
 
         #Add processor to the processors dictionary
         processors[socket_id] = processor
     
-    return (True, None)
+    return (True, warning_text)
 
 def get_nic_information(ssh_conn, virsh_conn, nic_topology):   
+    warning_text=""
     #Get list of net devices
     net_devices = virsh_conn.listDevices('net',0)
     print virsh_conn.listDevices('net',0)
@@ -1138,7 +1185,7 @@ def get_nic_information(ssh_conn, virsh_conn, nic_topology):
             #Only for non virtual interfaces: Obtain speed and if link is detected (this must be done using ethtool)
             if not virtual:
                 command = 'sudo ethtool '+interface+' | grep -e Speed -e "Link detected"'
-                (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+                (_, stdout, stderr) = ssh_conn.exec_command(command)
                 error = stderr.read()
                 if len(error) >0:
                     print 'Error running '+command+'\n'+error
@@ -1214,11 +1261,11 @@ def get_nic_information(ssh_conn, virsh_conn, nic_topology):
                 else:
                     port.enabled = False
             
-    return (True, None)     
+    return (True, warning_text)     
 
 def get_nic_information_old(ssh_conn, nic_topology):
     command = 'lstopo-no-graphics --of xml'
-    (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+    (_, stdout, stderr) = ssh_conn.exec_command(command)
     error = stderr.read()
     if len(error)>0:
         raise paramiko.ssh_exception.SSHException(command +' : '+ error)
@@ -1257,7 +1304,7 @@ def get_nic_information_old(ssh_conn, nic_topology):
                         mac = info.get("value")
                         #get the port speed and status
                         command = 'sudo ethtool '+name
-                        (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+                        (_, stdout, stderr) = ssh_conn.exec_command(command)
                         error = stderr.read()
                         if len(error)>0:
                             return (False, 'Error obtaining '+name+' information: '+error)
@@ -1294,9 +1341,10 @@ def get_nic_information_old(ssh_conn, nic_topology):
                 #Add it to the topology
                 nic_topology[node_id].append(nic)
                 
-    return (True, None)
+    return (True, "")
 
 def get_os_information(ssh_conn, os):
+    warning_text=""
 #    command = 'lsb_release -a'
 #    (stdin, stdout, stderr) = ssh_conn.exec_command(command)
 #    cont = 0
@@ -1313,37 +1361,37 @@ def get_os_information(ssh_conn, os):
 #            cont += 1
 #    if cont != 3:
 #        return (False, 'It was not possible to obtain the OS id')
-#    id = distributor+'-'+release+'-'+codename
+#    id_ = distributor+'-'+release+'-'+codename
  
     command = 'cat /etc/redhat-release'
-    (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+    (_, stdout, stderr) = ssh_conn.exec_command(command)
     error = stderr.read()
     if len(error)>0:
         raise paramiko.ssh_exception.SSHException(command +' : '+ error)
-    id = stdout.read().rstrip('\n')
+    id_ = stdout.read().rstrip('\n')
    
     command = 'uname -o'
-    (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+    (_, stdout, stderr) = ssh_conn.exec_command(command)
     error = stderr.read()
     if len(error)>0:
         raise paramiko.ssh_exception.SSHException(command +' : '+ error)
-    type = stdout.read().rstrip('\n')
+    type_ = stdout.read().rstrip('\n')
     
     command = 'uname -i'
-    (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+    (_, stdout, stderr) = ssh_conn.exec_command(command)
     error = stderr.read()
     if len(error)>0:
         raise paramiko.ssh_exception.SSHException(command +' : '+ error)
     bit_architecture = stdout.read().rstrip('\n')
     
-    (return_status, code) = os.set(id, type, bit_architecture)
+    (return_status, code) = os.set(id_, type_, bit_architecture)
     if not return_status:
         return (return_status, code)
-    
-    return (True, None) 
+    warning_text += code
+    return (True, warning_text) 
 
 def get_hypervisor_information(virsh_conn, hypervisor):
-    type = virsh_conn.getType().rstrip('\n')
+    type_ = virsh_conn.getType().rstrip('\n')
     version = virsh_conn.getVersion()
     lib_version = virsh_conn.getLibVersion()
     
@@ -1359,10 +1407,10 @@ def get_hypervisor_information(virsh_conn, hypervisor):
             for domain in target.findall("arch/domain"):
                 domains.append(domain.get("type"))
             
-    (return_status, code) = hypervisor.set(type, version, lib_version, domains)
+    (return_status, code) = hypervisor.set(type_, version, lib_version, domains)
     if not return_status:
         return (return_status, code)
-    return (True, None)      
+    return (True, code)      
      
 class RADavailableResourcesClass(RADclass):
     def __init__(self, resources):
@@ -1405,7 +1453,7 @@ class RADavailableResourcesClass(RADclass):
             return (return_status, code)
         ssh_conn = code
         command = 'mpstat -P ALL 1 1 | grep Average | egrep -v CPU\|all'
-        (stdin, stdout, stderr) = ssh_conn.exec_command(command)
+        (_, stdout, stderr) = ssh_conn.exec_command(command)
         error = stderr.read()
         if len(error) > 0:
             return (False, error)
@@ -1418,7 +1466,7 @@ class RADavailableResourcesClass(RADclass):
                 self.cores_consumption[int(cpu_usage_split[1])] = usage 
         ssh_conn.close()   
         #Check if any core marked as available in the nodes has cpu_usage > 0
-        for node_k, node_v in self.nodes.iteritems():
+        for _, node_v in self.nodes.iteritems():
             cores = node_v.processor.eligible_cores
             for cpu in cores:
                 if len(cpu) > 1:
@@ -1473,12 +1521,12 @@ class RADavailableResourcesClass(RADclass):
         #Iterate through reserved section to get used cores, used memory and port usage
         cores = dict()
         memory = dict()
-        reserved_cores = list
+        #reserved_cores = list
         for node_k in self.nodes.iterkeys():
             if not node_k in cores:
                 cores[node_k] = list()
                 memory[node_k] = 0
-            for VNFC, reserved in self.reserved.iteritems():
+            for _, reserved in self.reserved.iteritems():
                 if node_k in reserved.node_reserved_resources:
                     node_v = reserved.node_reserved_resources[node_k]
                     cores[node_k].extend(node_v.reserved_cores)
@@ -1510,7 +1558,7 @@ class RADreservedResources():
                 return (False, 'Duplicated node entry '+str(k)+' in reserved resources')
             self.node_reserved_resources[k]=v
             
-        return (True, None)
+        return (True, "")
     
     def to_text(self):
         text = '        image: '+str(self.image)+'\n'

@@ -96,7 +96,7 @@ template={
         "${}":[
             "${name} host name",
             "${user} host user (user)",
-            "${ip_name} host access IP or name (${name}.hi.inet)",
+            "${ip_name} host access IP or name (${name})",
             "${description} host description (${name})"
         ],
     
@@ -516,6 +516,8 @@ def element_new(args):
             uuid=item.get('uuid', 'uuid-not-found?')
         name = item.get('name', '')
         print " " + uuid +"   "+ name + "   Created"
+        for e in ('warning', 'error', 'last_error'):
+            if e in item:    print e + "\n" + item[e]
     return
 
 def element_action(args):
