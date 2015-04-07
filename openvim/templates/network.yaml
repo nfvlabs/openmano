@@ -21,7 +21,7 @@
 
 network:
     name:    network-name
-    type:    data             # "bridge_data" or "bridge_man" for control plane "data" for dataplane or "ptp" for point to point dataplane
+    type:    data             # "bridge_data" or "bridge_man" for control plane, "data" for dataplane, or "ptp" for point to point dataplane
     provider:physical:   null # needed a value for a bridge_data, bridge_man,
                               # can be:
                               #    bridge:iface_name  : attached to a iface_name host bridge interface

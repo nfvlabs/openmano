@@ -26,12 +26,16 @@
 #        $1: database user
 #        $2: database password 
 
+function usage(){
+    echo  -e "usage: sudo $0 [db-user [db-passwd]]\n  Install source code in ./openmano"
+    exit 1
+}
 
-if [ $EUID -ne 0  -o -z "$SUDO_USER" ]; then
-        echo "Needed root privileges"
-        echo  -e "usage: sudo $0 [db-user db-passwd]\n  Install source code in ./openmano"
-        exit 1
-fi
+#check root privileges and non a root user behind
+[ "$USER" != "root" ] && echo "Needed root privileges" && usage
+[ -z "$SUDO_USER" -o "$SUDO_USER" = "root" ] && echo "Must be runned with sudo from a non root user" && usage
+
+
 
 
 echo '
@@ -61,7 +65,7 @@ echo '
 #################################################################'
 apt-get update -y
 apt-get install -y apache2 mysql-server php5 php-pear php5-mysql
-apt-get install -y python-yaml python-libvirt python-bottle python-mysqldb python-jsonschema python-paramiko python-bs4 git screen
+apt-get install -y python-yaml python-libvirt python-bottle python-mysqldb python-jsonschema python-paramiko python-bs4 python-argcomplete git screen
 
 
 echo '
@@ -131,6 +135,39 @@ chown -R www-data ./openmano/openmano-gui
 #create a link 
 ln -s ${PWD}/openmano/openmano-gui /var/www/html/mano
 
+echo '
+#################################################################
+#####        CONFIGURE openvim openmano CLIENTS             #####
+#################################################################'
+#creates a link at ~/bin
+su $SUDO_USER -c 'mkdir -p ~/bin'
+rm -f /home/${SUDO_USER}/bin/openvim
+rm -f /home/${SUDO_USER}/bin/openmano
+ln -s ${PWD}/openmano/openvim/openvim   /home/${SUDO_USER}/bin/openvim
+ln -s ${PWD}/openmano/openmano/openmano /home/${SUDO_USER}/bin/openmano
+
+#insert /home/<user>/bin in the PATH
+#skiped because normally this is done authomatically when ~/bin exist
+#if ! su $SUDO_USER -c 'echo $PATH' | grep -q "/home/${SUDO_USER}/bin"
+#then
+#    echo "    inserting /home/$SUDO_USER/bin in the PATH at .bashrc"
+#    su $SUDO_USER -c 'echo "PATH=\$PATH:/home/\${USER}/bin" >> ~/.bashrc'
+#fi
+
+#configure arg-autocomplete for this user
+su $SUDO_USER -c 'mkdir -p ~/.bash_completion.d'
+su $SUDO_USER -c 'activate-global-python-argcomplete --dest=/home/${USER}/.bash_completion.d'
+if ! grep -q bash_completion.d/python-argcomplete.sh /home/${SUDO_USER}/.bashrc
+then
+    echo "    inserting .bash_completion.d/python-argcomplete.sh execution at .bashrc"
+    su $SUDO_USER -c 'echo ". .bash_completion.d/python-argcomplete.sh" >> ~/.bashrc'
+fi
+
 echo
-echo "Done!   Run './openmano/scripts/start-all.sh' for starting ${OPENFLOW_INSTALED}openvim and openmano in a screen"
+echo "Done!  you may need to logout and login again for loading the configuration"
+echo " Run './openmano/scripts/start-all.sh' for starting ${OPENFLOW_INSTALED}openvim and openmano in a screen"
+
+
+
+
 

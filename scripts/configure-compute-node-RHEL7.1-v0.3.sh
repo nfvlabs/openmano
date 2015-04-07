@@ -49,12 +49,8 @@ function usage(){
 
 #1 CHECK input parameters
 #1.1 root privileges
-if [ $EUID -ne 0  ]
-then
-    echo "Needed root privileges"
-    usage
-    exit -1
-fi
+[ "$USER" != "root" ] && echo "Needed root privileges" && usage && exit -1
+
 #1.2 input parameters
 FORCE=""
 while getopts "y" o; do
@@ -64,6 +60,7 @@ while getopts "y" o; do
             ;;
         *)
             usage
+            exit -1
             ;;
     esac
 done
