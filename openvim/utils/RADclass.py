@@ -38,6 +38,22 @@ import paramiko
 import re
 import yaml
 
+
+def getCredentials(creds, data):
+    """Used as a backup for libvirt.openAuth in order to provide password that came with data,
+    not used by the moment
+    """
+    print "RADclass:getCredentials", creds, data
+    for cred in creds:
+        print cred[1] + ": ",
+        if cred[0] == libvirt.VIR_CRED_AUTHNAME:
+            cred[4] = data
+        elif cred[0] == libvirt.VIR_CRED_PASSPHRASE:
+            cred[4] = data
+        else:
+            return -1
+    return 0
+
 class RADclass():
     def __init__(self):
         self.name = None
@@ -58,9 +74,13 @@ class RADclass():
         self.hypervisor = Hypervisor()      #Hypervisor information
         self.os = OpSys()                   #Operating system information
         self.ports_list = list()            #List containing all network ports in the node. This is used to avoid having defined multiple times the same port in the system
-        
+    
+    
     def obtain_RAD(self, user, password, machine):
         """This function obtains the RAD information from the remote server.
+        It uses both a ssh and a libvirt connection. 
+        It is desirable in future versions get rid of the ssh connection, but currently 
+        libvirt does not provide all the needed information. 
         Returns (True, Warning) in case of success and (False, <error>) in case of error"""
         warning_text=""
         try:
@@ -72,7 +92,12 @@ class RADclass():
             ssh_conn = code
             
             self.connection_IP = machine
+            #print "libvirt open pre"
             virsh_conn=libvirt.open("qemu+ssh://"+user+'@'+machine+"/system")
+            #virsh_conn=libvirt.openAuth("qemu+ssh://"+user+'@'+machine+"/system", 
+            #        [[libvirt.VIR_CRED_AUTHNAME, libvirt.VIR_CRED_PASSPHRASE, libvirt.VIR_CRED_USERNAME], getCredentials, password],
+            #        0)
+            #print "libvirt open after"
             
     #         #Set connection infomation
     #         (return_status, code) = self.set_connection_info(machine, user, password)
@@ -162,7 +187,7 @@ class RADclass():
 
     def set_name(self,name):
         """Sets the machine name. 
-        Returns (True,Waring) in case of success and ('False',<error description>) in case of error"""
+        Returns (True,Warning) in case of success and ('False',<error description>) in case of error"""
         if not isinstance(name,str):
             return (False, 'The variable \'name\' must be text')
         self.name = name
@@ -1064,28 +1089,22 @@ def get_processor_information(ssh_conn, vish_conn, processors):
     #print vish_conn.getSysinfo(0)
     #return (False, 'forces error for debuging')
     not_populated=False
+    socket_id = -1     #in case we can not determine the socket_id we assume incremental order, starting by 0
     for target in tree.findall("processor"):
         count = 0
-        
+        socket_id += 1
         #Get processor id, family, manufacturer and version
         for entry in target.findall("entry"):
             if entry.get("name") == "status":
                 if entry.text[0:11] == "Unpopulated":
                     not_populated=True
             elif entry.get("name") == 'socket_destination':
-                socket_id = entry.text
-                if not socket_id.startswith('CPU'):
-                    return (False, 'socket_destination does not follow format CPU<cpu nb>. The value is '+socket_id)
-              
-                socket_id = socket_id.strip('CPU')
-                socket_id = socket_id.strip() #removes trailing spaces
-                if not socket_id.isdigit():
-                    return (False, 'socket_destination does not follow format CPU<cpu nb>. The value is '+socket_id)
-              
-                socket_id = ord(socket_id) - ord('0') - 1
-                if not socket_id >= 0:
-                    return (False, 'socket_destination does not follow format CPU<cpu nb>. The value is '+socket_id)
-                count += 1
+                socket_text = entry.text
+                if socket_text.startswith('CPU'):
+                    socket_text = socket_text.strip('CPU')
+                    socket_text = socket_text.strip() #removes trailing spaces
+                    if socket_text.isdigit() and int(socket_text)<9 and int(socket_text)>0:
+                        socket_id = int(socket_text) - 1
               
             elif entry.get("name") == 'family':
                 family = entry.text
@@ -1096,7 +1115,7 @@ def get_processor_information(ssh_conn, vish_conn, processors):
             elif entry.get("name") == 'version':
                 version = entry.text.strip()
                 count += 1
-        if count != 4:
+        if count != 3:
             return (False, 'Error. Not all expected fields could be found in processor')
         
         #Create and fill processor structure
