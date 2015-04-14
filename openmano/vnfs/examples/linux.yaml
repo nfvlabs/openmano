@@ -17,4 +17,6 @@ vnf:
         ram: 1024         # Only for traditional cloud VMs. Memory in MBytes (not from hugepages, oversubscription is allowed)
         bridge-ifaces:
         -   name:      eth0
+            vpci:      "0000:00:11:0"
+        numas: []
 
