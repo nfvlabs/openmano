@@ -1,0 +1,6 @@
+network:
+    name:               bridge_net
+    type:               bridge_data
+    provider:physical:  bridge:virbrMan1
+    shared:             true
+

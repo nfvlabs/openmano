@@ -1,0 +1,6 @@
+network:
+    name:               default
+    type:               bridge_man
+    provider:physical:  default
+    shared:             true
+

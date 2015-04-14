@@ -1,0 +1,6 @@
+network:
+    name:               data_net
+    type:               data
+    provider:physical:  null
+    shared:             true
+
