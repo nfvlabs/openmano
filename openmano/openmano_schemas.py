@@ -31,7 +31,7 @@ __date__ ="$09-oct-2014 09:09:48$"
 nameshort_schema={"type" : "string", "minLength":1, "maxLength":24, "pattern" : "^[^,;()'\"]+$"}
 name_schema={"type" : "string", "minLength":1, "maxLength":36, "pattern" : "^[^,;()'\"]+$"}
 xml_text_schema={"type" : "string", "minLength":1, "maxLength":1000, "pattern" : "^[^']+$"}
-description_schema={"type" : ["string","null"], "maxLength":100, "pattern" : "^[^'\"]+$"}
+description_schema={"type" : ["string","null"], "maxLength":200, "pattern" : "^[^'\"]+$"}
 id_schema_fake = {"type" : "string", "minLength":2, "maxLength":36 }  #"pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$"
 id_schema = {"type" : "string", "pattern": "^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$"}
 pci_schema={"type":"string", "pattern":"^[0-9a-fA-F]{4}(:[0-9a-fA-F]{2}){2}.[0-9a-fA-F]$"}
@@ -531,7 +531,7 @@ vnfc_schema = {
     "type":"object",
     "properties":{
         "name": name_schema,
-        "description": name_schema,
+        "description": description_schema,
         "VNFC image": path_schema,
         "image metadata": metadata_schema, 
         "processor": {

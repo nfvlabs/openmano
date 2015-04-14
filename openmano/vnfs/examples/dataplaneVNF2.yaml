@@ -1,7 +1,7 @@
 ---
 vnf:
     name:        dataplaneVNF2
-    description: Example of a dataplane VNF consisting of a single VM for data plane workloads with high I/O performance requierements: 3 cores, 8 GB hugepages, 2 10G interfaces and 1 SR-IOV interface
+    description: "Example of a dataplane VNF consisting of a single VM for data plane workloads with high I/O performance requirements: 3 cores, 8 GB hugepages, 2 10G interfaces and 1 SR-IOV interface"
     external-connections:
     -   name:              mgmt
         type:              mgmt       # "mgmt"(autoconnect to management net)
@@ -15,22 +15,22 @@ vnf:
         description:       Bridge interface
     -   name:              xe0
         type:              data
-        VNFC:              dataplaneVNF1-VM
+        VNFC:              dataplaneVNF2-VM
         local_iface_name:  xe0
         description:       Dataplane interface 1
     -   name:              xe1
         type:              data
-        VNFC:              dataplaneVNF1-VM
+        VNFC:              dataplaneVNF2-VM
         local_iface_name:  xe1
         description:       Dataplane interface 2
     -   name:              xe2
         type:              data
-        VNFC:              dataplaneVNF1-VM
+        VNFC:              dataplaneVNF2-VM
         local_iface_name:  xe2
         description:       Dataplane interface 3 (SR-IOV)
     VNFC:
     -   name:        dataplaneVNF2-VM
-        description: Dataplane VM with high I/O performance requierements: 3 cores (no hyperthreading), 8 GB hugepages, 2 10G interfaces and 1 SR-IOV interface
+        description: "Dataplane VM with high I/O performance requirements: 3 cores (no hyperthreading), 8 GB hugepages, 2 10G interfaces and 1 SR-IOV interface"
         #Copy the image to a compute path and edit this path
         VNFC image:  /path/to/imagefolder/dataplaneVNF2.qcow2
         numas: 

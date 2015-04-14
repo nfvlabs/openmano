@@ -1,4 +1,3 @@
-/*
 ##
 # Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
 # This file is part of openmano
@@ -19,9 +18,9 @@
 # For those usages not covered by the Apache License, Version 2.0 please
 # contact with: nfvlabs@tid.es
 ##
-*/
 
-/* This table contains the matching between dataplane host ports 
+/*
+   This table contains the matching between dataplane host ports 
    and openflow switch ports. 
    The two first column identifies the host and the pci bus
    Last column identifies the switch port name
@@ -35,6 +34,7 @@
 
 LOCK TABLES `of_ports_pci_correspondence` WRITE;
 
+/*
 INSERT INTO `of_ports_pci_correspondence` 
     (ip_name, pci, switch_port)
 VALUES
@@ -124,5 +124,6 @@ VALUES
     ( '10.95.87.186', '0000:08:00.1', 'spp0-31'),
     ( '10.95.87.186', '0000:08:00.0', 'spp0-32')
 ;
+*/
 
 UNLOCK TABLES;

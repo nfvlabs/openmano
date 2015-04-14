@@ -528,7 +528,7 @@ class vimconnector():
                                     i['vim_id'] = iface['iface_id']
                     except KeyError, e:
                         print "Attach vim_id to interface list: Error No bridge interfaces KeyError " + e.message
-                        exit()
+                        pass
                     #extended interfaces
                     try:
                         for numa in http_content['server']['extended']['numas']:

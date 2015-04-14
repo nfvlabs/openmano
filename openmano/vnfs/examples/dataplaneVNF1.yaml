@@ -1,7 +1,7 @@
 ---
 vnf:
     name:        dataplaneVNF1
-    description: Example of a dataplane VNF consisting of a single VM for data plane workloads with high I/O performance requierements: 14 HW threads, 16 GB hugepages and 4 10G interfaces
+    description: "Example of a dataplane VNF consisting of a single VM for data plane workloads with high I/O performance requirements: 14 HW threads, 16 GB hugepages and 4 10G interfaces"
     external-connections:
     -   name:              mgmt
         type:              mgmt       # "mgmt"(autoconnect to management net)
@@ -30,7 +30,7 @@ vnf:
         description:       Dataplane interface 4
     VNFC:
     -   name:        dataplaneVNF1-VM
-        description: Dataplane VM with high I/O performance requierements: 14 HW threads, 16 GB hugepages and 4 10G interfaces
+        description: "Dataplane VM with high I/O performance requirements: 14 HW threads, 16 GB hugepages and 4 10G interfaces"
         #Copy the image to a compute path and edit this path
         VNFC image:  /path/to/imagefolder/dataplaneVNF1.qcow2
         numas: 
