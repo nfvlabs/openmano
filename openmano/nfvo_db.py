@@ -706,7 +706,7 @@ class nfvo_db():
                             for bridgeiface in vm['bridge-ifaces']:
                                 af.convert_bandwidth(bridgeiface)
                                 bridgeInterfacesDict[vm['name']][bridgeiface['name']] = {}
-                                bridgeInterfacesDict[vm['name']][bridgeiface['name']]['vpci'] = bridgeiface['vpci']
+                                bridgeInterfacesDict[vm['name']][bridgeiface['name']]['vpci'] = bridgeiface.get('vpci',None)
                                 bridgeInterfacesDict[vm['name']][bridgeiface['name']]['bw'] = bridgeiface.get('bandwidth', None)
                                 bridgeInterfacesDict[vm['name']][bridgeiface['name']]['model'] = bridgeiface.get('model', None)
                     

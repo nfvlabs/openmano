@@ -231,117 +231,129 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
     print 'BEGIN creation of VNF "%s"' % vnf_name
     print "VNF %s: consisting of %d VNFC(s)" % (vnf_name,len(vnf_descriptor['vnf']['VNFC']))
     
-    print "Creating new flavors in the VIM for each VNFC"
     #For each VNFC, we add it to the VNFCDict and we  create a flavor.
     VNFCDict = {}     # Dictionary, key: VNFC name, value: dict with the relevant information to create the VNF and VMs in the MANO database
     flavorList = []   # It will contain the new flavors created in VIM. It is used for rollback  
     imageList = []    # It will contain the new images created in VIM. It is used for rollback
 
-    for vnfc in vnf_descriptor['vnf']['VNFC']:
-        VNFCitem={}
-        VNFCitem["name"] = vnfc['name']
-        VNFCitem["description"] = vnfc.get("description", 'VM %s of the VNF %s' %(vnfc['name'],vnf_name))
-        
-        print "Flavor name: %s. Description: %s" % (VNFCitem["name"]+"-flv", VNFCitem["description"])
-        
-        myflavorDict = {}
-        myflavorDict["flavor"] = {}
-        myflavorDict["flavor"]["name"] = vnfc['name']+"-flv"
-        myflavorDict["flavor"]["description"] = VNFCitem["description"]
-        myflavorDict["flavor"]["ram"] = vnfc.get("ram", 0)
-        myflavorDict["flavor"]["vcpus"] = vnfc.get("vcpus", 0)
-        myflavorDict["flavor"]["extended"] = {}
-        
-        devices = vnfc.get("devices", [])
-        if len(devices)>0:
-            myflavorDict["flavor"]["extended"]["devices"] = []
-            dev_nb=0 
-        for device in devices:
-            dev = {}
-            dev.update(device)
+    try:
+        print "Creating additional disk images and new flavors in the VIM for each VNFC"
+        for vnfc in vnf_descriptor['vnf']['VNFC']:
+            VNFCitem={}
+            VNFCitem["name"] = vnfc['name']
+            VNFCitem["description"] = vnfc.get("description", 'VM %s of the VNF %s' %(vnfc['name'],vnf_name))
             
-            if "image" in dev:
-                # Step 6.1 Additional disk images are created in the VIM 
-                res, image_id =  new_image_at_vim(myvimURL, myvim, myvim_tenant, dev['image'], 
-                                                  dev.get('image metadata', None), vnfc['name']+str(dev_nb)+"-img", 
-                                                  VNFCitem['description'])
-                if res < 0 or res > 1:
-                    result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
-                    if result2:
-                        return res, image_id + " Rollback successful."
-                    else:
-                        return res, image_id + " Rollback fail: you need to access VIM and delete manually: %s" % message
-                elif res==1:
-                    imageList.append(image_id)
-                print "Additional disk image id for VNFC %s: %s" % (vnfc['name'],image_id)
+            print "Flavor name: %s. Description: %s" % (VNFCitem["name"]+"-flv", VNFCitem["description"])
+            
+            myflavorDict = {}
+            myflavorDict["flavor"] = {}
+            myflavorDict["flavor"]["name"] = vnfc['name']+"-flv"
+            myflavorDict["flavor"]["description"] = VNFCitem["description"]
+            myflavorDict["flavor"]["ram"] = vnfc.get("ram", 0)
+            myflavorDict["flavor"]["vcpus"] = vnfc.get("vcpus", 0)
+            myflavorDict["flavor"]["extended"] = {}
+            
+            devices = vnfc.get("devices", [])
+            if len(devices)>0:
+                myflavorDict["flavor"]["extended"]["devices"] = []
+                dev_nb=0 
+            for device in devices:
+                dev = {}
+                dev.update(device)
                 
-                dev["imageRef"]=image_id
-                del dev['image']
-                
-            if "image metadata" in dev:
-                del dev["image metadata"]
-            myflavorDict["flavor"]["extended"]["devices"].append(dev)
-            dev_nb += 1
-        
-        # TODO:
-        # Mapping from processor models to rankings should be available somehow in the NFVO. They could be taken from VIM or directly from a new database table
-        # Another option is that the processor in the VNF descriptor specifies directly the ranking of the host 
-        
-        # Previous code has been commented
-        #if vnfc['processor']['model'] == "Intel(R) Xeon(R) CPU E5-4620 0 @ 2.20GHz" :
-        #    myflavorDict["flavor"]['extended']['processor_ranking'] = 200
-        #elif vnfc['processor']['model'] == "Intel(R) Xeon(R) CPU E5-2697 v2 @ 2.70GHz" :
-        #    myflavorDict["flavor"]['extended']['processor_ranking'] = 300
-        #else:
-        #    result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
-        #    if result2:
-        #        print "Error creating flavor: unknown processor model. Rollback successful."
-        #        return -HTTP_Bad_Request, "Error creating flavor: unknown processor model. Rollback successful."
-        #    else:
-        #        return -HTTP_Bad_Request, "Error creating flavor: unknown processor model. Rollback fail: you need to access VIM and delete the following %s" % message
-        myflavorDict["flavor"]['extended']['processor_ranking'] = 100  #Hardcoded value, while we decide when the mapping is done
- 
-        myflavorDict["flavor"]['extended']['numas'] = vnfc['numas']
-        #print myflavorDict
+                if "image" in dev:
+                    # Step 6.1 Additional disk images are created in the VIM 
+                    res, image_id =  new_image_at_vim(myvimURL, myvim, myvim_tenant, dev['image'], 
+                                                      dev.get('image metadata', None), vnfc['name']+str(dev_nb)+"-img", 
+                                                      VNFCitem['description'])
+                    if res < 0 or res > 1:
+                        result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
+                        if result2:
+                            return res, image_id + " Rollback successful."
+                        else:
+                            return res, image_id + " Rollback fail: you need to access VIM and delete manually: %s" % message
+                    elif res==1:
+                        imageList.append(image_id)
+                    print "Additional disk image id for VNFC %s: %s" % (vnfc['name'],image_id)
+                    
+                    dev["imageRef"]=image_id
+                    del dev['image']
+                    
+                if "image metadata" in dev:
+                    del dev["image metadata"]
+                myflavorDict["flavor"]["extended"]["devices"].append(dev)
+                dev_nb += 1
+            
+            # TODO:
+            # Mapping from processor models to rankings should be available somehow in the NFVO. They could be taken from VIM or directly from a new database table
+            # Another option is that the processor in the VNF descriptor specifies directly the ranking of the host 
+            
+            # Previous code has been commented
+            #if vnfc['processor']['model'] == "Intel(R) Xeon(R) CPU E5-4620 0 @ 2.20GHz" :
+            #    myflavorDict["flavor"]['extended']['processor_ranking'] = 200
+            #elif vnfc['processor']['model'] == "Intel(R) Xeon(R) CPU E5-2697 v2 @ 2.70GHz" :
+            #    myflavorDict["flavor"]['extended']['processor_ranking'] = 300
+            #else:
+            #    result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
+            #    if result2:
+            #        print "Error creating flavor: unknown processor model. Rollback successful."
+            #        return -HTTP_Bad_Request, "Error creating flavor: unknown processor model. Rollback successful."
+            #    else:
+            #        return -HTTP_Bad_Request, "Error creating flavor: unknown processor model. Rollback fail: you need to access VIM and delete the following %s" % message
+            myflavorDict["flavor"]['extended']['processor_ranking'] = 100  #Hardcoded value, while we decide when the mapping is done
+     
+            if 'numas' in vnfc:
+                myflavorDict["flavor"]['extended']['numas'] = vnfc['numas']
 
-        # Step 6.2 New flavors are created in the VIM
-        result, flavor_id = myvim.new_tenant_flavor(myvimURL, myvim_tenant, json.dumps(myflavorDict))
-        if result < 0:
-            result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList)
-            if result2:
-                print "Error creating flavor: %s. Rollback successful." %flavor_id
-                return result, "Error creating flavor: %s. Rollback successful" %flavor_id
-            else:
-                return result, "Error creating flavor: %s. Rollback fail: you need to access VIM and delete manually: %s" % (flavor_id, message)
-        
-        print "Flavor id for VNFC %s: %s" % (vnfc['name'],flavor_id)
-        flavorList.append(flavor_id)
-        VNFCitem["vim_flavor_id"] = flavor_id
-        VNFCDict[vnfc['name']] = VNFCitem
-        
-    print "Creating new images in the VIM for each VNFC"
-    # Step 6.3 New images are created in the VIM
-    #For each VNFC, we must create the appropriate image.
-    #This "for" loop might be integrated with the previous one 
-    #In case this integration is made, the VNFCDict might become a VNFClist.
-    for vnfc in vnf_descriptor['vnf']['VNFC']:
-        print "Image name: %s. Description: %s" % (vnfc['name']+"-img", VNFCDict[vnfc['name']]['description'])
-        
-        res, image_id =  new_image_at_vim(myvimURL, myvim, myvim_tenant, vnfc['VNFC image'], 
-                                          vnfc.get('image metadata', None), vnfc['name']+"-img", 
-                                          VNFCDict[vnfc['name']]['description'])
-        if res < 0 or res > 1:
-            result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
-            if result2:
-                return res, image_id + " Rollback successful."
-            else:
-                return res, image_id + " Rollback fail: you need to access VIM and delete manually: %s" % message
-        elif res==1:
-            imageList.append(image_id)
-        print "Image id for VNFC %s: %s" % (vnfc['name'],image_id)
-        VNFCDict[vnfc['name']]["vim_image_id"] = image_id
-        VNFCDict[vnfc['name']]["image_path"] = vnfc['VNFC image']
+            #print myflavorDict
+    
+            # Step 6.2 New flavors are created in the VIM
+            result, flavor_id = myvim.new_tenant_flavor(myvimURL, myvim_tenant, json.dumps(myflavorDict))
+            if result < 0:
+                result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList)
+                if result2:
+                    print "Error creating flavor: %s. Rollback successful." %flavor_id
+                    return result, "Error creating flavor: %s. Rollback successful" %flavor_id
+                else:
+                    return result, "Error creating flavor: %s. Rollback fail: you need to access VIM and delete manually: %s" % (flavor_id, message)
+            
+            print "Flavor id for VNFC %s: %s" % (vnfc['name'],flavor_id)
+            flavorList.append(flavor_id)
+            VNFCitem["vim_flavor_id"] = flavor_id
+            VNFCDict[vnfc['name']] = VNFCitem
+            
+        print "Creating new images in the VIM for each VNFC"
+        # Step 6.3 New images are created in the VIM
+        #For each VNFC, we must create the appropriate image.
+        #This "for" loop might be integrated with the previous one 
+        #In case this integration is made, the VNFCDict might become a VNFClist.
+        for vnfc in vnf_descriptor['vnf']['VNFC']:
+            print "Image name: %s. Description: %s" % (vnfc['name']+"-img", VNFCDict[vnfc['name']]['description'])
+            
+            res, image_id =  new_image_at_vim(myvimURL, myvim, myvim_tenant, vnfc['VNFC image'], 
+                                              vnfc.get('image metadata', None), vnfc['name']+"-img", 
+                                              VNFCDict[vnfc['name']]['description'])
+            if res < 0 or res > 1:
+                result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
+                if result2:
+                    return res, image_id + " Rollback successful."
+                else:
+                    return res, image_id + " Rollback fail: you need to access VIM and delete manually: %s" % message
+            elif res==1:
+                imageList.append(image_id)
+            print "Image id for VNFC %s: %s" % (vnfc['name'],image_id)
+            VNFCDict[vnfc['name']]["vim_image_id"] = image_id
+            VNFCDict[vnfc['name']]["image_path"] = vnfc['VNFC image']
 
+    except KeyError as e:
+        print "Error while creating a VNF. KeyError: " + str(e)
+        result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
+        if result2:
+            return -HTTP_Internal_Server_Error, "Error while creating a VNF. KeyError: " + str(e) + " Rollback successful."
+        else:
+            return -HTTP_Internal_Server_Error, "Error while creating a VNF. KeyError: " + str(e) + " Rollback fail: you need to access VIM and delete manually: %s" % message
+        
+    # Step 7. Storing the VNF in the repository
     print "Storing YAML file of the VNF"
     vnf_descriptor_filename = global_config['vnf_repository'] + "/" + vnf_name + ".vnfd"
     if not os.path.exists(vnf_descriptor_filename):
@@ -349,7 +361,17 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
         f.write(json.dumps(vnf_descriptor, indent=4) + os.linesep)
         f.close()
 
-    result, vnf_id = mydb.new_vnf_as_a_whole(nfvo_tenant,vnf_name,vnf_descriptor_filename,vnf_descriptor,VNFCDict)
+    # Step 8. Adding the VNF to the NFVO DB
+    try:
+        result, vnf_id = mydb.new_vnf_as_a_whole(nfvo_tenant,vnf_name,vnf_descriptor_filename,vnf_descriptor,VNFCDict)
+    except KeyError as e:
+        print "Error while creating a VNF. KeyError: " + str(e)
+        result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
+        if result2:
+            return -HTTP_Internal_Server_Error, "Error while creating a VNF. KeyError: " + str(e) + " Rollback successful."
+        else:
+            return -HTTP_Internal_Server_Error, "Error while creating a VNF. KeyError: " + str(e) + " Rollback fail: you need to access VIM and delete manually: %s" % message
+    
     if result < 0:
         result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
         if result2:
