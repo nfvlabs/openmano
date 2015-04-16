@@ -27,7 +27,7 @@
 # Personalize RHEL7.1 on compute nodes
 # Prepared to work with the following network card drivers:
 # tg3 driver for management interfaces
-# i40e driver for data plane interfaces
+# i40e or ixgbe for driver for data plane interfaces
 
 # To download:
 # wget wget https://raw.githubusercontent.com/nfvlabs/openmano/master/scripts/configure-compute-node-RHEL7.1-v0.3.sh
@@ -38,7 +38,7 @@
 
 
 function usage(){
-    echo -e "Usage: sudo $0 [-y] <user-name>  [ <iface-name>  [<ip-address|dhcp] ]"
+    echo -e "Usage: sudo $0 [-y] <user-name>  [ <iface-name>  [<ip-address>|dhcp] ]"
     echo -e "  Configure compute host for VIM usage. Params:"
     echo -e "     -y  do not prompt for confirmation. If a new user is created, the user name is set as password"
     echo -e "     <user-name> Create if not exist and configure this user for openvim to connect"
@@ -125,7 +125,7 @@ else
   if [ -z "$FORCE" ] 
   then 
      echo "Provide a password for $user_name"
-      passwd $user_name
+     passwd $user_name
   else
      echo -e "$user_name\n$user_name" | passwd --stdin $user_name
   fi
@@ -156,14 +156,14 @@ echo '
 #################################################################'
 
 # Huge pages 1G auto mount
-#mkdir -p /mnt/huge
-#if ! grep -q "Huge pages" /etc/fstab
-#then
-#  echo "" >> /etc/fstab
-#  echo "# Huge pages" >> /etc/fstab
-#  echo "nodev /mnt/huge hugetlbfs pagesize=1GB 0 0" >> /etc/fstab
-#  echo "" >> /etc/fstab
-#fi
+mkdir -p /mnt/huge
+if ! grep -q "/mnt/huge" /etc/fstab
+then
+  echo "" >> /etc/fstab
+  echo "# Huge pages" >> /etc/fstab
+  echo "nodev /mnt/huge hugetlbfs pagesize=1GB 0 0" >> /etc/fstab
+  echo "" >> /etc/fstab
+fi
 
 # Huge pages reservation service
 if ! [ -f /usr/lib/systemd/system/hugetlb-gigantic-pages.service ]
@@ -226,7 +226,7 @@ EOL
   do
     node=`head -n1 $f | gawk '($5=="kB"){print $2}'`
     memory=`head -n1 $f | gawk '($5=="kB"){print $4}'`
-    memory=$((memory+1048570))   #memory must be ceiled  
+    memory=$((memory+1048576-1))   #memory must be ceiled  
     memory=$((memory/1048576))   #from `kB to GB 
     #if memory 
     [ $memory -gt 4 ] && echo "reserve_pages $((memory-4)) node$node" >> /usr/lib/systemd/hugetlb-reserve-pages
@@ -302,7 +302,7 @@ else
 fi
 
 echo "creating local information /opt/VNF/images/hostinfo.yaml"
-echo "#By default openvim assumes control plane interface naming as em0,em1,em2,em3 " > /opt/VNF/images/hostinfo.yaml
+echo "#By default openvim assumes control plane interface naming as em1,em2,em3,em4 " > /opt/VNF/images/hostinfo.yaml
 echo "#and bridge ifaces as virbrMan1, virbrMan2, ..." >> /opt/VNF/images/hostinfo.yaml
 echo "#if compute node contain a different name it must be indicated in this file" >> /opt/VNF/images/hostinfo.yaml
 echo "#with the format extandard-name: compute-name" >> /opt/VNF/images/hostinfo.yaml

@@ -36,6 +36,9 @@ FLD=${DIRNAME}/../../floodlight-0.90
 [ ! -r $FLD/target/floodlight.jar ] &&
      echo "File 'target/floodlight.jar' not found" && exit
 
+
+echo "Deprecated, use '$DIRNAME/openmano-service.sh start floodlight'"
+
 screen -dmS flow bash
 #sleep 1
 #screen -S flow -p 0 -X stuff "cd ${FLD}\n"

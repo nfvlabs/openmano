@@ -25,6 +25,9 @@
 
 DIRNAME=`dirname $0`
 
+echo "Deprecated, use '$DIRNAME/openmano-service.sh start openvim'"
+
+
 screen -dmS vim  bash
 sleep 1
 screen -S vim -p 0 -X stuff "cd ${DIRNAME}/../openvim\n"

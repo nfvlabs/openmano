@@ -1381,13 +1381,19 @@ def get_os_information(ssh_conn, os):
 #    if cont != 3:
 #        return (False, 'It was not possible to obtain the OS id')
 #    id_ = distributor+'-'+release+'-'+codename
- 
+
+
     command = 'cat /etc/redhat-release'
-    (_, stdout, stderr) = ssh_conn.exec_command(command)
-    error = stderr.read()
-    if len(error)>0:
-        raise paramiko.ssh_exception.SSHException(command +' : '+ error)
-    id_ = stdout.read().rstrip('\n')
+    (_, stdout, _) = ssh_conn.exec_command(command)
+    id_text= stdout.read()
+    if len(id_text)==0:
+        #try with Ubuntu
+        command = 'lsb_release -d -s'
+        (_, stdout, _) = ssh_conn.exec_command(command)
+        id_text= stdout.read()
+    if len(id_text)==0:
+        raise paramiko.ssh_exception.SSHException("Can not determinte release neither with 'lsb_release' nor with 'cat /etc/redhat-release'")
+    id_ = id_text.rstrip('\n')
    
     command = 'uname -o'
     (_, stdout, stderr) = ssh_conn.exec_command(command)
