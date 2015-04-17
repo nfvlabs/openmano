@@ -31,7 +31,7 @@ __date__ ="$08-sep-2014 12:21:22$"
 
 import datetime
 from jsonschema import validate as js_v, exceptions as js_e
-from bs4 import BeautifulSoup
+#from bs4 import BeautifulSoup
 
 def read_file(file_to_read):
     """Reads a file specified by 'file_to_read' and returns (True,<its content as a string>) in case of success or (False, <error message>) in case of failure"""
@@ -83,22 +83,10 @@ def remove_extra_items(data, schema):
     elif len(deleted) == 1: return deleted[0]
     else: return deleted
 
-def format_html2text(http_content):
-#     tree = html.fromstring(http_content)
-#     xpath = "/html/body/p/text()"
-#     elem = tree.xpath(xpath)
-#     print "Tree"
-#     print tree
-#     print "elem"
-#     print elem
-#     print "html2text"
-#     print html2text(http_content)
-    soup=BeautifulSoup(http_content)
-#     print "BeautifulSoup"
-#     print soup.body.get_text()
-#     print "End of soup"
-    text = soup.p.get_text() + " " + soup.pre.get_text()
-    return text
+#def format_html2text(http_content):
+#    soup=BeautifulSoup(http_content)
+#    text = soup.p.get_text() + " " + soup.pre.get_text()
+#    return text
 
 def format_jsonerror(http_response):
     data = http_response.json()
