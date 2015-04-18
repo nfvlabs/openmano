@@ -1077,10 +1077,10 @@ def get_processor_information(ssh_conn, vish_conn, processors):
     #Otherwise it is possible to do it using virsh capabilities
     else:
         for target in tree.findall("host/topology/cells/cell"):
-            socket_id = target.get("id")
+            socket_id = int(target.get("id"))
             topology[socket_id] = list()
             for cpu in target.findall("cpus/cpu"):
-                topology[socket_id].append(cpu.get("id"))
+                topology[socket_id].append(int(cpu.get("id")))
     
     #-----------------------------------------------------------         
     #Create a dictionary with the information of all processors

@@ -82,9 +82,10 @@ do
         [ -n "$component_id" ] && echo -n "    stopping $openmano_name ... " && kill_pid $component_id 
         component_id=""
         #terminates screen
-        if screen -ls | grep -q .$openmano_component
+        if screen -wipe | grep -q .$openmano_component
         then
             screen -S $openmano_component -p 0 -X stuff "exit\n"
+            sleep 1
         fi
     fi
 
@@ -95,7 +96,7 @@ do
         [ -n "$component_id" ] && echo "    $openmano_name is already running. Skipping" && continue
         #create screen if not created
         echo -n "    starting $openmano_name ... "
-        if ! screen -ls | grep -q .${openmano_component}
+        if ! screen -wipe | grep -q .${openmano_component}
         then
             screen -dmS ${openmano_component}  bash
             sleep 1
