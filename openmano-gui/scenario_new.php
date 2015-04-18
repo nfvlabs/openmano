@@ -23,7 +23,7 @@
 ##
 
     Author: Alfonso Tierno
-    Version: 0.51
+    Version: 0.52
     Date: Feb 2015
 -->
 
@@ -112,8 +112,9 @@ var connectorHoverStyle = {lineWidth:5,strokeStyle:'SteelBlue',outlineWidth:1,ou
 //vnfsDefs
 <?php
 	getVnfs_js();
-	global $db_server, $db_user, $db_passwd, $db_name, $mano_http, $mano_tenant;
-	echo "    mano_http='{$mano_http}';\n    mano_tenant='{$mano_tenant}';\n";
+	global $db_server, $db_user, $db_passwd, $db_name, $mano_port, $mano_path, $mano_domain, $mano_tenant;
+	echo "    mano_url_base='http://" . ($mano_domain!=null? "{$mano_domain}" : "'+window.location.host+'"). ":{$mano_port}{$mano_path}';\n";
+	echo "    mano_tenant='{$mano_tenant}';\n";
 	if ($uuid != null){
 		getScenarioId_js($uuid);
 	}else{
@@ -338,7 +339,7 @@ jsPlumb.ready(function() {
 		}
 	
 		$.ajaxSetup({headers:{'Accept':'application/yaml','Content-Type':'application/yaml'}});  //ALF
-		var jqxhr=$.post(mano_http +"/"+ mano_tenant +"/scenarios",
+		var jqxhr=$.post(mano_url_base + mano_tenant +"/scenarios",
 				yamlData,
 			function(data,status){
 				alert("Result: " + status + "\nData: " + data);

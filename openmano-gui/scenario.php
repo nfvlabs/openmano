@@ -23,7 +23,7 @@
 ##
 
     Author: Alfonso Tierno, Gerardo Garcia
-    Version: 0.50
+    Version: 0.52
     Date: Feb 2015
 -->
 
@@ -63,7 +63,7 @@
 				<h4 style="text-align: center">Scenarios/Instances</h4>
 				<hr>
 				<?php
-				global $db_server, $db_user, $db_passwd, $db_name, $mano_http, $mano_tenant;
+				global $db_server, $db_user, $db_passwd, $db_name, $mano_port, $mano_path, $mano_domain, $mano_tenant;
 				require 'config.php';
 				require 'get_scenarios.php';
 				require 'get_vnfs.php';
@@ -71,7 +71,9 @@
 				getVnfs(false);
 				getScenarios();
 				echo "<script>\n";
-				echo "    mano_http='{$mano_http}';\n    mano_tenant='{$mano_tenant}';\n";
+				echo "    mano_url_base='http://" . ($mano_domain!=null? "{$mano_domain}" : "'+window.location.host+'"). ":{$mano_port}{$mano_path}';\n";
+				#echo "    mano_url_base='http://" . ($mano_domain!=null? "{$mano_domain}" : $_SERVER['HTTP_HOST']). ":{$mano_port}{$mano_path}';\n";
+				echo "    mano_tenant='{$mano_tenant}';\n";
 				echo "</script>\n";
 				?>
 			</div>
@@ -261,7 +263,7 @@
 			return;
 		}
 		$.ajaxSetup({headers:{'Accept':'application/yaml','Content-Type':'application/yaml'}});  //ALF
-		var jqxhr=$.post(mano_http +"/"+ mano_tenant +"/instances/" + selected_item.uuid + "/action",
+		var jqxhr=$.post(mano_url_base + mano_tenant +"/instances/" + selected_item.uuid + "/action",
 			yamlCmd,
 			function(data,status){
 				alert("Result: " + status + "\nData: " + data);
@@ -278,7 +280,7 @@
 		
 			$.ajaxSetup({headers:{'Accept':'application/yaml','Content-Type':'application/yaml'}});  //ALF
 			var jqxhr = $.ajax({
-				url: mano_http +"/"+ mano_tenant +"/"+what+"s/" + selected_item.uuid,
+				url: mano_url_base + mano_tenant +"/"+what+"s/" + selected_item.uuid,
 				type: 'DELETE',
 				success: function(data,status) {
 					alert("Status: " + status +"\nData: " + data + "\n");
@@ -313,7 +315,7 @@
 	})
 	$("#updateButton").click(function(e){ 
 		$.ajaxSetup({headers:{'Accept':'application/yaml','Content-Type':'application/yaml'}});  //ALF
-		var jqxhr=$.get(mano_http +"/"+ mano_tenant +"/instances/" + selected_item.uuid,
+		var jqxhr=$.get(mano_url_base + mano_tenant +"/instances/" + selected_item.uuid,
 			function(data,status){
 				//alert("Result: " + status + "\nData: " + data);
 				$("#containerLogicalDrawing").load("scenario_id.php?uuid="+selected_item["uuid"]+"&type=instance");
@@ -384,7 +386,7 @@
 		
 			$.ajaxSetup({headers:{'Accept':'application/yaml','Content-Type':'application/yaml'}});  //ALF
 			var jqxhr = $.ajax({
-				url: mano_http +"/"+ mano_tenant +"/scenarios/" + selected_item.uuid,
+				url: mano_url_base + mano_tenant +"/scenarios/" + selected_item.uuid,
 				type: 'PUT',
 				data: yamlData,
 				success: function(data,status) {
@@ -450,7 +452,7 @@
                 if (name != null) {
 
                         $.ajaxSetup({headers:{'Accept':'application/yaml','Content-Type':'application/yaml'}});  //ALF
-                        var jqxhr=$.post(mano_http +"/"+ mano_tenant +"/scenarios/" + selected_item.uuid + "/action",
+                        var jqxhr=$.post(mano_url_base + mano_tenant +"/scenarios/" + selected_item.uuid + "/action",
                                 start_reserve + ": \n  instance_name: " + name + "\n",
                                 function(data,status){
                                         alert("Result: " + status + "\nData: " + data);

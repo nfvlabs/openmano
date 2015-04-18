@@ -37,6 +37,7 @@
 --> 
 <script src="js/contextmenu.js"></script>
 <script src="js/js-yaml.js"></script>
+<script src="js/jstree.min.js"></script>
 
 <title>Scenario details</title>
 </head>

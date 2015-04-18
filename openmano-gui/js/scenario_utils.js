@@ -382,8 +382,8 @@
 			}
 			yamlTopologyObj["nodes"][nodename]={};
 			yamlTopologyObj["nodes"][nodename]['graph']={};
-	        yamlTopologyObj["nodes"][nodename]['graph']["x"]=parseInt(instances_vnfs[v].css('left').split("px")[0],10); 
-	        yamlTopologyObj["nodes"][nodename]['graph']["y"]=parseInt(instances_vnfs[v].css('top').split("px")[0],10); 
+			yamlTopologyObj["nodes"][nodename]['graph']["x"]=parseInt(instances_vnfs[v].css('left').split("px")[0],10); 
+			yamlTopologyObj["nodes"][nodename]['graph']["y"]=parseInt(instances_vnfs[v].css('top').split("px")[0],10); 
 			yamlTopologyObj["nodes"][nodename]['graph']["ifaces"]={};
 			if (instances_vnfs[v]["left_ifaces"].length > 0){
 				yamlTopologyObj["nodes"][nodename]['graph']["ifaces"]["left"] = [].concat( instances_vnfs[v]["left_ifaces"] );

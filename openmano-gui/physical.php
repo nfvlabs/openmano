@@ -23,7 +23,7 @@
 ##
 
     # Author: Alfonso Tierno, Gerardo Garcia
-    # Version: 0.51
+    # Version: 0.52
     # Date: Feb 2015
 -->
 
@@ -59,7 +59,9 @@
 				getConfig();
 				getHosts();
 				echo "<script>\n";
-				echo "    mano_http='{$mano_http}';\n    mano_tenant='{$mano_tenant}';\n";
+				echo "    mano_url_base='http://" . ($mano_domain!=null? "{$mano_domain}" : "'+window.location.host+'"). ":{$mano_port}{$mano_path}';\n";
+				#echo "    mano_url_base='http://" . ($mano_domain!=null? "{$mano_domain}" : $_SERVER['HTTP_HOST']). ":{$mano_port}{$mano_path}';\n";
+				echo "    mano_tenant='{$mano_tenant}';\n";
 				echo "</script>\n";
 				?>
 			</div>
