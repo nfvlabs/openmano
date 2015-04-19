@@ -39,7 +39,7 @@ function getConfig(){
 #openmano norhbound URL: http://domain:port/path
 	$mano_domain='';	#leave empty when web server and openmano run in same host ...
 				#so that web domain is used for northbound openmano. 
-				#In other case use the 'http_host' of openmanod.cfg
+				#In other case set the server ip address/name where openmano is running
 
 	$mano_port='9090';	#http_port of openmanod.cfg
 	$mano_path='openmano';	#openmano uses always 'openmano', so do not change

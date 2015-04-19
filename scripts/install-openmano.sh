@@ -29,7 +29,6 @@
 
 function usage(){
     echo  -e "usage: sudo $0 [db-user [db-passwd]]\n  Install source code in ./openmano"
-    exit 1
 }
 
 function install_packets(){
@@ -51,8 +50,9 @@ function install_packets(){
 }
 
 #check root privileges and non a root user behind
-[ "$USER" != "root" ] && echo "Needed root privileges" && usage
-[ -z "$SUDO_USER" -o "$SUDO_USER" = "root" ] && echo "Must be runned with sudo from a non root user" && usage
+[ "$1" == "-h" -o "$1" == "--help" ] && usage && exit 0
+[ "$USER" != "root" ] && echo "Needed root privileges" >&2 && usage >&2 && exit -1
+[ -z "$SUDO_USER" -o "$SUDO_USER" = "root" ] && echo "Must be runned with sudo from a non root user"  >&2 && usage >&2 && exit -1
 
 
 #Discover Linux distribution
