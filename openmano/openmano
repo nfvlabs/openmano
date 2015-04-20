@@ -313,7 +313,7 @@ def scenario_list(args):
             if args.verbose:
                 print yaml.safe_dump(content, indent=4, default_flow_style=False)
                 return
-            scenario = content
+            scenario = content['scenario']
             myoutput = "%s %s %s" %(scenario['uuid'].ljust(38),scenario['name'].ljust(20), scenario['created_at'].ljust(20))
             print myoutput
             print "  Description: %s" %scenario['description']
@@ -323,8 +323,10 @@ def scenario_list(args):
             if len(scenario['nets'])>0:
                 print "    Internal nets:"
                 for net in scenario['nets']:
+                    if net['description'] is None:   #if description does not exist, description is "-". Valid for external and internal nets.
+                        net['description'] = '-' 
                     if not net['external']:
-                        print "        %s %s %s" %(net['name'].ljust(20), net['uuid'].ljust(38), net['description'])
+                        print "        %s %s %s" %(net['name'].ljust(20), net['uuid'].ljust(38), net['description'].ljust(30))
                 print "    External nets:"
                 for net in scenario['nets']:
                     if net['external']:
