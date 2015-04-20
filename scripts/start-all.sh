@@ -25,6 +25,8 @@
 
 DIRNAME=`dirname $0`
 
+echo "Deprecated, use '$DIRNAME/openmano-service.sh start'"
+
 $DIRNAME/start-openflow.sh
 sleep 10
 $DIRNAME/start-openvim.sh

@@ -21,6 +21,7 @@
 # contact with: nfvlabs@tid.es
 ##
 
+#ONLY TESTED for Ubuntu. 
 #Get needed packets, source code and configure to run openvim, openmano and floodlight
 #Ask for database user and password if not provided
 #        $1: database user
@@ -31,19 +32,34 @@ function usage(){
     exit 1
 }
 
+function install_packets(){
+    [ -x /usr/bin/apt-get ] && apt-get install -y $*
+    [ -x /usr/bin/yum ]     && yum install -y $*   #TODO revise for redhat type distributions "yum list instal"???
+    
+    #check properly installed
+    for PACKET in $*
+    do
+        PACKET_INSTALLED="no"
+        [ -x /usr/bin/apt-get ] && dpkg -l $PACKET          &>> /dev/null && PACKET_INSTALLED="yes"
+        [ -x /usr/bin/yum ]     && yum list install $PACKET &>> /dev/null && PACKET_INSTALLED="yes" #TODO revise "yum list instal" do what expected
+        if [ "$PACKET_INSTALLED" = "no" ]
+        then
+            echo "failed to install packet '$PACKET'. Revise network connectivity and try again"
+            exit -1
+       fi
+    done
+}
+
 #check root privileges and non a root user behind
 [ "$USER" != "root" ] && echo "Needed root privileges" && usage
 [ -z "$SUDO_USER" -o "$SUDO_USER" = "root" ] && echo "Must be runned with sudo from a non root user" && usage
-
-
-
 
 echo '
 #################################################################
 #####        INSTALL LAMP   PACKETS                         #####
 #################################################################'
 apt-get update -y
-apt-get install -y apache2 mysql-server php5 php-pear php5-mysql
+install_packets "apache2 mysql-server php5 php-pear php5-mysql"
 
 #check and ask for database user password. Must be done after MYSQL instalation
 [ -n "$1" ] && DBUSER=$1
@@ -64,9 +80,8 @@ echo '
 #####        INSTALL PYTHON PACKETS                         #####
 #################################################################'
 apt-get update -y
-apt-get install -y apache2 mysql-server php5 php-pear php5-mysql
-apt-get install -y python-yaml python-libvirt python-bottle python-mysqldb python-jsonschema python-paramiko python-bs4 python-argcomplete git screen
-
+install_packets "apache2 mysql-server php5 php-pear php5-mysql"
+install_packets "python-yaml python-libvirt python-bottle python-mysqldb python-jsonschema python-paramiko python-bs4 python-argcomplete git screen"
 
 echo '
 #################################################################
@@ -108,7 +123,7 @@ then
     su $SUDO_USER -c 'tar xvzf floodlight-source-0.90.tar.gz'
     
     #Install Java JDK and Ant packages at the VM 
-    apt-get install  -y build-essential default-jdk ant python-dev
+    install_packets "build-essential default-jdk ant python-dev"
 
     #Configure Java environment variables. It is seem that is not needed!!!
     #export JAVA_HOME=/usr/lib/jvm/default-java" >> /home/${SUDO_USER}/.bashr
@@ -165,9 +180,7 @@ fi
 
 echo
 echo "Done!  you may need to logout and login again for loading the configuration"
-echo " Run './openmano/scripts/start-all.sh' for starting ${OPENFLOW_INSTALED}openvim and openmano in a screen"
-
-
+echo " Run './openmano/scripts/service-openmano.sh start' for starting ${OPENFLOW_INSTALED}openvim and openmano in a screen"
 
 
 

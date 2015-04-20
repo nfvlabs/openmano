@@ -25,6 +25,8 @@
 
 DIRNAME=`dirname $0`
 
+echo "Deprecated, use '$DIRNAME/openmano-service.sh start openmano'"
+
 screen -dmS mano  bash
 sleep 1
 screen -S mano -p 0 -X stuff "cd ${DIRNAME}/../openmano\n"
