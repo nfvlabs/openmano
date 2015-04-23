@@ -21,8 +21,8 @@
 # contact with: nfvlabs@tid.es
 ##
 
-# v0.4: 2015 April 
-# Author: Antonio Lopez, Pablo Montes, Alfonso Tierno
+# v0.4: 2015 April 23rd 
+# Authors: Antonio Lopez, Pablo Montes, Alfonso Tierno
 
 # Personalize RHEL7.1 on compute nodes
 # Prepared to work with the following network card drivers:
