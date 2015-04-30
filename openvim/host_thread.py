@@ -976,6 +976,7 @@ class host_thread(threading.Thread):
             elif 'resume' in req['action'] and req['status']!='ERROR' and req['status']!='INACTIVE' :     new_status = 'ACTIVE'
             elif 'pause' in req['action']  and req['status']!='ERROR':      new_status = 'PAUSED'
             elif 'reboot' in req['action'] and req['status']!='ERROR':     new_status = 'ACTIVE'
+            elif 'rebuild' in req['action']:     new_status = 'ACTIVE'
             elif 'createImage' in req['action']:     pass
         else:
             try:

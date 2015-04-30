@@ -109,7 +109,8 @@
 	$('#containerCommands').append('<input id="editButton"   type="button" class="actionButton scenarioEdit" value="Save" title="Saves changes of current scenario">').button();
 	$('#containerCommands').append('<input id="deployButton" type="button" class="actionButton scenarioEdit" value="Deploy" title="Launches a new instance of the scenario">').button();
 	$('#containerCommands').append('<input id="reserveButton" type="button" class="actionButton scenarioEdit" value="Reserve" title="Launches a new instance of the scenario without starting virtual machines">').button();
-	$('#containerCommands').append('<input id="downloadButton" type="button" class="actionButton scenarioEdit" value="Download" title="Download the selected scenario">').button();
+/*	$('#containerCommands').append('<input id="downloadButton" type="button" class="actionButton scenarioEdit" value="Download" title="Download the selected scenario">').button();
+*/
 	$('#containerCommands').append('<input id="deleteButton" type="button" class="actionButton scenarioEdit" value="Delete" title="Deletes the scenario">').button();
 	$('#containerCommands').append('<input id="cloneButton"  type="button" class="actionButton scenarioEdit" value="Clone" title="Creates a new scenario based on current one">').button();
 	$('#containerCommands').append('<input id="textButton"  type="button" class="actionButton scenarioEdit" value="See as text" title="Show the scenario definiton text template">').button();

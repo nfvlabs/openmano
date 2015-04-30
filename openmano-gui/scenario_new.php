@@ -189,10 +189,10 @@ jsPlumb.ready(function() {
 			{start:function(key1){
 				return function(){
 					vnf_id_selected=key1;
-					if (active_vnf!=""){
+					if (active_vnf in instances_vnfs){
 						instances_vnfs[active_vnf].css({'background-color':'ivory'});
-						active_vnf="";
 					} 
+					active_vnf="";
 				}}(key)
  			}
 		);
@@ -209,7 +209,7 @@ jsPlumb.ready(function() {
 			var objifcs=null;
 			for (var v in instances_vnfs) {
 				if (instances_vnfs[v][0].id == active_vnf ){
-					var objifcs=instances_vnfs[v].ifaces; 
+					objifcs=instances_vnfs[v].ifaces; 
 					break;
 				}
 			} 
@@ -220,7 +220,7 @@ jsPlumb.ready(function() {
 			for(var j in objifcs){
 				jsPlumb.deleteEndpoint(objifcs[j]);
 			}
-			// desconectar las conexiones y borrar el objeto
+			// remove all conections and object
 			jsPlumb.detachAllConnections($(instances_vnfs[v]));
 			$(instances_vnfs[v]).remove();
 			delete instances_vnfs[v] ;//e.stopPropagation(); 
@@ -230,7 +230,7 @@ jsPlumb.ready(function() {
 	
 	$('#containerLogicalDrawing').mousedown(function(e){// Remove focus from object when clicking on canvas
 		var tgt=$(e.target);
-		if (active_vnf!=""){
+		if (active_vnf in instances_vnfs){
 			instances_vnfs[active_vnf].css({'background-color':'ivory'});
 		} 
 		active_vnf="";
@@ -241,7 +241,8 @@ jsPlumb.ready(function() {
 			active_vnf=tgt.parent().attr('id');
 		};// ensure active_vnf is new_instance_vnf, not a childnode
 		if(active_vnf!=""){
-			instances_vnfs[active_vnf].css({'background-color':'Wheat'});
+			if (active_vnf in instances_vnfs)
+				instances_vnfs[active_vnf].css({'background-color':'Wheat'});
 		};
 	});
 	
