@@ -22,11 +22,11 @@
 ##
 
 
-MUSER="$1"
-MPASS="$2"
-MDB="$3"
-HOST=localhost
-PORT=3306
+DBUSER="vim"
+DBPASS=""
+DBHOST="localhost"
+DBPORT="3306"
+DBNAME="vim_db"
  
 # Detect paths
 MYSQL=$(which mysql)
@@ -34,26 +34,86 @@ AWK=$(which awk)
 GREP=$(which grep)
 DIRNAME=`dirname $0`
  
-if [ $# -lt 3 ]
-then
-        echo "Usage: $0 {MySQL-User-Name} {MySQL-User-Password} {MySQL-Database-Name}"
-        echo "Dump DB"
-        exit 1
-fi
-if [ $# -ge 4 ]
-then
-        HOST=$4
-elif [ $# -ge 5 ]
-then
-        PORT=$5
-fi
+function usage(){
+    echo -e "Usage: $0 OPTIONS"
+    echo -e "Dump openvim database content"
+    echo -e "  OPTIONS"
+    echo -e "     -u USER  database user (it tries '$DBUSER' by default, asks if fail)"
+    echo -e "     -p PASS  database password. Asks if fail"
+    echo -e "     -P PORT  database port ($DBPORT by default)"
+    echo -e "     -h HOST  database host ($DBHOST by default)"
+    echo -e "     -d NAME  database name (it tries '$DBNAME' by default, asks if fail)"
+    echo -e "     --help   show this help"
+}
+
+while getopts ":u:p:P:h:-:" o; do
+    case "${o}" in
+        u)
+            DBUSER="$OPTARG"
+            ;;
+        p)
+            DBPASS="$OPTARG"
+            ;;
+        P)
+            DBPORT="$OPTARG"
+            ;;
+        d)
+            DBNAME="$OPTARG"
+            ;;
+        h)
+            DBHOST="$OPTARG"
+            ;;
+        -)
+            [ "${OPTARG}" == "help" ] && usage && exit 0
+            echo "Invalid option: --$OPTARG" >&2 && usage  >&2
+            exit 1
+            ;;
+        \?)
+            echo "Invalid option: -$OPTARG" >&2 && usage  >&2
+            exit 1
+            ;;
+        :)
+            echo "Option -$OPTARG requires an argument." >&2 && usage  >&2
+            exit 1
+            ;;
+        *)
+            usage >&2
+            exit -1
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+#check and ask for database user password
+DBUSER_="-u$DBUSER"
+DBPASS_=""
+[ -n "$DBPASS" ] && DBPASS_="-p$DBPASS"
+DBHOST_="-h$DBHOST"
+DBPORT_="-P$DBPORT"
+while !  echo ";" | mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ $DBNAME >/dev/null
+do
+        [ -n "$logintry" ] &&  echo -e "\nInvalid database credentials!!!. Try again (Ctrl+c to abort)"
+        [ -z "$logintry" ] &&  echo -e "\nProvide database name and credentials"
+        read -p "mysql database name($DBNAME): " KK
+        [ -n "$KK" ] && DBNAME="$KK"
+        read -p "mysql user($DBUSER): " KK
+        [ -n "$KK" ] && DBUSER="$KK" && DBUSER_="-u$DBUSER"
+        read -s -p "mysql password: " DBPASS
+        [ -n "$DBPASS" ] && DBPASS_="-p$DBPASS"
+        [ -z "$DBPASS" ] && DBPASS_=""
+        logintry="yes"
+        echo
+done
+
  
 #mysqldump -h $HOST -P $PORT -u $MUSER -p$MPASS --no-data $MDB > "$MDB"_structure.sql
-mysqldump -h $HOST -P $PORT -u $MUSER -p$MPASS --no-data --add-drop-table --add-drop-database --routines --databases $MDB > ${DIRNAME}/${MDB}_structure.sql
-echo "    ${DIRNAME}/${MDB}_structure.sql"
+mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --no-data --add-drop-table --add-drop-database --routines --databases $DBNAME > ${DIRNAME}/${DBNAME}_structure.sql
+echo -e "\n\n\n\n" >> ${DIRNAME}/${DBNAME}_structure.sql
+mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --no-create-info $DBNAME --tables schema_version 2>/dev/null  >> ${DIRNAME}/${DBNAME}_structure.sql
+echo "    ${DIRNAME}/${DBNAME}_structure.sql"
 
-mysqldump -h $HOST -P $PORT -u $MUSER -p$MPASS --no-create-info $MDB > ${DIRNAME}/${MDB}_data.sql
-echo "    ${DIRNAME}/${MDB}_data.sql"
+mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --no-create-info $DBNAME > ${DIRNAME}/${DBNAME}_data.sql
+echo "    ${DIRNAME}/${DBNAME}_data.sql"
 
-mysqldump -h $HOST -P $PORT -u $MUSER -p$MPASS --add-drop-table --add-drop-database --routines --databases $MDB > ${DIRNAME}/${MDB}_all.sql
-echo "    ${DIRNAME}/${MDB}_all.sql"
+mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --add-drop-table --add-drop-database --routines --databases $DBNAME > ${DIRNAME}/${DBNAME}_all.sql
+echo "    ${DIRNAME}/${DBNAME}_all.sql"

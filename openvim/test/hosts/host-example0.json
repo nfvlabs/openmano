@@ -1,16 +1,16 @@
 {
     "host":{
-        "name": "fakehost0",
+        "name": "fake-host-0",
         "user": "user", 
         "password": "password", 
-        "ip_name": "nfv100.hi.inet" 
+        "ip_name": "fakehost0" 
     },
 "host-data":
 {
-    "name": "fakehost0",
+    "name": "fake-host-0",
     "ranking": 300,
-    "description": "host-nfv100",
-    "ip_name": "nfv100.hi.inet",
+    "description": "fake host 0 for test mode",
+    "ip_name": "fakehost0",
     "features": "lps,dioc,hwsv,ht,64b,tlbps",
     "user": "user",
     "password": "password",

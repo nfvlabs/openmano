@@ -41,7 +41,7 @@ xml_text_schema={"type" : "string", "minLength":1, "maxLength":1000, "pattern" :
 description_schema={"type" : ["string","null"], "maxLength":200, "pattern" : "^[^'\"]+$"}
 id_schema_fake = {"type" : "string", "minLength":2, "maxLength":36 }  #"pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$"
 id_schema = {"type" : "string", "pattern": "^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$"}
-pci_schema={"type":"string", "pattern":"^[0-9a-fA-F]{4}(:[0-9a-fA-F]{2}){2}.[0-9a-fA-F]$"}
+pci_schema={"type":"string", "pattern":"^[0-9a-fA-F]{4}(:[0-9a-fA-F]{2}){2}\.[0-9a-fA-F]$"}
 bandwidth_schema={"type":"string", "pattern" : "^[0-9]+ *([MG]bps)?$"}
 integer0_schema={"type":"integer","minimum":0}
 integer1_schema={"type":"integer","minimum":1}
@@ -211,7 +211,7 @@ host_data_schema={
     "type":"object", 
     "properties":{                  
         "ip_name":nameshort_schema,
-        "name": nameshort_schema,
+        "name": name_schema,
         "description":description_schema,
         "user":nameshort_schema,
         "password":nameshort_schema,
@@ -302,7 +302,7 @@ host_edit_schema={
             "type":"object",
             "properties":{
                 "ip_name":nameshort_schema,
-                "name": nameshort_schema,
+                "name": name_schema,
                 "description":description_schema,
                 "user":nameshort_schema,
                 "password":nameshort_schema,
@@ -339,7 +339,7 @@ host_new_schema = {
             "properties":{
                 "id":id_schema,
                 "ip_name":nameshort_schema,
-                "name": nameshort_schema,
+                "name": name_schema,
                 "description":description_schema,
                 "user":nameshort_schema,
                 "password":nameshort_schema,

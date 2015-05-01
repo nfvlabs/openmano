@@ -764,7 +764,7 @@ def element_list(args):
             verbose += args.verbose
         for item in item_list:
             extra=""
-            if args.element=="servers": extra = "   "+item['status']
+            if args.element=="servers" or args.element=="networks": extra = "   "+item['status']
             if args.element in ("hosts","networks","ports") and not item['admin_state_up']: extra = "   admin_status_up=false"
             print item['id']+"   "+item['name'] + extra
             if verbose>0:
