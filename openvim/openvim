@@ -765,7 +765,7 @@ def element_list(args):
         for item in item_list:
             extra=""
             if args.element=="servers": extra = "   "+item['status']
-            if args.element in ("hosts","networks","ports") and not item['admin_state_up']: extra = "   admin_state_up=false"
+            if args.element in ("hosts","networks","ports") and not item['admin_state_up']: extra = "   admin_status_up=false"
             print item['id']+"   "+item['name'] + extra
             if verbose>0:
                 r2,c2 = vim_read(url + "/"+ item['id'])
@@ -880,13 +880,13 @@ if __name__=="__main__":
             port_action_detach_parser.set_defaults(func=element_action_edit, element="ports", action="dettach")
 
         if item=='net' or item=='host':
-            nethost_action_up_parser = subparsers.add_parser(item+"-up", help="puts admin_state_up of "+item_dict[item][:-1]+" to true")
+            nethost_action_up_parser = subparsers.add_parser(item+"-up", help="puts admin_status_up of "+item_dict[item][:-1]+" to true")
             nethost_action_up_parser.add_argument("name", help="name or ID of the "+item_dict[item][:-1]+", 'ALL' for all")
             nethost_action_up_parser.add_argument("-F","--filter", action="store", help="filter query string")
             nethost_action_up_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
             nethost_action_up_parser.set_defaults(func=element_action_edit, element=item_dict[item], action="up")
         
-            nethost_action_down_parser = subparsers.add_parser(item+"-down", help="puts admin_state_up of "+item_dict[item][:-1]+" to false")
+            nethost_action_down_parser = subparsers.add_parser(item+"-down", help="puts admin_status_up of "+item_dict[item][:-1]+" to false")
             nethost_action_down_parser.add_argument("name", help="name or ID of the "+item_dict[item][:-1]+", 'ALL' for all")
             nethost_action_down_parser.add_argument("-F","--filter", action="store", help="filter query string")
             nethost_action_down_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")

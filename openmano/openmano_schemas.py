@@ -227,7 +227,7 @@ image_schema = {
     "type":"object",
     "properties":{
         "id":id_schema,
-        "name": name_schema,
+        "name": nameshort_schema,
     },
     "required": ["id","name"]
 }
