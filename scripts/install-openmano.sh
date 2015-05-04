@@ -21,7 +21,7 @@
 # contact with: nfvlabs@tid.es
 ##
 
-#ONLY TESTED for Ubuntu. 
+#ONLY TESTED for Ubuntu 14.10 14.04  and  CentOS7
 #Get needed packets, source code and configure to run openvim, openmano and floodlight
 #Ask for database user and password if not provided
 #        $1: database user
@@ -29,19 +29,18 @@
 
 function usage(){
     echo  -e "usage: sudo $0 [db-user [db-passwd]]\n  Install source code in ./openmano"
-    exit 1
 }
 
 function install_packets(){
     [ -x /usr/bin/apt-get ] && apt-get install -y $*
-    [ -x /usr/bin/yum ]     && yum install -y $*   #TODO revise for redhat type distributions "yum list instal"???
+    [ -x /usr/bin/yum ]     && yum install -y $*   
     
     #check properly installed
     for PACKET in $*
     do
         PACKET_INSTALLED="no"
-        [ -x /usr/bin/apt-get ] && dpkg -l $PACKET          &>> /dev/null && PACKET_INSTALLED="yes"
-        [ -x /usr/bin/yum ]     && yum list install $PACKET &>> /dev/null && PACKET_INSTALLED="yes" #TODO revise "yum list instal" do what expected
+        [ -x /usr/bin/apt-get ] && dpkg -l $PACKET            &>> /dev/null && PACKET_INSTALLED="yes"
+        [ -x /usr/bin/yum ]     && yum list installed $PACKET &>> /dev/null && PACKET_INSTALLED="yes" 
         if [ "$PACKET_INSTALLED" = "no" ]
         then
             echo "failed to install packet '$PACKET'. Revise network connectivity and try again"
@@ -51,27 +50,92 @@ function install_packets(){
 }
 
 #check root privileges and non a root user behind
-[ "$USER" != "root" ] && echo "Needed root privileges" && usage
-[ -z "$SUDO_USER" -o "$SUDO_USER" = "root" ] && echo "Must be runned with sudo from a non root user" && usage
+[ "$1" == "-h" -o "$1" == "--help" ] && usage && exit 0
+[ "$USER" != "root" ] && echo "Needed root privileges" >&2 && usage >&2 && exit -1
+[ -z "$SUDO_USER" -o "$SUDO_USER" = "root" ] && echo "Must be runned with sudo from a non root user"  >&2 && usage >&2 && exit -1
+
+
+#Discover Linux distribution
+#try redhat type
+[ -f   /etc/redhat-release ] && _DISTRO=$(cat /etc/redhat-release 2>/dev/null | cut  -d" " -f1) 
+#try ubuntu type
+[ ! -f /etc/redhat-release ] && _DISTRO=$(lsb_release -is  2>/dev/null)            
+if [ "$_DISTRO" == "Ubuntu" ]
+then
+    _RELEASE="14"
+    if ! lsb_release -rs | grep -q "14."
+    then 
+        read -p "WARNING! Not tested Ubuntu version. Continue assuming a '$_RELEASE' type? (y/N)" KK
+        [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Canceled" && exit 0
+    fi
+elif [ "$_DISTRO" == "CentOS" ]
+then
+    _RELEASE="7" 
+    if ! cat /etc/redhat-release | grep -q "7."
+    then
+        read -p "WARNING! Not tested CentOS version. Continue assuming a '_RELEASE' type? (y/N)" KK
+        [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Canceled" && exit 0
+    fi
+else  #[ "$_DISTRO" != "Ubuntu" -a "$_DISTRO" != "CentOS" ] 
+    _DISTRO_DISCOVER=$_DISTRO
+    [ -x /usr/bin/apt-get ] && _DISTRO="Ubuntu" && _RELEASE="14"
+    [ -x /usr/bin/yum ]     && _DISTRO="CentOS" && _RELEASE="7"
+    read -p "WARNING! Not tested Linux distribution '$_DISTRO_DISCOVER '. Continue assuming a '$_DISTRO $_RELEASE' type? (y/N)" KK
+    [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Canceled" && exit 0
+fi
+
+
+
+echo '
+#################################################################
+#####        UPDATE REPOSITORIES                            #####
+#################################################################'
+[ "$_DISTRO" == "Ubuntu" ] && apt-get update -y
+
+[ "$_DISTRO" == "CentOS" ] && yum check-update -y
+[ "$_DISTRO" == "CentOS" ] && sudo yum install -y epel-release
+[ "$_DISTRO" == "CentOS" ] && sudo yum repolist
+
 
 echo '
 #################################################################
 #####        INSTALL LAMP   PACKETS                         #####
 #################################################################'
-apt-get update -y
-install_packets "apache2 mysql-server php5 php-pear php5-mysql"
+[ "$_DISTRO" == "Ubuntu" ] && install_packets "apache2 mysql-server           php5 php-pear php5-mysql" #TODO revise if php-pear is needed
+[ "$_DISTRO" == "CentOS" ] && install_packets "httpd   mariadb mariadb-server php           php-mysql"
 
-#check and ask for database user password. Must be done after MYSQL instalation
+if [ "$_DISTRO" == "CentOS" ]
+then
+    #start sercices. By default CentOS does not start services
+    service mariadb start
+    service httpd   start
+    systemctl enable mariadb
+    systemctl enable httpd
+    read -p "Do you want to configure mariadb (recomended if not done before) (Y/n)" KK
+    [ "$KK" != "n" -a  "$KK" != "no" ] && mysql_secure_installation
+
+    read -p "Do you want to set firewall to grant web access port 80,443  (Y/n)" KK
+    [ "$KK" != "n" -a  "$KK" != "no" ] && 
+        firewall-cmd --permanent --zone=public --add-service=http &&
+        firewall-cmd --permanent --zone=public --add-service=https &&
+        firewall-cmd --reload
+fi
+
+#check and ask for database user password. Must be done after database instalation
 [ -n "$1" ] && DBUSER=$1
 [ -z "$1" ] && DBUSER=root
-[ -n "$2" ] && DBPASSWD=$2
-while [ -z "$DBPASSWD" ] || !  echo "" | mysql -u$DBUSER -p"$DBPASSWD" 
+[ -n "$2" ] && DBPASSWD="-p$2"
+[ -z "$2" ] && DBPASSWD=""
+echo -e "\nCheking database connection and ask for credentials"
+while !  echo "" | mysql -u$DBUSER $DBPASSWD
 do
         [ -n "$logintry" ] &&  echo -e "\nInvalid database credentials!!!. Try again (Ctrl+c to abort)"
         [ -z "$logintry" ] &&  echo -e "\nProvide database credentials"
-        read -p "mysql user($DBUSER): " DBUSER_
+        read -p "database user? ($DBUSER) " DBUSER_
         [ -n "$DBUSER_" ] && DBUSER=$DBUSER_
-        read -p "mysql password: " DBPASSWD
+        read -s -p "database password? (Enter for not using password) " DBPASSWD_
+        [ -n "$DBPASSWD_" ] && DBPASSWD="-p$DBPASSWD_"
+        [ -z "$DBPASSWD_" ] && DBPASSWD=""
         logintry="yes"
 done
 
@@ -79,9 +143,12 @@ echo '
 #################################################################
 #####        INSTALL PYTHON PACKETS                         #####
 #################################################################'
-apt-get update -y
-install_packets "apache2 mysql-server php5 php-pear php5-mysql"
-install_packets "python-yaml python-libvirt python-bottle python-mysqldb python-jsonschema python-paramiko python-bs4 python-argcomplete git screen"
+[ "$_DISTRO" == "Ubuntu" ] && install_packets "python-yaml python-libvirt python-bottle python-mysqldb python-jsonschema python-paramiko python-argcomplete python-requests git screen wget"
+[ "$_DISTRO" == "CentOS" ] && install_packets "PyYAML      libvirt-python               MySQL-python   python-jsonschema python-paramiko python-argcomplete python-requests git screen wget"
+
+#The only way to install python-bottle on Centos7 is with easy_install or pip
+[ "$_DISTRO" == "CentOS" ] && easy_install -U bottle
+
 
 echo '
 #################################################################
@@ -93,13 +160,13 @@ echo '
 #################################################################
 #####        CREATE DATABASE                                #####
 #################################################################'
-mysqladmin -u$DBUSER -p$DBPASSWD create vim_db
-mysqladmin -u$DBUSER -p$DBPASSWD create mano_db
+mysqladmin -u$DBUSER $DBPASSWD create vim_db
+mysqladmin -u$DBUSER $DBPASSWD create mano_db
 
-echo "CREATE USER 'vim'@'localhost' identified by 'vimpw';"     | mysql -u$DBUSER -p$DBPASSWD
-echo "GRANT ALL PRIVILEGES ON vim_db.* TO 'vim'@'localhost';"   | mysql -u$DBUSER -p$DBPASSWD
-echo "CREATE USER 'mano'@'localhost' identified by 'manopw';"   | mysql -u$DBUSER -p$DBPASSWD
-echo "GRANT ALL PRIVILEGES ON mano_db.* TO 'mano'@'localhost';" | mysql -u$DBUSER -p$DBPASSWD
+echo "CREATE USER 'vim'@'localhost' identified by 'vimpw';"     | mysql -u$DBUSER $DBPASSWD
+echo "GRANT ALL PRIVILEGES ON vim_db.* TO 'vim'@'localhost';"   | mysql -u$DBUSER $DBPASSWD
+echo "CREATE USER 'mano'@'localhost' identified by 'manopw';"   | mysql -u$DBUSER $DBPASSWD
+echo "GRANT ALL PRIVILEGES ON mano_db.* TO 'mano'@'localhost';" | mysql -u$DBUSER $DBPASSWD
 
 echo "vim database"
 su $SUDO_USER -c './openmano/openvim/database_utils/init_vim_db.sh vim vimpw vim_db'
@@ -114,7 +181,6 @@ echo '
 #FLoodLight
 echo "Installing FloodLight requires Java, that takes a while to download"
 read -p "Do you agree on download and install FloodLight from http://www.projectfloodlight.org upon the owner license? (y/N)" KK
-echo $KK
 if [ "$KK" == "y" -o   "$KK" == "yes" ]
 then
 
@@ -123,7 +189,8 @@ then
     su $SUDO_USER -c 'tar xvzf floodlight-source-0.90.tar.gz'
     
     #Install Java JDK and Ant packages at the VM 
-    install_packets "build-essential default-jdk ant python-dev"
+    [ "$_DISTRO" == "Ubuntu" ] && install_packets "build-essential default-jdk ant python-dev" #TODO revise if packets are needed apart from ant
+    [ "$_DISTRO" == "CentOS" ] && install_packets "                            ant "
 
     #Configure Java environment variables. It is seem that is not needed!!!
     #export JAVA_HOME=/usr/lib/jvm/default-java" >> /home/${SUDO_USER}/.bashr
@@ -145,10 +212,25 @@ echo '
 #################################################################
 #####        CONFIGURE OPENMANO-GUI WEB                     #####
 #################################################################'
-#allow apache user (www-data) grant access to the files, changing user owner
-chown -R www-data ./openmano/openmano-gui
-#create a link 
-ln -s ${PWD}/openmano/openmano-gui /var/www/html/mano
+#create a link, also a copy can be an alternative
+ln -s ${PWD}/openmano/openmano-gui /var/www/html/openmano
+
+#allow apache user: apache(centos), or www-data(ubuntu) grant access to the files, changing user owner
+grep -q "^www-data:" /etc/passwd && chown -R www-data ./openmano/openmano-gui
+grep -q "^apache:"   /etc/passwd && chown -R apache   ./openmano/openmano-gui
+
+#ensure parent folders can be access by apache user
+su $SUDO_USER -c 'chmod o+x ./openmano .'
+PARENT_FOLDER=".."
+while su $SUDO_USER -c "chmod o+x $PARENT_FOLDER &>/dev/null"
+do
+  #echo $PARENT_FOLDER
+  PARENT_FOLDER="../$PARENT_FOLDER"
+done
+
+#Allow SELinux security over openmano-gui
+[ "$_DISTRO" == "CentOS" ] && chcon -R --reference=/var/www ${PWD}/openmano/openmano-gui || true
+
 
 echo '
 #################################################################

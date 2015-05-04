@@ -21,25 +21,25 @@
 # contact with: nfvlabs@tid.es
 ##
 
-# v0.3: 2015 March 
-# Author: Antonio Lopez, Pablo Montes, Alfonso Tierno
+# v0.4: 2015 April 23rd 
+# Authors: Antonio Lopez, Pablo Montes, Alfonso Tierno
 
 # Personalize RHEL7.1 on compute nodes
 # Prepared to work with the following network card drivers:
 # tg3 driver for management interfaces
-# i40e or ixgbe for driver for data plane interfaces
+# i40e and ixgbe driver for data plane interfaces
 
 # To download:
-# wget wget https://raw.githubusercontent.com/nfvlabs/openmano/master/scripts/configure-compute-node-RHEL7.1-v0.3.sh
+# wget https://raw.githubusercontent.com/nfvlabs/openmano/master/scripts/configure-compute-node-RHEL7.1.sh
 # To execute:
-# chmod +x ./configure-compute-node-RHEL7.1-v0.3.sh
-# sudo ./configure-compute-node-RHEL7.1-v0.3.sh <user> <iface>
+# chmod +x ./configure-compute-node-RHEL7.1.sh
+# sudo ./configure-compute-node-RHEL7.1.sh <user> <iface>
 
 
 
 function usage(){
     echo -e "Usage: sudo $0 [-y] <user-name>  [ <iface-name>  [<ip-address>|dhcp] ]"
-    echo -e "  Configure compute host for VIM usage. Params:"
+    echo -e "  Configure compute host for VIM usage. (version 0.4). Params:"
     echo -e "     -y  do not prompt for confirmation. If a new user is created, the user name is set as password"
     echo -e "     <user-name> Create if not exist and configure this user for openvim to connect"
     echo -e "     <iface-name> if suplied creates bridge interfaces on this interface, needed for openvim"
@@ -115,7 +115,7 @@ then
 else 
   #create user if it does not exist
   [ -z "$FORCE" ] && read -p "user '${user_name}' does not exist, create (Y/n)" kk
-  if ! [ -z "$kk" -o "$kk"=="y" -o "$kk"=="Y" ]
+  if ! [ -z "$kk" -o "$kk"="y" -o "$kk"="Y" ]
   then
     exit
   fi
@@ -157,7 +157,7 @@ echo '
 
 # Huge pages 1G auto mount
 mkdir -p /mnt/huge
-if ! grep -q "/mnt/huge" /etc/fstab
+if ! grep -q "Huge pages" /etc/fstab
 then
   echo "" >> /etc/fstab
   echo "# Huge pages" >> /etc/fstab
@@ -308,7 +308,8 @@ echo "#if compute node contain a different name it must be indicated in this fil
 echo "#with the format extandard-name: compute-name" >> /opt/VNF/images/hostinfo.yaml
 if [ "$interface" != "" -a "$interface" != "em1" ]
 then
-  echo "em1: ${interface}" >> /opt/VNF/images/hostinfo.yaml
+  echo "iface_names:"  >> /opt/VNF/images/hostinfo.yaml
+  echo "  em1: ${interface}" >> /opt/VNF/images/hostinfo.yaml
 fi
 chmod o+r /opt/VNF/images/hostinfo.yaml
 
@@ -380,6 +381,25 @@ then
 #    fi
 #  done
 
+  #Create infrastructure bridge, normally used for connecting to compute nodes, openflow controller, ...  
+  echo "DEVICE=virbrInf
+TYPE=Bridge
+ONBOOT=yes
+DELAY=0
+NM_CONTROLLED=no
+USERCTL=no" > ifcfg-virbrInf
+
+    #Create VLAN for infrastructure bridge
+    echo "DEVICE=${interface}.1001
+ONBOOT=yes
+NM_CONTROLLED=no
+USERCTL=no
+VLAN=yes
+BOOTPROTO=none
+BRIDGE=virbrInf" > ifcfg-${interface}.1001
+
+
+
   #Create bridge interfaces
   echo "Creating bridge ifaces: "
   for ((i=1;i<=20;i++))
@@ -392,7 +412,7 @@ TYPE=Bridge
 ONBOOT=yes
 DELAY=0
 NM_CONTROLLED=no
-USERCTL=no
+USERCTL=no" > ifcfg-virbrMan$i
 
 #Without IP:
 #BOOTPROTO=static
@@ -422,7 +442,7 @@ TYPE=Ethernet
 ONBOOT=yes
 NM_CONTROLLED=no
 IPV6INIT=no" >> $iface.tmp
-    [ $ip_iface == "dhcp" ] && echo -e "BOOTPROTO=dhcp\nDHCP_HOSTNAME=$HOSTNAME" >> $iface.tmp
+    [ $ip_iface = "dhcp" ] && echo -e "BOOTPROTO=dhcp\nDHCP_HOSTNAME=$HOSTNAME" >> $iface.tmp
     [ $ip_iface != "dhcp" ] && echo -e "BOOTPROTO=static\nIPADDR=${ip_iface}\nNETMASK=255.255.255.0" >> $iface.tmp
     mv $iface.tmp  ifcfg-$iface
   fi
@@ -433,7 +453,7 @@ IPV6INIT=no" >> $iface.tmp
     # Intel X520 cards: driver ixgbe
     # Intel XL710 Fortville cards: driver i40e
     driver=`ethtool -i $iface| awk '($0~"driver"){print $2}'`
-    if [ "$driver" == "i40e" -o "$driver" == "ixgbe" ]
+    if [ "$driver" = "i40e" -o "$driver" = "ixgbe" ]
     then
       echo "configuring dataplane iface $iface"
       # Create 8 SR-IOV per PF

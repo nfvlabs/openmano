@@ -27,7 +27,7 @@ DIRNAME=`dirname $0`
 FLD=${DIRNAME}/../../floodlight-0.90
 
 function usage(){
-    echo -e "Usage: $0 [start|stop|restart] [floodlight] [openvim] [openmano]"
+    echo -e "Usage: $0 [floodlight] [openvim] [openmano] start|stop|restart|status"
     echo -e "  Launch|Removes|Restart openmano components (by default all) on a screen"
 }
 
@@ -48,24 +48,27 @@ function kill_pid(){
 
 #obtain parameters
 openmano_list=""
-openmano_action="start"
+#openmano_action="start"  #uncoment to get a default action
 for param in $*
 do
-    [ "$param" == "start" -o "$param" == "stop"  -o "$param" == "restart" ] &&    openmano_action=$param  && continue
+    [ "$param" == "start" -o "$param" == "stop"  -o "$param" == "restart" -o "$param" == "status" ] && openmano_action=$param  && continue
     [ "$param" == "openvim" -o "$param" == "vim"  ]    && openmano_list="$openmano_list vim"              && continue
     [ "$param" == "openmano" -o "$param" == "mano" ]   && openmano_list="$openmano_list mano"             && continue
     [ "$param" == "openflow" -o "$param" == "flow" -o "$param" == "floodlight" ] && openmano_list="flow $openmano_list" && continue
+    [ "$param" == "-h" -o "$param" == "--help" ] && usage && exit 0
     #note flow that it must be the first element, because openvim relay on this
     
     #if none of above, reach this line because a param is incorrect
-    echo "Unknown param '$param'"
-    usage
-    exit
+    echo "Unknown param '$param'" >&2
+    usage >&2
+    exit -1
 done
 
-#if no componenets supply assume all
-[ -z "$openmano_list" ] && openmano_list="flow vim mano"
+#check action is provided
+[ -z "$openmano_action" ] && usage >&2 && exit -1
 
+#if no componenets supplied assume all
+[ -z "$openmano_list" ] && openmano_list="flow vim mano"
  
 for openmano_component in $openmano_list
 do
@@ -75,6 +78,14 @@ do
     #obtain PID of program
     component_id=`ps -o pid,cmd -U $USER -u $USER | grep -v grep | grep ${openmano_cmd} | awk '{print $1}'`
 
+    #status
+    if [ "$openmano_action" == "status" ]
+    then
+        #terminates program
+        [ -n "$component_id" ] && echo "    $openmano_name running, pid $component_id"
+        [ -z "$component_id" ] && echo "    $openmano_name stopped"
+    fi
+
     #stop
     if [ "$openmano_action" == "stop" -o "$openmano_action" == "restart" ]
     then
@@ -82,9 +93,10 @@ do
         [ -n "$component_id" ] && echo -n "    stopping $openmano_name ... " && kill_pid $component_id 
         component_id=""
         #terminates screen
-        if screen -ls | grep -q .$openmano_component
+        if screen -wipe | grep -q .$openmano_component
         then
             screen -S $openmano_component -p 0 -X stuff "exit\n"
+            sleep 1
         fi
     fi
 
@@ -95,7 +107,7 @@ do
         [ -n "$component_id" ] && echo "    $openmano_name is already running. Skipping" && continue
         #create screen if not created
         echo -n "    starting $openmano_name ... "
-        if ! screen -ls | grep -q .${openmano_component}
+        if ! screen -wipe | grep -q .${openmano_component}
         then
             screen -dmS ${openmano_component}  bash
             sleep 1

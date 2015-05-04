@@ -258,7 +258,9 @@ class openflow_thread(threading.Thread):
                         return result, content
             
         #launch to openflow
-        db_of_inserts = self.install_netrules(net_id, ports)
+        result, db_of_inserts = self.install_netrules(net_id, ports)
+        if result < 0:
+            return result, db_of_inserts
         for INSERT in db_of_inserts:
             self.db_lock.acquire()
             result, content = self.db.new_row('of_flows', INSERT)
@@ -327,7 +329,7 @@ class openflow_thread(threading.Thread):
         return 0, None  #vlan was changed
         
     def install_netrules(self, net_id, ports):
-
+        error_text=""
         db_list = []
         nb_rules = len(ports)
 
@@ -337,6 +339,14 @@ class openflow_thread(threading.Thread):
         for pair in pairs:
             if pair[0]['switch_port'] == pair[1]['switch_port']:
                 continue
+            if str(pair[0]['switch_port']) not in self.pp2ofi:
+                error_text= "switch port name '%s' is not valid" % str(pair[0]['switch_port'])
+                print self.name, ": ERROR " + error_text
+                return -1, error_text
+            if str(pair[1]['switch_port']) not in self.pp2ofi:
+                error_text= "switch port name '%s' is not valid" % str(pair[1]['switch_port'])
+                print self.name, ": ERROR " + error_text
+                return -1, error_text
             flow = {
                 'switch':self.dpid,
                 "name": net_id+'_'+str(index),
@@ -411,7 +421,7 @@ class openflow_thread(threading.Thread):
                             'priority':flow['priority'], 'actions':flow['actions'], 'dst_mac': flow.get('dst-mac', None)}
                 db_list.append(INSERT)
             
-        return db_list
+        return 0, db_list
             
 
 

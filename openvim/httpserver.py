@@ -1342,9 +1342,22 @@ def http_post_networks():
         if result<=0:
             bottle.abort(HTTP_Not_Found, 'tenant %s not found or not enabled' % tenant_id)
             return
-
     bridge_net = None
-    if 'type' not in network or network['type']=='bridge_data' or network['type']=='bridge_man':
+    if 'bind' in network and network['bind']!=None:
+        if network['bind'][:7]=='bridge:':
+            #check it is one of the pre-provisioned bridges
+            bridge_net_name = network['bind'][7:]
+            for brnet in config_dic['bridge_nets']:
+                if brnet[0]==bridge_net_name: # free
+                    if brnet[3] != None:
+                        bottle.abort(HTTP_Conflict, "invalid binding at 'provider:physical', bridge '%s' is already used" % bridge_net_name)
+                        return
+                    bridge_net=brnet
+                    break
+            if bridge_net==None:     
+                bottle.abort(HTTP_Bad_Request, "invalid binding at 'provider:physical', bridge '%s' is not one of the provisioned 'bridge_ifaces' in the configuration file" % bridge_net_name)
+                return
+    elif 'type' not in network or network['type']=='bridge_data' or network['type']=='bridge_man':
         #look for a free precreated nets
         for brnet in config_dic['bridge_nets']:
             if brnet[3]==None: # free
@@ -1356,7 +1369,7 @@ def http_post_networks():
                 else:
                     bridge_net = brnet
         if bridge_net==None:
-            bottle.abort(HTTP_Bad_Request, "Max limits of 5 bridge networks reached. Future versions of VIM will overcome this limit")
+            bottle.abort(HTTP_Bad_Request, "Max limits of bridge networks reached. Future versions of VIM will overcome this limit")
             return
         else:
             print "using net", bridge_net

@@ -23,7 +23,7 @@
 ##
 
     Author: Alfonso Tierno
-    Version: 0.51
+    Version: 0.52
     Date: Feb 2015
 -->
 
@@ -112,8 +112,9 @@ var connectorHoverStyle = {lineWidth:5,strokeStyle:'SteelBlue',outlineWidth:1,ou
 //vnfsDefs
 <?php
 	getVnfs_js();
-	global $db_server, $db_user, $db_passwd, $db_name, $mano_http, $mano_tenant;
-	echo "    mano_http='{$mano_http}';\n    mano_tenant='{$mano_tenant}';\n";
+	global $db_server, $db_user, $db_passwd, $db_name, $mano_port, $mano_path, $mano_domain, $mano_tenant;
+	echo "    mano_url_base='http://" . ($mano_domain!=null? "{$mano_domain}" : "'+window.location.host+'"). ":{$mano_port}{$mano_path}';\n";
+	echo "    mano_tenant='{$mano_tenant}';\n";
 	if ($uuid != null){
 		getScenarioId_js($uuid);
 	}else{
@@ -188,10 +189,10 @@ jsPlumb.ready(function() {
 			{start:function(key1){
 				return function(){
 					vnf_id_selected=key1;
-					if (active_vnf!=""){
+					if (active_vnf in instances_vnfs){
 						instances_vnfs[active_vnf].css({'background-color':'ivory'});
-						active_vnf="";
 					} 
+					active_vnf="";
 				}}(key)
  			}
 		);
@@ -208,7 +209,7 @@ jsPlumb.ready(function() {
 			var objifcs=null;
 			for (var v in instances_vnfs) {
 				if (instances_vnfs[v][0].id == active_vnf ){
-					var objifcs=instances_vnfs[v].ifaces; 
+					objifcs=instances_vnfs[v].ifaces; 
 					break;
 				}
 			} 
@@ -219,7 +220,7 @@ jsPlumb.ready(function() {
 			for(var j in objifcs){
 				jsPlumb.deleteEndpoint(objifcs[j]);
 			}
-			// desconectar las conexiones y borrar el objeto
+			// remove all conections and object
 			jsPlumb.detachAllConnections($(instances_vnfs[v]));
 			$(instances_vnfs[v]).remove();
 			delete instances_vnfs[v] ;//e.stopPropagation(); 
@@ -229,7 +230,7 @@ jsPlumb.ready(function() {
 	
 	$('#containerLogicalDrawing').mousedown(function(e){// Remove focus from object when clicking on canvas
 		var tgt=$(e.target);
-		if (active_vnf!=""){
+		if (active_vnf in instances_vnfs){
 			instances_vnfs[active_vnf].css({'background-color':'ivory'});
 		} 
 		active_vnf="";
@@ -240,7 +241,8 @@ jsPlumb.ready(function() {
 			active_vnf=tgt.parent().attr('id');
 		};// ensure active_vnf is new_instance_vnf, not a childnode
 		if(active_vnf!=""){
-			instances_vnfs[active_vnf].css({'background-color':'Wheat'});
+			if (active_vnf in instances_vnfs)
+				instances_vnfs[active_vnf].css({'background-color':'Wheat'});
 		};
 	});
 	
@@ -338,7 +340,7 @@ jsPlumb.ready(function() {
 		}
 	
 		$.ajaxSetup({headers:{'Accept':'application/yaml','Content-Type':'application/yaml'}});  //ALF
-		var jqxhr=$.post(mano_http +"/"+ mano_tenant +"/scenarios",
+		var jqxhr=$.post(mano_url_base + mano_tenant +"/scenarios",
 				yamlData,
 			function(data,status){
 				alert("Result: " + status + "\nData: " + data);

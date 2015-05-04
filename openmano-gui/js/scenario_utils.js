@@ -237,12 +237,15 @@
 					}},
 					{label:'Remove',action: function(e){
 						// find vnf object
+						var objifcs=null;
 						for (var v in instances_vnfs) {
 							if (instances_vnfs[v][0].id == active_vnf ){
-								var objifcs=instances_vnfs[v].ifaces; 
+								objifcs=instances_vnfs[v].ifaces; 
 								break;
 							}
-						} 
+						}
+						if (objifcs==null)
+							return;
 						   
 						// borrar los endpoints correspondientes
 						for(var j in objifcs){
@@ -382,8 +385,8 @@
 			}
 			yamlTopologyObj["nodes"][nodename]={};
 			yamlTopologyObj["nodes"][nodename]['graph']={};
-	        yamlTopologyObj["nodes"][nodename]['graph']["x"]=parseInt(instances_vnfs[v].css('left').split("px")[0],10); 
-	        yamlTopologyObj["nodes"][nodename]['graph']["y"]=parseInt(instances_vnfs[v].css('top').split("px")[0],10); 
+			yamlTopologyObj["nodes"][nodename]['graph']["x"]=parseInt(instances_vnfs[v].css('left').split("px")[0],10); 
+			yamlTopologyObj["nodes"][nodename]['graph']["y"]=parseInt(instances_vnfs[v].css('top').split("px")[0],10); 
 			yamlTopologyObj["nodes"][nodename]['graph']["ifaces"]={};
 			if (instances_vnfs[v]["left_ifaces"].length > 0){
 				yamlTopologyObj["nodes"][nodename]['graph']["ifaces"]["left"] = [].concat( instances_vnfs[v]["left_ifaces"] );

@@ -790,7 +790,9 @@ def element_list(args):
 #                         if data[key]==None: del data[key]
 #                         elif key=='id' or key=='name' or key=='links': del data[key]
                         
-                    print json.dumps(data2, indent=4)
+                    #print json.dumps(data2, indent=4)
+                    data2={args.element[:-1]: data2}
+                    print yaml.safe_dump(data2, indent=4, default_flow_style=False)
     return
 
 if __name__=="__main__":
