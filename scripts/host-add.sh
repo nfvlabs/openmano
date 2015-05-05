@@ -232,8 +232,6 @@ do
   echo "    memory:    $memory"
 
 #CORES
-  #echo $CPUS
-  #exit
   echo "    cores:"
   FIRST="-" #first item in a list start with "-" in yaml files, then it will set to " "
   for cpu in $CPUS
@@ -242,7 +240,6 @@ do
     CORE=`echo $cpu | cut -f 2 -d"-"`
     THREAD=`echo $cpu | cut -f 3 -d"-"`
     [ $PHYSICAL != $numa ] && continue   #skip non physical
-    #echo "    ${FIRST} core_id:   $CORE"
     echo "    - core_id:   $CORE"
     echo "      thread_id: $THREAD"
     #check if eligible
@@ -251,7 +248,6 @@ do
     do
       isolcpu_start=`echo $isolcpu | cut -f 1 -d"-"`
       isolcpu_end=`echo $isolcpu | cut -f 2 -d"-"`
-      #echo isolcpu $isolcpu  isolcpu_start $isolcpu_start isolcpu_end $isolcpu_end
       if [ $THREAD -ge $isolcpu_start -a $THREAD -le $isolcpu_end ]
       then
         cpu_isolated="yes"
@@ -262,45 +258,37 @@ do
     FIRST=" "
   done
  
-#NIC INTERFACES
-echo "    \"interfaces\": ["
-for ((i=0; i<${#PF_list[@]};i++))
-do
-  underscored_pci=${PF_list[$i]}
-  pname=$(get_hash_value $underscored_pci "name")
-  pnuma=$(get_hash_value $underscored_pci "numa")
-  [ $pnuma != $numa ] && continue 
-  pmac=$(get_hash_value $underscored_pci "mac")
-  ppci=$(get_hash_value $underscored_pci "pci")
-  pspeed=$(get_hash_value $underscored_pci "speed")
-  pSRIOV=$(get_hash_value $underscored_pci "SRIOV")
-  echo "      {"
-  echo "        \"source_name\": \"$pname\","
-  echo "        \"Mbps\": $pspeed,"
-  echo "        \"pci\": \"$ppci\","
-  echo "        \"mac\": \"$pmac\","
-  echo "        \"sriovs\": ["
-  for ((j=1;j<=$pSRIOV;j++))
+  #NIC INTERFACES
+  echo "    interfaces:"
+  for ((i=0; i<${#PF_list[@]};i++))
   do
-    childSRIOV="vfpci_"$(get_hash_value $underscored_pci "SRIOV"$j)
-    pname=$(get_hash_value $childSRIOV "source_name")
-    index=${pname##*_}
-    pmac=$(get_hash_value $childSRIOV "mac")
-    ppci=$(get_hash_value $childSRIOV "pci")
-    vlan=$((j+99))
-    echo "          {"
-    echo "             \"mac\": \"$pmac\","
-    echo "             \"pci\": \"$ppci\","
-    echo "             \"source_name\": $index,"
-    echo "             \"vlan\": $vlan"
-    [ $((j+1)) -le ${#VF_list[@]} ] && echo "          },"
-    [ $((j+1)) -gt ${#VF_list[@]} ] && echo "          }"
+    underscored_pci=${PF_list[$i]}
+    pname=$(get_hash_value $underscored_pci "name")
+    pnuma=$(get_hash_value $underscored_pci "numa")
+    [ $pnuma != $numa ] && continue 
+    pmac=$(get_hash_value $underscored_pci "mac")
+    ppci=$(get_hash_value $underscored_pci "pci")
+    pspeed=$(get_hash_value $underscored_pci "speed")
+    pSRIOV=$(get_hash_value $underscored_pci "SRIOV")
+    echo "    - source_name: $pname"
+    echo "      Mbps: $pspeed"
+    echo "      pci: \"$ppci\""
+    echo "      mac: \"$pmac\""
+    echo "      sriovs:"
+    for ((j=1;j<=$pSRIOV;j++))
+    do
+      childSRIOV="vfpci_"$(get_hash_value $underscored_pci "SRIOV"$j)
+      pname=$(get_hash_value $childSRIOV "source_name")
+      index=${pname##*_}
+      pmac=$(get_hash_value $childSRIOV "mac")
+      ppci=$(get_hash_value $childSRIOV "pci")
+      vlan=$((j+99))
+      echo "      - mac: \"$pmac\""
+      echo "        pci: \"$ppci\""
+      echo "        source_name: $index"
+      echo "        vlan: $vlan"
+    done
   done
-  echo "        ]"
-[ $((i+1)) -lt ${#PF_list[@]} ] && echo "      },"
-[ $((i+1)) -ge ${#PF_list[@]} ] && echo "      }"
-done
-echo "    ]"
 
   numa=$((numa+1))
 done
