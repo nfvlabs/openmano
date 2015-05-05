@@ -1287,7 +1287,7 @@ def http_get_networks():
     #obtain data
     select_,where_,limit_ = filter_query_string(bottle.request.query, http2db_network,
             ('id','name','tenant_id','type',
-             'shared','provider:vlan','status','admin_state_up','provider:physical') )
+             'shared','provider:vlan','status','last_error','admin_state_up','provider:physical') )
     result, content = my.db.get_table(SELECT=select_, FROM='nets', WHERE=where_, LIMIT=limit_)
     if result < 0:
         print "http_get_networks error %d %s" % (result, content)

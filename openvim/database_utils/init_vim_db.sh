@@ -21,43 +21,100 @@
 # contact with: nfvlabs@tid.es
 ##
 
-MUSER="$1"
-MPASS="$2"
-MDB="$3"
-HOST="localhost"
-PORT=3306
+DBUSER="vim"
+DBPASS=""
+DBHOST="localhost"
+DBPORT="3306"
+DBNAME="vim_db"
  
 # Detect paths
 MYSQL=$(which mysql)
 AWK=$(which awk)
 GREP=$(which grep)
 DIRNAME=`dirname $0`
- 
-if [ $# -lt 3 ]
-then
-	echo "Usage: $0 {MySQL-User-Name} {MySQL-User-Password} {MySQL-Database-Name}"
-	echo "Inits VIM DB, deletes DB, loads  _structure.sql"
-	echo "    and data from host_ranking.sql, nets.sql, of_ports_pci_correspondece*.sql"
-	exit 1
-fi
-if [ $# -ge 4 ]
-then
-        HOST=$4
-elif [ $# -ge 5 ]
-then
-        PORT=$5
-fi
 
-echo "    loading ${DIRNAME}/${MDB}_structure.sql"
-mysql -h $HOST -P $PORT -u $MUSER -p$MPASS < ${DIRNAME}/${MDB}_structure.sql
+function usage(){
+    echo -e "Usage: $0 OPTIONS"
+    echo -e "Inits openvim database; deletes previous one and loads from ${DBNAME}_structure.sql"
+    echo -e "    and data from host_ranking.sql, nets.sql, of_ports_pci_correspondece*.sql"
+    echo -e "  OPTIONS"
+    echo -e "     -u USER  database user (it tries '$DBUSER' by default, asks if fail)"
+    echo -e "     -p PASS  database password. Asks if fail"
+    echo -e "     -P PORT  database port ($DBPORT by default)"
+    echo -e "     -h HOST  database host ($DBHOST by default)"
+#    echo -e "     -d NAME  database name (it tries '$DBNAME' by default, asks if fail)"
+    echo -e "     --help   show this help"
+}
+
+while getopts ":u:p:P:h:-:" o; do
+    case "${o}" in
+        u)
+            DBUSER="$OPTARG"
+            ;;
+        p)
+            DBPASS="$OPTARG"
+            ;;
+        P)
+            DBPORT="$OPTARG"
+            ;;
+#        d)
+#            DBNAME="$OPTARG"
+#            ;;
+        h)
+            DBHOST="$OPTARG"
+            ;;
+        -)
+            [ "${OPTARG}" == "help" ] && usage && exit 0
+            echo "Invalid option: --$OPTARG" >&2 && usage  >&2
+            exit 1
+            ;;
+        \?)
+            echo "Invalid option: -$OPTARG" >&2 && usage  >&2
+            exit 1
+            ;;
+        :)
+            echo "Option -$OPTARG requires an argument." >&2 && usage  >&2
+            exit 1
+            ;;
+        *)
+            usage >&2
+            exit -1
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+#check and ask for database user password
+DBUSER_="-u$DBUSER"
+DBPASS_=""
+[ -n "$DBPASS" ] && DBPASS_="-p$DBPASS"
+DBHOST_="-h$DBHOST"
+DBPORT_="-P$DBPORT"
+while !  echo ";" | mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ >/dev/null
+do
+        [ -n "$logintry" ] &&  echo -e "\nInvalid database credentials!!!. Try again (Ctrl+c to abort)"
+        [ -z "$logintry" ] &&  echo -e "\nProvide database credentials"
+#        read -p "mysql database name($DBNAME): " KK
+#        [ -n "$KK" ] && DBNAME="$KK"
+        read -p "mysql user($DBUSER): " KK
+        [ -n "$KK" ] && DBUSER="$KK" && DBUSER_="-u$DBUSER"
+        read -s -p "mysql password: " DBPASS
+        [ -n "$DBPASS" ] && DBPASS_="-p$DBPASS"
+        [ -z "$DBPASS" ] && DBPASS_=""
+        logintry="yes"
+        echo
+done
+
+echo "    loading ${DIRNAME}/${DBNAME}_structure.sql"
+mysql  $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ < ${DIRNAME}/${DBNAME}_structure.sql
 
 echo  "    loading ${DIRNAME}/host_ranking.sql"
-mysql -h $HOST -P $PORT -u $MUSER -p$MPASS $MDB < ${DIRNAME}/host_ranking.sql
+mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_  $DBNAME < ${DIRNAME}/host_ranking.sql
 
 echo  "    loading ${DIRNAME}/of_ports_pci_correspondence.sql"
-mysql -h $HOST -P $PORT -u $MUSER -p$MPASS $MDB < ${DIRNAME}/of_ports_pci_correspondence.sql
+mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_  $DBNAME < ${DIRNAME}/of_ports_pci_correspondence.sql
 #mysql -h $HOST -P $PORT -u $MUSER -p$MPASS $MDB < ${DIRNAME}/of_ports_pci_correspondence_centos.sql
 
 echo  "    loading ${DIRNAME}/nets.sql"
-mysql -h $HOST -P $PORT -u $MUSER -p$MPASS $MDB < ${DIRNAME}/nets.sql
+mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_  $DBNAME < ${DIRNAME}/nets.sql
 

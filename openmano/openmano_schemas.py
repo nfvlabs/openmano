@@ -34,7 +34,7 @@ xml_text_schema={"type" : "string", "minLength":1, "maxLength":1000, "pattern" :
 description_schema={"type" : ["string","null"], "maxLength":200, "pattern" : "^[^'\"]+$"}
 id_schema_fake = {"type" : "string", "minLength":2, "maxLength":36 }  #"pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$"
 id_schema = {"type" : "string", "pattern": "^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$"}
-pci_schema={"type":"string", "pattern":"^[0-9a-fA-F]{4}(:[0-9a-fA-F]{2}){2}.[0-9a-fA-F]$"}
+pci_schema={"type":"string", "pattern":"^[0-9a-fA-F]{4}(:[0-9a-fA-F]{2}){2}\.[0-9a-fA-F]$"}
 http_schema={"type":"string", "pattern":"^https?://[^'\"=]+$"}
 bandwidth_schema={"type":"string", "pattern" : "^[0-9]+ *([MG]bps)?$"}
 memory_schema={"type":"string", "pattern" : "^[0-9]+ *([MG]i?[Bb])?$"}
@@ -219,7 +219,7 @@ host_schema = {
     "type":"object",
     "properties":{
         "id":id_schema,
-        "name": nameshort_schema,
+        "name": name_schema,
     },
     "required": ["id"]
 }
@@ -227,7 +227,7 @@ image_schema = {
     "type":"object",
     "properties":{
         "id":id_schema,
-        "name": nameshort_schema,
+        "name": name_schema,
     },
     "required": ["id","name"]
 }
@@ -750,7 +750,9 @@ instance_scenario_action_schema = {
         "start":{"type": "null"},
         "pause":{"type": "null"},
         "resume":{"type": "null"},
+        "shutoff":{"type": "null"},
         "shutdown":{"type": "null"},
+        "forceOff":{"type": "null"},
         "rebuild":{"type": "null"},
         "reboot":{
             "type": ["object","null"],

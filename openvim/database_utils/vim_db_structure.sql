@@ -226,6 +226,7 @@ CREATE TABLE `nets` (
   `tenant_id` varchar(36) DEFAULT NULL,
   `type` enum('ptp','data','bridge_data','bridge_man') NOT NULL DEFAULT 'bridge_man',
   `status` enum('ACTIVE','DOWN','BUILD','ERROR') NOT NULL DEFAULT 'ACTIVE',
+  `last_error` varchar(200) DEFAULT NULL,
   `name` varchar(50) NOT NULL,
   `shared` enum('true','false') NOT NULL DEFAULT 'false',
   `admin_state_up` enum('true','false') NOT NULL DEFAULT 'true',
@@ -410,6 +411,23 @@ CREATE TABLE `resources_port` (
   CONSTRAINT `FK_resources_port_numas` FOREIGN KEY (`numa_id`) REFERENCES `numas` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `FK_resources_port_ports` FOREIGN KEY (`port_id`) REFERENCES `ports` (`uuid`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=1296 DEFAULT CHARSET=utf8 COMMENT='Contain NIC ports SRIOV and availabes, and current use. Every port contain several entries, one per port (root_id=NULL) and all posible SRIOV (root_id=id of port)';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `schema_version`
+--
+
+DROP TABLE IF EXISTS `schema_version`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `schema_version` (
+  `version_int` int(11) NOT NULL COMMENT 'version as a number. Must not contain gaps',
+  `version` varchar(20) NOT NULL COMMENT 'version as a text',
+  `openvim_ver` varchar(20) NOT NULL COMMENT 'openvim version',
+  `comments` varchar(2000) DEFAULT NULL COMMENT 'changes to database',
+  `date` date DEFAULT NULL,
+  PRIMARY KEY (`version_int`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='database schema control version';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -851,3 +869,45 @@ DELIMITER ;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2015-02-09 15:49:57
+
+
+
+
+
+-- MySQL dump 10.13  Distrib 5.5.35, for debian-linux-gnu (x86_64)
+--
+-- Host: localhost    Database: vim_db
+-- ------------------------------------------------------
+-- Server version	5.5.35-1ubuntu1
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+--
+-- Dumping data for table `schema_version`
+--
+
+LOCK TABLES `schema_version` WRITE;
+/*!40000 ALTER TABLE `schema_version` DISABLE KEYS */;
+INSERT INTO `schema_version` VALUES (1,'0.1','0.2.00','insert schema_version; alter nets with last_error column','2015-05-05');
+/*!40000 ALTER TABLE `schema_version` ENABLE KEYS */;
+UNLOCK TABLES;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
+-- Dump completed on 2015-04-30 10:14:40

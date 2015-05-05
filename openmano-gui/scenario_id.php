@@ -30,14 +30,14 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+<!-- already loaded at scenario.php 
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script> 
 <script src="js/jquery-ui-1.9.2-min.js"></script>
-<!-- already loaded at scenario.php 
   <script src="https://rawgit.com/sporritt/jsPlumb/1.5.0/dist/js/jquery.jsPlumb-1.5.0-min.js"></script> 
+<script src="js/jstree.min.js"></script>
 --> 
 <script src="js/contextmenu.js"></script>
 <script src="js/js-yaml.js"></script>
-<script src="js/jstree.min.js"></script>
 
 <title>Scenario details</title>
 </head>

@@ -150,7 +150,16 @@ class openflow_thread(threading.Thread):
 
             print self.name, ": processing task", task[0]
             if task[0] == 'update-net':
-                self.update_of_flows(task[1])
+                r,c = self.update_of_flows(task[1])
+                #updata database status
+                self.db_lock.acquire()
+                if r<0:
+                    UPDATE={'status':'ERROR', 'last_error': str(c)}
+                else:
+                    UPDATE={'status':'ACTIVE'}
+                self.db.update_rows('nets', UPDATE, WHERE={'uuid':task[1]} )
+                self.db_lock.release()
+
             elif task[0] == 'clear-all':
                 self.clear_all_flows(task[1])
             elif task[0] == 'exit':
@@ -169,7 +178,7 @@ class openflow_thread(threading.Thread):
         self.db_lock.release()
         if result < 0:
             print self.name, ": update_of_flows() ERROR getting net", content
-            return -1, content
+            return -1, "ERROR getting net " + content
         elif result==0:
             #net has been deleted
             ifaces_nb = 0
@@ -187,7 +196,7 @@ class openflow_thread(threading.Thread):
                 self.db_lock.release()
                 if ifaces_nb < 0:
                     print self.name, ": update_of_flows() ERROR getting ports", ports
-                    return -1, ports
+                    return -1, "ERROR getting ports "+ ports
         
         #Get the name of flows that will be affected by this NET or net_id==NULL that means net deleted (At DB foreign key: On delete set null)
         self.db_lock.acquire()
@@ -195,7 +204,7 @@ class openflow_thread(threading.Thread):
         self.db_lock.release()
         if result < 0:
             print self.name, ": update_of_flows() ERROR getting flows", flows
-            return -1, flows
+            return -1, "ERROR getting flows " + flows
         elif result > 0:
             #delete flows
             for flow in flows:

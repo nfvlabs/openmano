@@ -237,12 +237,15 @@
 					}},
 					{label:'Remove',action: function(e){
 						// find vnf object
+						var objifcs=null;
 						for (var v in instances_vnfs) {
 							if (instances_vnfs[v][0].id == active_vnf ){
-								var objifcs=instances_vnfs[v].ifaces; 
+								objifcs=instances_vnfs[v].ifaces; 
 								break;
 							}
-						} 
+						}
+						if (objifcs==null)
+							return;
 						   
 						// borrar los endpoints correspondientes
 						for(var j in objifcs){
