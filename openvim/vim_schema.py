@@ -59,7 +59,7 @@ config_schema = {
         "http_port": port_schema,
         "http_admin_port": port_schema,
         "http_host": nameshort_schema,
-        "http_url_prefix": path_schema, #no funciona, bottle lo pilla antes de la cuenta
+        "http_url_prefix": path_schema, # it does not work yet; it's supposed to be the base path to be used by bottle, but it must be explicitly declared
         "db_host": nameshort_schema,
         "db_user": nameshort_schema,
         "db_passwd": {"type":"string"},
@@ -571,4 +571,32 @@ port_update_schema = {
     },
     "required": ["port"],
     "additionalProperties": False
+}
+
+localinfo_schema = {
+    "title":"localinfo information schema",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type":"object",
+    "properties":{
+        "files":{ "type": "object"},
+        "inc_files":{ "type": "object"},
+        "server_files":{ "type": "object"}
+    },
+    "required": ["files"]
+}
+
+hostinfo_schema = {
+    "title":"host information schema",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type":"object",
+    "properties":{
+        "iface_names":{
+            "type":"object",
+            "patternProperties":{
+                ".":{ "type": "string"}
+            },
+            "minProperties": 1
+        }
+    },
+    "required": ["iface_names"]
 }
