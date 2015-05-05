@@ -31,7 +31,7 @@ __date__ ="$10-jul-2014 12:07:15$"
 # SCHEMAS to validate input data
 #
 
-path_schema={"type":"string", "pattern":"^(/[a-zA-Z0-9 \-.:!_]*)+$"}
+path_schema={"type":"string", "pattern":"^(\.(\.?))?(/[^/"":{}\ \(\)]+)+$"}
 port_schema={"type":"integer","minimum":1,"maximun":65534}
 ip_schema={"type":"string","pattern":"^([0-9]{1,3}.){3}[0-9]{1,3}$"}
 name_schema={"type" : "string", "minLength":1, "maxLength":36, "pattern" : "^[^,;()'\"]+$"}
