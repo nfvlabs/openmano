@@ -37,41 +37,12 @@ import Queue
 import paramiko
 from jsonschema import validate as js_v, exceptions as js_e
 import libvirt
+from vim_schema import path_schema, localinfo_schema, hostinfo_schema
 #import math
 #from logging import Logger
 #import utils.auxiliary_functions as af
 
 #TODO: insert a logging system
-#TODO: insert these schemas at vim_schema.py 
-path_schema={"type":"string", "pattern":"^(/[a-zA-Z0-9 \-.:!_]*)+$"}
-localinfo_schema = {
-    "title":"localinfo information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "files":{ "type": "object"},
-        "inc_files":{ "type": "object"},
-        "server_files":{ "type": "object"}
-    },
-    "required": ["files"]
-}
-
-hostinfo_schema = {
-    "title":"host information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "iface_names":{
-            "type":"object",
-            "patternProperties":{
-                ".":{ "type": "string"}
-            },
-            "minProperties": 1
-        }
-    },
-    "required": ["iface_names"]
-}
-
 
 class host_thread(threading.Thread):
     def __init__(self, name, host, user, db, db_lock, test, image_path, host_id, version, develop_mode, develop_bridge_iface):
