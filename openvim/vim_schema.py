@@ -70,6 +70,7 @@ config_schema = {
         "of_controller_nets_with_same_vlan": {"type" : "boolean"},
         "test_mode": {"type": "boolean"}, #leave for backward compatibility
         "mode": {"type":"string", "enum":["normal", "host only", "development", "test"] },
+        "development_bridge": {"type":"string"},
         "tenant_id": {"type" : "string"},
         "image_path": path_schema,
         "bridge_ifaces": {
@@ -275,7 +276,9 @@ host_data_schema={
                                         "additionalProperties": False,
                                         "required": ["source_name","mac","vlan","pci"]
                                     }
-                                }
+                                },
+                                "switch_port": nameshort_schema,
+                                "switch_dpid": nameshort_schema,
                             },
                             "additionalProperties": False,
                             "required": ["source_name","mac","Mbps","pci"]

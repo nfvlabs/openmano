@@ -74,7 +74,7 @@ hostinfo_schema = {
 
 
 class host_thread(threading.Thread):
-    def __init__(self, name, host, user, db, db_lock, test, image_path, host_id, version):
+    def __init__(self, name, host, user, db, db_lock, test, image_path, host_id, version, develop_mode, develop_bridge_iface):
         '''Init a thread.
         Arguments: thread_info must be a dictionary with:
             'id' number of thead
@@ -92,6 +92,8 @@ class host_thread(threading.Thread):
         self.db = db
         self.db_lock = db_lock
         self.test = test
+        self.develop_mode = develop_mode
+        self.develop_bridge_iface = develop_bridge_iface
         self.image_path = image_path
         self.host_id = host_id
         self.version = version
@@ -289,8 +291,7 @@ class host_thread(threading.Thread):
                         print self.name, ": Exception deleting file '%s': %s" %(localfile['source file'], str(e))
                 del self.localinfo['server_files'][uuid]
                 self.localinfo_dirty = True
-        
-        
+   
     def insert_task(self, task, *aditional):
         try:
             self.queueLock.acquire()
@@ -414,14 +415,15 @@ class host_thread(threading.Thread):
         if 'extended' in server and server['extended']!=None and 'numas' in server['extended']:
             numa = server['extended']['numas'][0]
     #memory
+        use_huge = False
         memory = int(numa.get('memory',0))*1024*1024 #in KiB
         if memory==0:
             memory = int(server['ram'])*1024;
-            use_huge = False
         else:
-            use_huge = True
+            if not self.develop_mode:
+                use_huge = True
         if memory==0:
-            return -1, 'No memory asigned to instance'
+            return -1, 'No memory assigned to instance'
         memory = str(memory)
         text += self.tab() + "<memory unit='KiB'>" +memory+"</memory>" 
         text += self.tab() + "<currentMemory unit='KiB'>" +memory+ "</currentMemory>"
@@ -432,22 +434,26 @@ class host_thread(threading.Thread):
 
     #cpu
         use_cpu_pinning=False
+        vcpus = int(server.get("vcpus",0))
         cpu_pinning = []
         if 'cores-source' in numa:
             use_cpu_pinning=True
             for index in range(0, len(numa['cores-source'])):
                 cpu_pinning.append( [ numa['cores-id'][index], numa['cores-source'][index] ] )
+                vcpus += 1
         if 'threads-source' in numa:
             use_cpu_pinning=True
             for index in range(0, len(numa['threads-source'])):
                 cpu_pinning.append( [ numa['threads-id'][index], numa['threads-source'][index] ] )
+                vcpus += 1
         if 'paired-threads-source' in numa:
             use_cpu_pinning=True
             for index in range(0, len(numa['paired-threads-source'])):
                 cpu_pinning.append( [numa['paired-threads-id'][index][0], numa['paired-threads-source'][index][0] ] )
                 cpu_pinning.append( [numa['paired-threads-id'][index][1], numa['paired-threads-source'][index][1] ] )
+                vcpus += 2
         
-        if use_cpu_pinning:
+        if use_cpu_pinning and not self.develop_mode:
             text += self.tab()+"<vcpu placement='static'>" +str(len(cpu_pinning)) +"</vcpu>" + \
                 self.tab()+'<cputune>'
             self.xml_level += 1
@@ -458,9 +464,9 @@ class host_thread(threading.Thread):
                 self.inc_tab() + "<memory mode='strict' nodeset='" +str(numa['source'])+ "'/>" +\
                 self.dec_tab() + '</numatune>'
         else:
-            if int(server["vcpus"])==0:
+            if vcpus==0:
                 return -1, "Instance without number of cpus"
-            text += self.tab()+"<vcpu>" + str(server["vcpus"])  + "</vcpu>"
+            text += self.tab()+"<vcpu>" + str(vcpus)  + "</vcpu>"
 
     #boot
         boot_cdrom = False
@@ -605,6 +611,18 @@ class host_thread(threading.Thread):
 
         net_nb=0
         for v in interfaces:
+            if self.develop_mode: #map these interfaces to bridges
+                text += self.tab() + "<interface type='bridge'>" +  \
+                    self.inc_tab()+"<source bridge='" +self.develop_bridge_iface+ "'/>"
+                if windows_os:
+                    text += self.tab() + "<target dev='vnet" + str(net_nb)+ "'/>" +\
+                        self.tab() + "<alias name='net" + str(net_nb)+ "'/>"
+                if v.get('mac_address', None) != None:
+                    text+= self.tab() +"<mac address='" +v['mac_address']+ "'/>"
+                text += self.pci2xml(v.get('vpci',None))
+                text += self.dec_tab()+'</interface>'
+                continue
+                
             if v['dedicated'] == 'yes':  #passthrought
                 text += self.tab() + "<hostdev mode='subsystem' type='pci' managed='yes'>" + \
                     self.inc_tab() + "<source>"

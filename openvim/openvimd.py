@@ -30,8 +30,9 @@ and host controllers
 
 __author__="Alfonso Tierno"
 __date__ ="$10-jul-2014 12:07:15$"
-__version__="0.2.01-r365"
+__version__="0.2.02-r370"
 version_date="May 2015"
+database_version="0.1"      #expected database schema version
 
 import httpserver
 from utils import auxiliary_functions as af
@@ -156,6 +157,9 @@ if __name__=="__main__":
             #allow backward compatibility of test_mode option
             if 'test_mode' in config_dic and config_dic['test_mode']==True:
                 config_dic['mode'] = 'test' 
+        if config_dic['mode'] == 'development' and ( 'development_bridge' not in config_dic or config_dic['development_bridge'] not in config_dic.get("bridge_ifaces",None) ):
+            print "Error at '%s': Provide a valid 'development_bridge' that must be one of the 'bridge_ifaces'" %config_file
+            exit(-1)
             
         if config_dic['mode'] != 'normal':
             print '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
@@ -165,6 +169,13 @@ if __name__=="__main__":
 
     #Connect to database
         db_http = create_database_connection(config_dic)
+        r = db_http.get_db_version()
+        if r[0]<0:
+            print "Error DATABASE is not a VIM one or it is a '0.0' version. Try to upgrade to version '%s' with './database_utils/migrate_vim_db.sh'" % database_version
+            exit(-1)
+        elif r[1]!=database_version:
+            print "Error DATABASE wrong version '%s'. Try to upgrade/downgrade to version '%s' with './database_utils/migrate_vim_db.sh'" % (r[1], database_version) 
+            exit(-1)
         db_of = create_database_connection(config_dic)
         db_lock= threading.Lock()
         config_dic['db'] = db_of
@@ -187,10 +198,13 @@ if __name__=="__main__":
     #precreate interfaces; [bridge:<host_bridge_name>, VLAN used at Host, uuid of network camping in this bridge, speed in Gbit/s
         config_dic['bridge_nets']=[]
         for bridge,vlan_speed in config_dic["bridge_ifaces"].items():
+            #skip 'development_bridge'
+            if config_dic['mode'] == 'development' and config_dic['development_bridge'] == bridge:
+                continue
             config_dic['bridge_nets'].append( [bridge, vlan_speed[0], vlan_speed[1], None] )
         del config_dic["bridge_ifaces"]
 
-        #check if already present
+        #check if this bridge is already used (present at database) for a network)
         used_bridge_nets=[]
         for brnet in config_dic['bridge_nets']:
             r,c = db_of.get_table(SELECT=('uuid',), FROM='nets',WHERE={'bind': "bridge:"+brnet[0]})
@@ -203,6 +217,8 @@ if __name__=="__main__":
         
     #Create one thread for each host
         host_test_mode = True if config_dic['mode']=='test' else False
+        host_develop_mode = True if config_dic['mode']=='development' else False
+        host_develop_bridge_iface = config_dic.get('development_bridge', None)
         config_dic['host_threads'] = {}
         r,c = db_of.get_table(SELECT=('name','ip_name','user','uuid'), FROM='hosts', WHERE={'status':'ok'})
         if r<0:
@@ -213,7 +229,7 @@ if __name__=="__main__":
                 host['image_path'] = '/opt/VNF/images/openvim'
                 thread = ht.host_thread(name=host['name'], user=host['user'], host=host['ip_name'], db=db_of, db_lock=db_lock,
                         test=host_test_mode, image_path=config_dic['image_path'], version=config_dic['version'],
-                        host_id=host['uuid']  )
+                        host_id=host['uuid'], develop_mode=host_develop_mode, develop_bridge_iface=host_develop_bridge_iface  )
                 thread.start()
                 config_dic['host_threads'][ host['uuid'] ] = thread
                 

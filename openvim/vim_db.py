@@ -71,7 +71,32 @@ class vim_db():
         except mdb.Error, e:
             print "Error connecting to DB %s@%s -> %s Error %d: %s" % (self.user, self.host, self.database, e.args[0], e.args[1])
             return -1
-        
+    def get_db_version(self):
+        ''' Obtain the database schema version.
+        Return: (negative, text) if error or version 0.0 where schema_version table is missing
+                (version_int, version_text) if ok
+        '''
+        cmd = "SELECT version_int,version,openvim_ver FROM schema_version"
+        for retry_ in range(0,2):
+            try:
+                with self.con:
+                    self.cur = self.con.cursor()
+                    if self.debug: print cmd
+                    self.cur.execute(cmd)
+                    rows = self.cur.fetchall()
+                    highest_version_int=0
+                    highest_version=""
+                    #print rows
+                    for row in rows: #look for the latest version
+                        if row[0]>highest_version_int:
+                            highest_version_int, highest_version = row[0:2]
+                    return highest_version_int, highest_version
+            except (mdb.Error, AttributeError), e:
+                if not self.debug: print cmd
+                print "get_db_version DB Exception %d: %s" % (e.args[0], e.args[1])
+                r,c = self.format_error(e)
+                if r!=-HTTP_Request_Timeout or retry_==1: return r,c    
+                
     def disconnect(self):
         '''disconnect from the data base'''
         try:
@@ -575,6 +600,8 @@ class vim_db():
                             port_dict['numa_id'] = numa_dict['id']
                             port_dict['id'] = port_dict['root_id'] = next_ids['resources_port']
                             next_ids['resources_port'] += 1
+                            switch_port = port_dict.get('switch_port', None)
+                            port_dict.pop('switch_dpid', None)
                             keys    = ",".join(port_dict.keys())
                             values  = ",".join( map(lambda x:  "Null" if x is None else "'"+str(x)+"'", port_dict.values() ) )
                             cmd = "INSERT INTO resources_port (" + keys + ") VALUES (" + values + ")"
@@ -583,6 +610,8 @@ class vim_db():
 
                             #insert sriovs into port table
                             for sriov_dict in sriov_list:
+                                if switch_port != None:
+                                    sriov_dict['switch_port'] = switch_port
                                 sriov_dict['numa_id'] = port_dict['numa_id']
                                 sriov_dict['Mbps'] = port_dict['Mbps']
                                 sriov_dict['root_id'] = port_dict['id']

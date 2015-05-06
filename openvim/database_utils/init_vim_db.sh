@@ -118,3 +118,6 @@ mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_  $DBNAME < ${DIRNAME}/of_ports_pci_cor
 echo  "    loading ${DIRNAME}/nets.sql"
 mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_  $DBNAME < ${DIRNAME}/nets.sql
 
+echo "    migrage database version"
+${DIRNAME}/migrate_vim_db.sh $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ -d$DBNAME
+

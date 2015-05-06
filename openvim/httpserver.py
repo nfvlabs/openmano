@@ -578,9 +578,12 @@ def http_post_hosts():
         if content['admin_state_up']:
             #create thread
             host_test_mode = True if config_dic['mode']=='test' else False
+            host_develop_mode = True if config_dic['mode']=='development' else False
+            host_develop_bridge_iface = config_dic.get('development_bridge', None)
             thread = ht.host_thread(name=host.get('name',ip_name), user=user, host=ip_name, db=config_dic['db'], db_lock=config_dic['db_lock'], 
                 test=host_test_mode, image_path=config_dic['image_path'],
-                version=config_dic['version'], host_id=content['uuid']  )
+                version=config_dic['version'], host_id=content['uuid'],
+                develop_mode=host_develop_mode, develop_bridge_iface=host_develop_bridge_iface   )
             thread.start()
             config_dic['host_threads'][ content['uuid'] ] = thread
 
