@@ -1515,6 +1515,13 @@ def http_clear_openflow_rules():
     data={'result' : " All openflow rules have been cleared"}
     return format_out(data)
 
+@bottle.route(url_base + '/networks/openflow/ports', method='GET')
+def http_get_openflow_ports():
+    '''Obtain switch ports names of openflow controller
+    '''
+    data={'ports' : config_dic['of_thread'].pp2ofi}
+    return format_out(data)
+
 
 #
 # PORTS

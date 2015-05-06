@@ -65,7 +65,7 @@ then
     _RELEASE="14"
     if ! lsb_release -rs | grep -q "14."
     then 
-        read -p "WARNING! Not tested Ubuntu version. Continue assuming a '$_RELEASE' type? (y/N)" KK
+        read -e -p "WARNING! Not tested Ubuntu version. Continue assuming a '$_RELEASE' type? (y/N)" KK
         [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Canceled" && exit 0
     fi
 elif [ "$_DISTRO" == "CentOS" ]
@@ -73,14 +73,14 @@ then
     _RELEASE="7" 
     if ! cat /etc/redhat-release | grep -q "7."
     then
-        read -p "WARNING! Not tested CentOS version. Continue assuming a '_RELEASE' type? (y/N)" KK
+        read -e -p "WARNING! Not tested CentOS version. Continue assuming a '_RELEASE' type? (y/N)" KK
         [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Canceled" && exit 0
     fi
 else  #[ "$_DISTRO" != "Ubuntu" -a "$_DISTRO" != "CentOS" ] 
     _DISTRO_DISCOVER=$_DISTRO
     [ -x /usr/bin/apt-get ] && _DISTRO="Ubuntu" && _RELEASE="14"
     [ -x /usr/bin/yum ]     && _DISTRO="CentOS" && _RELEASE="7"
-    read -p "WARNING! Not tested Linux distribution '$_DISTRO_DISCOVER '. Continue assuming a '$_DISTRO $_RELEASE' type? (y/N)" KK
+    read -e -p "WARNING! Not tested Linux distribution '$_DISTRO_DISCOVER '. Continue assuming a '$_DISTRO $_RELEASE' type? (y/N)" KK
     [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Canceled" && exit 0
 fi
 
@@ -111,10 +111,10 @@ then
     service httpd   start
     systemctl enable mariadb
     systemctl enable httpd
-    read -p "Do you want to configure mariadb (recomended if not done before) (Y/n)" KK
+    read -e -p "Do you want to configure mariadb (recomended if not done before) (Y/n)" KK
     [ "$KK" != "n" -a  "$KK" != "no" ] && mysql_secure_installation
 
-    read -p "Do you want to set firewall to grant web access port 80,443  (Y/n)" KK
+    read -e -p "Do you want to set firewall to grant web access port 80,443  (Y/n)" KK
     [ "$KK" != "n" -a  "$KK" != "no" ] && 
         firewall-cmd --permanent --zone=public --add-service=http &&
         firewall-cmd --permanent --zone=public --add-service=https &&
@@ -131,9 +131,9 @@ while !  echo "" | mysql -u$DBUSER $DBPASSWD
 do
         [ -n "$logintry" ] &&  echo -e "\nInvalid database credentials!!!. Try again (Ctrl+c to abort)"
         [ -z "$logintry" ] &&  echo -e "\nProvide database credentials"
-        read -p "database user? ($DBUSER) " DBUSER_
+        read -e -p "database user? ($DBUSER) " DBUSER_
         [ -n "$DBUSER_" ] && DBUSER=$DBUSER_
-        read -s -p "database password? (Enter for not using password) " DBPASSWD_
+        read -e -s -p "database password? (Enter for not using password) " DBPASSWD_
         [ -n "$DBPASSWD_" ] && DBPASSWD="-p$DBPASSWD_"
         [ -z "$DBPASSWD_" ] && DBPASSWD=""
         logintry="yes"
@@ -180,7 +180,7 @@ echo '
 #################################################################'
 #FLoodLight
 echo "Installing FloodLight requires Java, that takes a while to download"
-read -p "Do you agree on download and install FloodLight from http://www.projectfloodlight.org upon the owner license? (y/N)" KK
+read -e -p "Do you agree on download and install FloodLight from http://www.projectfloodlight.org upon the owner license? (y/N)" KK
 if [ "$KK" == "y" -o   "$KK" == "yes" ]
 then
 

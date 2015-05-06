@@ -795,6 +795,17 @@ def element_list(args):
                     print yaml.safe_dump(data2, indent=4, default_flow_style=False)
     return
 
+def openflow_action(args):
+    if args.action=='port-list':
+        url = "http://%s:%s/openvim/networks/openflow/ports" %(vim_config["HOST"], vim_config["PORT"])
+        r,c = vim_read(url)
+    else:
+        return
+    if r<0:           
+        print "Error:", c
+    else:
+        print yaml.safe_dump(c, indent=4, default_flow_style=False)
+
 if __name__=="__main__":
     
     item_dict={'vm':'servers','host':'hosts','tenant':'tenants','image':'images','flavor':'flavors','net':'networks','port':'ports'}
@@ -892,6 +903,10 @@ if __name__=="__main__":
             nethost_action_down_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
             nethost_action_down_parser.set_defaults(func=element_action_edit, element=item_dict[item], action="down")
 
+    #openflow rules
+    openflow_list_action = subparsers.add_parser("openflow-port-list", help="list openflow switch ports name")
+    openflow_list_action.set_defaults(func=openflow_action, action="port-list")
+    
     argcomplete.autocomplete(main_parser)
     
     try:

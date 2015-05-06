@@ -30,9 +30,9 @@ and host controllers
 
 __author__="Alfonso Tierno"
 __date__ ="$10-jul-2014 12:07:15$"
-__version__="0.2.02-r370"
+__version__="0.2.03-r375"
 version_date="May 2015"
-database_version="0.1"      #expected database schema version
+database_version="0.2"      #expected database schema version
 
 import httpserver
 from utils import auxiliary_functions as af
@@ -189,7 +189,7 @@ if __name__=="__main__":
                         db=db_of,  db_lock=db_lock,
                         pmp_with_same_vlan=config_dic['of_controller_nets_with_same_vlan'])
         r,c = thread.get_of_controller_info()
-        if r<c:
+        if r<0:
             print "Error getting openflow information", c
             exit()
         thread.start()

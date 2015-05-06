@@ -601,7 +601,7 @@ class vim_db():
                             port_dict['id'] = port_dict['root_id'] = next_ids['resources_port']
                             next_ids['resources_port'] += 1
                             switch_port = port_dict.get('switch_port', None)
-                            port_dict.pop('switch_dpid', None)
+                            switch_dpid = port_dict.get('switch_dpid', None)
                             keys    = ",".join(port_dict.keys())
                             values  = ",".join( map(lambda x:  "Null" if x is None else "'"+str(x)+"'", port_dict.values() ) )
                             cmd = "INSERT INTO resources_port (" + keys + ") VALUES (" + values + ")"
@@ -610,8 +610,8 @@ class vim_db():
 
                             #insert sriovs into port table
                             for sriov_dict in sriov_list:
-                                if switch_port != None:
-                                    sriov_dict['switch_port'] = switch_port
+                                sriov_dict['switch_port'] = switch_port
+                                sriov_dict['switch_dpid'] = switch_dpid
                                 sriov_dict['numa_id'] = port_dict['numa_id']
                                 sriov_dict['Mbps'] = port_dict['Mbps']
                                 sriov_dict['root_id'] = port_dict['id']

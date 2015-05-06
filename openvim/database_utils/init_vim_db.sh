@@ -94,11 +94,11 @@ while !  echo ";" | mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ >/dev/null
 do
         [ -n "$logintry" ] &&  echo -e "\nInvalid database credentials!!!. Try again (Ctrl+c to abort)"
         [ -z "$logintry" ] &&  echo -e "\nProvide database credentials"
-#        read -p "mysql database name($DBNAME): " KK
+#        read -e -p "mysql database name($DBNAME): " KK
 #        [ -n "$KK" ] && DBNAME="$KK"
-        read -p "mysql user($DBUSER): " KK
+        read -e -p "mysql user($DBUSER): " KK
         [ -n "$KK" ] && DBUSER="$KK" && DBUSER_="-u$DBUSER"
-        read -s -p "mysql password: " DBPASS
+        read -e -s -p "mysql password: " DBPASS
         [ -n "$DBPASS" ] && DBPASS_="-p$DBPASS"
         [ -z "$DBPASS" ] && DBPASS_=""
         logintry="yes"

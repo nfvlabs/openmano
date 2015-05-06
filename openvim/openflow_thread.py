@@ -83,7 +83,7 @@ class openflow_thread(threading.Thread):
                 for port in info[index]["ports"]:
                     self.pp2ofi[ str(port["name"]) ] = str(port["portNumber"] )
             print self.name, ": get_of_controller_info ports:", self.pp2ofi
-            return 0, None
+            return 0, self.pp2ofi
         except requests.exceptions.RequestException, e:
             print self.name, ": get_of_controller_info Exception:", str(e)
             return -1, str(e)
@@ -348,11 +348,11 @@ class openflow_thread(threading.Thread):
         for pair in pairs:
             if pair[0]['switch_port'] == pair[1]['switch_port']:
                 continue
-            if str(pair[0]['switch_port']) not in self.pp2ofi:
+            if str(pair[0]['switch_port']) not in self.pp2ofi and not self.test:
                 error_text= "switch port name '%s' is not valid" % str(pair[0]['switch_port'])
                 print self.name, ": ERROR " + error_text
                 return -1, error_text
-            if str(pair[1]['switch_port']) not in self.pp2ofi:
+            if str(pair[1]['switch_port']) not in self.pp2ofi and not self.test:
                 error_text= "switch port name '%s' is not valid" % str(pair[1]['switch_port'])
                 print self.name, ": ERROR " + error_text
                 return -1, error_text

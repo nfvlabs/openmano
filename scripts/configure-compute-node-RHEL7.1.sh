@@ -114,7 +114,7 @@ then
   usermod -a -G libvirt,admin -g admin $user_name
 else 
   #create user if it does not exist
-  [ -z "$FORCE" ] && read -p "user '${user_name}' does not exist, create (Y/n)" kk
+  [ -z "$FORCE" ] && read -e -p "user '${user_name}' does not exist, create (Y/n)" kk
   if ! [ -z "$kk" -o "$kk"="y" -o "$kk"="Y" ]
   then
     exit

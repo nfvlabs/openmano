@@ -96,6 +96,7 @@ then
     OPENVIM_VER=`${DIRNAME}/../openvimd.py -v`
     OPENVIM_VER=${OPENVIM_VER%%-r*}
     OPENVIM_VER=${OPENVIM_VER##*version }
+    echo "Detected openvim version $OPENVIM_VER"
 fi
 VERSION_1=`echo $OPENVIM_VER | cut -f 1 -d"."`
 VERSION_2=`echo $OPENVIM_VER | cut -f 2 -d"."`
@@ -107,22 +108,21 @@ then
     exit -1
 fi
 OPENVIM_VER_NUM="${VERSION_1}${VERSION_2}${VERSION_3}"
-echo "Migrating to openvim version $OPENVIM_VER"
 
 #check and ask for database user password
 DBUSER_="-u$DBUSER"
 [ -n "$DBPASS" ] && DBPASS_="-p$DBPASS"
 DBHOST_="-h$DBHOST"
 DBPORT_="-P$DBPORT"
-while !  echo ";" | mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ $DBNAME >/dev/null
+while !  echo ";" | mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ $DBNAME >/dev/null 2>&1
 do
         [ -n "$logintry" ] &&  echo -e "\nInvalid database credentials!!!. Try again (Ctrl+c to abort)"
         [ -z "$logintry" ] &&  echo -e "\nProvide database name and credentials"
-        read -p "mysql database name($DBNAME): " KK
+        read -e -p "mysql database name($DBNAME): " KK
         [ -n "$KK" ] && DBNAME="$KK"
-        read -p "mysql user($DBUSER): " KK
+        read -e -p "mysql user($DBUSER): " KK
         [ -n "$KK" ] && DBUSER="$KK" && DBUSER_="-u$DBUSER"
-        read -s -p "mysql password: " DBPASS
+        read -e -s -p "mysql password: " DBPASS
         [ -n "$DBPASS" ] && DBPASS_="-p$DBPASS"
         [ -z "$DBPASS" ] && DBPASS_=""
         logintry="yes"
@@ -154,7 +154,8 @@ fi
 
 #GET DATABASE TARGET VERSION
 DATABASE_TARGET_VER_NUM=0
-[ $OPENVIM_VER_NUM -gt 0191 ] && DATABASE_TARGET_VER_NUM=1   #0.1.90 =>  1
+[ $OPENVIM_VER_NUM -gt 0191 ] && DATABASE_TARGET_VER_NUM=1   #0.2.00 =>  1
+[ $OPENVIM_VER_NUM -ge 0203 ] && DATABASE_TARGET_VER_NUM=2   #0.2.03 =>  2
 #TODO ... put next versions here
 
 
@@ -171,19 +172,92 @@ function upgrade_to_1(){
 	)
 	COMMENT='database schema control version'
 	COLLATE='utf8_general_ci'
-	ENGINE=InnoDB;" | $DBCMD
-    echo "INSERT INTO \`vim_db\`.\`schema_version\` (\`version_int\`, \`version\`, \`openvim_ver\`, \`comments\`, \`date\`)
+	ENGINE=InnoDB;" | $DBCMD  || ( echo "ERROR. Aborted!" && exit -1 )
+    echo "INSERT INTO \`schema_version\` (\`version_int\`, \`version\`, \`openvim_ver\`, \`comments\`, \`date\`)
 	 VALUES (1, '0.1', '0.2.00', 'insert schema_version; alter nets with last_error column', '2015-05-05');" | $DBCMD
     echo "  ALTER TABLE \`nets\`, ADD COLUMN \`last_error\`"
-    echo "ALTER TABLE \`nets\`
-	ADD COLUMN \`last_error\` VARCHAR(200) NULL AFTER \`status\`;" | $DBCMD
+    echo "ALTER TABLE \`nets\` 
+         ADD COLUMN \`last_error\` VARCHAR(200) NULL AFTER \`status\`;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
 }
 function downgrade_from_1(){
     echo "downgrade database from version 0.1 to version 0.0"
     echo "  ALTER TABLE \`nets\` DROP COLUMN \`last_error\`"
-    echo "ALTER TABLE \`nets\` DROP COLUMN \`last_error\`;" | $DBCMD
+    echo "ALTER TABLE \`nets\` DROP COLUMN \`last_error\`;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
     echo "  DROP TABLE \`schema_version\`"
-    echo "DROP TABLE \`schema_version\`;" | $DBCMD
+    echo "DROP TABLE \`schema_version\`;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+}
+function upgrade_to_2(){
+    echo "upgrade database from version 0.1 to version 0.2"
+    echo "  ALTER TABLE \`of_ports_pci_correspondence\` \`resources_port\` \`ports\` ADD COLUMN \`switch_dpid\`"
+    for table in of_ports_pci_correspondence resources_port ports
+    do
+        echo "ALTER TABLE \`${table}\`
+            ADD COLUMN \`switch_dpid\` CHAR(23) NULL DEFAULT NULL AFTER \`switch_port\`; " | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+        echo "ALTER TABLE ${table} CHANGE COLUMN switch_port switch_port VARCHAR(24) NULL DEFAULT NULL;" | $DBCMD || 
+            ( echo "ERROR. Aborted!" && exit -1 )
+        [ $table == of_ports_pci_correspondence ] ||
+            echo "ALTER TABLE ${table} DROP INDEX vlan_switch_port, ADD UNIQUE INDEX vlan_switch_port (vlan, switch_port, switch_dpid);" | $DBCMD ||
+            ( echo "ERROR. Aborted!" && exit -1 )
+    done
+    echo "  UPDATE procedure UpdateSwitchPort"
+    echo "DROP PROCEDURE IF EXISTS UpdateSwitchPort;
+    delimiter //
+    CREATE PROCEDURE UpdateSwitchPort() MODIFIES SQL DATA SQL SECURITY INVOKER
+    COMMENT 'Load the openflow switch ports from of_ports_pci_correspondece into resoureces_port and ports'
+    BEGIN
+        #DELETES switch_port entry before writing, because if not it fails for key constrains
+        UPDATE ports
+        RIGHT JOIN resources_port as RP on ports.uuid=RP.port_id
+        INNER JOIN resources_port as RP2 on RP2.id=RP.root_id
+        INNER JOIN numas on RP.numa_id=numas.id
+        INNER JOIN hosts on numas.host_id=hosts.uuid
+        INNER JOIN of_ports_pci_correspondence as PC on hosts.ip_name=PC.ip_name and RP2.pci=PC.pci
+        SET ports.switch_port=null, ports.switch_dpid=null, RP.switch_port=null, RP.switch_dpid=null;
+        #write switch_port into resources_port and ports
+        UPDATE ports
+        RIGHT JOIN resources_port as RP on ports.uuid=RP.port_id
+        INNER JOIN resources_port as RP2 on RP2.id=RP.root_id
+        INNER JOIN numas on RP.numa_id=numas.id
+        INNER JOIN hosts on numas.host_id=hosts.uuid
+        INNER JOIN of_ports_pci_correspondence as PC on hosts.ip_name=PC.ip_name and RP2.pci=PC.pci
+        SET ports.switch_port=PC.switch_port, ports.switch_dpid=PC.switch_dpid, RP.switch_port=PC.switch_port, RP.switch_dpid=PC.switch_dpid;
+    END//
+    delimiter ;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+    echo "INSERT INTO \`schema_version\` (\`version_int\`, \`version\`, \`openvim_ver\`, \`comments\`, \`date\`)
+	 VALUES (2, '0.2', '0.2.03', 'update Procedure UpdateSwitchPort', '2015-05-06');" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+}
+function downgrade_from_2(){
+    echo "downgrade database from version 0.2 to version 0.1"
+    echo "  UPDATE procedure UpdateSwitchPort"
+    echo "DROP PROCEDURE IF EXISTS UpdateSwitchPort;
+    delimiter //
+    CREATE PROCEDURE UpdateSwitchPort() MODIFIES SQL DATA SQL SECURITY INVOKER
+    BEGIN
+    UPDATE
+        resources_port INNER JOIN (
+            SELECT resources_port.id,KK.switch_port
+            FROM resources_port INNER JOIN numas on resources_port.numa_id=numas.id
+                INNER JOIN hosts on numas.host_id=hosts.uuid
+                INNER JOIN of_ports_pci_correspondence as KK on hosts.ip_name=KK.ip_name and resources_port.pci=KK.pci
+            ) as TABLA
+        ON  resources_port.root_id=TABLA.id
+    SET resources_port.switch_port=TABLA.switch_port
+    WHERE resources_port.root_id=TABLA.id;
+    END//
+    delimiter ;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+    echo "  ALTER TABLE \`of_ports_pci_correspondence\` \`resources_port\` \`ports\` DROP COLUMN \`switch_dpid\`"
+    for table in of_ports_pci_correspondence resources_port ports
+    do
+        [ $table == of_ports_pci_correspondence ] ||
+            echo "ALTER TABLE ${table} DROP INDEX vlan_switch_port, ADD UNIQUE INDEX vlan_switch_port (vlan, switch_port);" | $DBCMD ||
+            ( echo "ERROR. Aborted!" && exit -1 )
+        echo "ALTER TABLE \`${table}\` DROP COLUMN \`switch_dpid\`;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+        switch_port_size=12
+        [ $table == of_ports_pci_correspondence ] && switch_port_size=50
+        echo "ALTER TABLE ${table} CHANGE COLUMN switch_port switch_port VARCHAR(${switch_port_size}) NULL DEFAULT NULL;" | $DBCMD || 
+            ( echo "ERROR. Aborted!" && exit -1 )
+    done
+    echo "DELETE FROM \`schema_version\` WHERE \`version_int\` = '2'" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
 }
 #TODO ... put funtions here
 
