@@ -1497,6 +1497,7 @@ def http_put_openflow_id(network_id):
     data={'result' : str(result)+" nets updates"}
     return format_out(data)
 
+@bottle.route(url_base + '/networks/openflow/clear', method='DELETE')
 @bottle.route(url_base + '/networks/clear/openflow', method='DELETE')
 def http_clear_openflow_rules():
     '''To make actions over the net. The action is to delete ALL openflow rules

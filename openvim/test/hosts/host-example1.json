@@ -121,6 +121,8 @@
                     "source_name": "p2p1",
                     "Mbps": 10000,
                     "pci": "0000:44:00.0",
+                    "switch_port": "port0/4",
+                    "switch_dpid": "00:01:02:03:04:05:06:07",
                     "sriovs": [
                         {
                             "mac": "4e:2e:a5:ab:7f:4b",
@@ -177,6 +179,8 @@
                     "source_name": "p2p2",
                     "Mbps": 10000,
                     "pci": "0000:44:00.1",
+                    "switch_port": "port0/5",
+                    "switch_dpid": "00:01:02:03:04:05:06:07",
                     "sriovs": [
                         {
                             "mac": "ea:b6:5d:98:d9:86",
@@ -233,6 +237,8 @@
                     "source_name": "p3p2",
                     "Mbps": 10000,
                     "pci": "0000:43:00.1",
+                    "switch_port": "port0/7",
+                    "switch_dpid": "00:01:02:03:04:05:06:07",
                     "sriovs": [
                         {
                             "mac": "2e:b7:dc:aa:9a:35",
@@ -289,6 +295,8 @@
                     "source_name": "p3p1",
                     "Mbps": 10000,
                     "pci": "0000:43:00.0",
+                    "switch_port": "port0/6",
+                    "switch_dpid": "00:01:02:03:04:05:06:07",
                     "sriovs": [
                         {
                             "mac": "5e:2e:05:67:7b:05",
@@ -452,6 +460,8 @@
                     "source_name": "p5p1",
                     "Mbps": 10000,
                     "pci": "0000:04:00.0",
+                    "switch_port": "port0/8",
+                    "switch_dpid": "00:01:02:03:04:05:06:07",
                     "sriovs": [
                         {
                             "mac": "46:28:47:80:9d:fe",
@@ -508,6 +518,8 @@
                     "source_name": "p5p2",
                     "Mbps": 10000,
                     "pci": "0000:04:00.1",
+                    "switch_port": "port0/9",
+                    "switch_dpid": "00:01:02:03:04:05:06:07",
                     "sriovs": [
                         {
                             "mac": "f2:c8:15:59:9d:9e",
@@ -564,6 +576,8 @@
                     "source_name": "p7p1",
                     "Mbps": 10000,
                     "pci": "0000:06:00.0",
+                    "switch_port": "port0/10",
+                    "switch_dpid": "00:01:02:03:04:05:06:07",
                     "sriovs": [
                         {
                             "mac": "6e:51:ee:3c:66:fa",
@@ -620,6 +634,8 @@
                     "source_name": "p7p2",
                     "Mbps": 10000,
                     "pci": "0000:06:00.1",
+                    "switch_port": "port0/11",
+                    "switch_dpid": "00:01:02:03:04:05:06:07",
                     "sriovs": [
                         {
                             "mac": "76:28:ae:b5:31:25",

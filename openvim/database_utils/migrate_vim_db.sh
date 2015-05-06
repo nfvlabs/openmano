@@ -136,7 +136,7 @@ DBCMD="mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ $DBNAME"
 #check that the database seems a openvim database
 if ! echo -e "show create table instances;\nshow create table numas" | $DBCMD >/dev/null 2>&1
 then
-    echo "database $DBNAME does not seem to be an openvim database" >&2
+    echo "    database $DBNAME does not seem to be an openvim database" >&2
     exit -1;
 fi
 
@@ -147,7 +147,7 @@ then
 else 
     DATABASE_VER_NUM=`echo "select max(version_int) from schema_version;" | $DBCMD | tail -n+2` 
     DATABASE_VER=`echo "select version from schema_version where version_int='$DATABASE_VER_NUM';" | $DBCMD | tail -n+2` 
-    [ "$DATABASE_VER_NUM" -lt 0 -o "$DATABASE_VER_NUM" -gt 100 ] && echo "Error can not get database version ($DATABASE_VER?)" >&2 && exit -1
+    [ "$DATABASE_VER_NUM" -lt 0 -o "$DATABASE_VER_NUM" -gt 100 ] && echo "    Error can not get database version ($DATABASE_VER?)" >&2 && exit -1
     #echo "_${DATABASE_VER_NUM}_${DATABASE_VER}"
 fi
 
@@ -160,8 +160,8 @@ DATABASE_TARGET_VER_NUM=0
 
 
 function upgrade_to_1(){
-    echo "upgrade database from version 0.0 to version 0.1"
-    echo "  CREATE TABLE \`schema_version\`"
+    echo "    upgrade database from version 0.0 to version 0.1"
+    echo "      CREATE TABLE \`schema_version\`"
     echo "CREATE TABLE \`schema_version\` (
 	\`version_int\` INT NOT NULL COMMENT 'version as a number. Must not contain gaps',
 	\`version\` VARCHAR(20) NOT NULL COMMENT 'version as a text',
@@ -175,20 +175,20 @@ function upgrade_to_1(){
 	ENGINE=InnoDB;" | $DBCMD  || ( echo "ERROR. Aborted!" && exit -1 )
     echo "INSERT INTO \`schema_version\` (\`version_int\`, \`version\`, \`openvim_ver\`, \`comments\`, \`date\`)
 	 VALUES (1, '0.1', '0.2.00', 'insert schema_version; alter nets with last_error column', '2015-05-05');" | $DBCMD
-    echo "  ALTER TABLE \`nets\`, ADD COLUMN \`last_error\`"
+    echo "      ALTER TABLE \`nets\`, ADD COLUMN \`last_error\`"
     echo "ALTER TABLE \`nets\` 
          ADD COLUMN \`last_error\` VARCHAR(200) NULL AFTER \`status\`;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
 }
 function downgrade_from_1(){
-    echo "downgrade database from version 0.1 to version 0.0"
-    echo "  ALTER TABLE \`nets\` DROP COLUMN \`last_error\`"
+    echo "    downgrade database from version 0.1 to version 0.0"
+    echo "      ALTER TABLE \`nets\` DROP COLUMN \`last_error\`"
     echo "ALTER TABLE \`nets\` DROP COLUMN \`last_error\`;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
-    echo "  DROP TABLE \`schema_version\`"
+    echo "      DROP TABLE \`schema_version\`"
     echo "DROP TABLE \`schema_version\`;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
 }
 function upgrade_to_2(){
-    echo "upgrade database from version 0.1 to version 0.2"
-    echo "  ALTER TABLE \`of_ports_pci_correspondence\` \`resources_port\` \`ports\` ADD COLUMN \`switch_dpid\`"
+    echo "    upgrade database from version 0.1 to version 0.2"
+    echo "      ALTER TABLE \`of_ports_pci_correspondence\` \`resources_port\` \`ports\` ADD COLUMN \`switch_dpid\`"
     for table in of_ports_pci_correspondence resources_port ports
     do
         echo "ALTER TABLE \`${table}\`
@@ -199,7 +199,7 @@ function upgrade_to_2(){
             echo "ALTER TABLE ${table} DROP INDEX vlan_switch_port, ADD UNIQUE INDEX vlan_switch_port (vlan, switch_port, switch_dpid);" | $DBCMD ||
             ( echo "ERROR. Aborted!" && exit -1 )
     done
-    echo "  UPDATE procedure UpdateSwitchPort"
+    echo "      UPDATE procedure UpdateSwitchPort"
     echo "DROP PROCEDURE IF EXISTS UpdateSwitchPort;
     delimiter //
     CREATE PROCEDURE UpdateSwitchPort() MODIFIES SQL DATA SQL SECURITY INVOKER
@@ -227,8 +227,8 @@ function upgrade_to_2(){
 	 VALUES (2, '0.2', '0.2.03', 'update Procedure UpdateSwitchPort', '2015-05-06');" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
 }
 function downgrade_from_2(){
-    echo "downgrade database from version 0.2 to version 0.1"
-    echo "  UPDATE procedure UpdateSwitchPort"
+    echo "    downgrade database from version 0.2 to version 0.1"
+    echo "      UPDATE procedure UpdateSwitchPort"
     echo "DROP PROCEDURE IF EXISTS UpdateSwitchPort;
     delimiter //
     CREATE PROCEDURE UpdateSwitchPort() MODIFIES SQL DATA SQL SECURITY INVOKER
@@ -245,7 +245,7 @@ function downgrade_from_2(){
     WHERE resources_port.root_id=TABLA.id;
     END//
     delimiter ;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
-    echo "  ALTER TABLE \`of_ports_pci_correspondence\` \`resources_port\` \`ports\` DROP COLUMN \`switch_dpid\`"
+    echo "      ALTER TABLE \`of_ports_pci_correspondence\` \`resources_port\` \`ports\` DROP COLUMN \`switch_dpid\`"
     for table in of_ports_pci_correspondence resources_port ports
     do
         [ $table == of_ports_pci_correspondence ] ||

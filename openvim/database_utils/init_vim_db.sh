@@ -108,6 +108,9 @@ done
 echo "    loading ${DIRNAME}/${DBNAME}_structure.sql"
 mysql  $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ < ${DIRNAME}/${DBNAME}_structure.sql
 
+echo "    migrage database version"
+${DIRNAME}/migrate_vim_db.sh $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ -d$DBNAME
+
 echo  "    loading ${DIRNAME}/host_ranking.sql"
 mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_  $DBNAME < ${DIRNAME}/host_ranking.sql
 
@@ -117,7 +120,4 @@ mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_  $DBNAME < ${DIRNAME}/of_ports_pci_cor
 
 echo  "    loading ${DIRNAME}/nets.sql"
 mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_  $DBNAME < ${DIRNAME}/nets.sql
-
-echo "    migrage database version"
-${DIRNAME}/migrate_vim_db.sh $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ -d$DBNAME
 

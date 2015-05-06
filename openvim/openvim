@@ -234,7 +234,7 @@ def vim_delete(url):
             return -vim_response.status_code, vim_response.text
     except requests.exceptions.RequestException, e:
         return -1, " Exception DELETE at '"+url+"' " + str(e.message)
-    return 1, None
+    return 1, vim_response.json()
 
 def vim_action(url, payload):
     '''
@@ -515,7 +515,7 @@ def element_new(args):
         if uuid is None:
             uuid=item.get('uuid', 'uuid-not-found?')
         name = item.get('name', '')
-        print " " + uuid +"   "+ name + "   Created"
+        print " " + uuid +"   "+ name.ljust(20) + " Created"
         for e in ('warning', 'error', 'last_error'):
             if e in item:    print e + "\n" + item[e]
     return
@@ -582,9 +582,9 @@ def element_action(args):
             url=url_admin
             r,c = vim_action(url + "/" + uuid + "/action", payload)
         if r<0:
-            print " " + uuid +"   "+ name + "   " + c
+            print " " + uuid +"   "+ name.ljust(20) + "   " + c
         else:
-            print " " + uuid +"   "+ name + "   "+ args.action
+            print " " + uuid +"   "+ name.ljust(20) + "   "+ args.action
     return
 
 def element_edit(args):
@@ -647,9 +647,9 @@ def element_edit(args):
             url=url_admin
             r,c = vim_edit(url + "/" + uuid, payload)
         if r<0:
-            print " " + uuid +"   "+ name + "   " + c
+            print " " + uuid +"   "+ name.ljust(20) + " " + c
         else:
-            print " " + uuid +"   "+ name + "   edited"
+            print " " + uuid +"   "+ name.ljust(20) + " edited"
     return
 
 def element_action_edit(args):
@@ -721,9 +721,9 @@ def element_delete(args):
             url=url_admin
             r,c = vim_delete(url + "/" + uuid)
         if r<0:
-            print " " + uuid +"   "+ name + "   " + c
+            print " " + uuid +"   "+ name.ljust(20) + " " + c
         else:
-            print " " + uuid +"   "+ name + "   deleted"
+            print " " + uuid +"   "+ name.ljust(20) + " deleted"
     return
 
 def element_list(args):
@@ -764,9 +764,9 @@ def element_list(args):
             verbose += args.verbose
         for item in item_list:
             extra=""
-            if args.element=="servers" or args.element=="networks": extra = "   "+item['status']
-            if args.element in ("hosts","networks","ports") and not item['admin_state_up']: extra += "   admin_state_up=false"
-            print item['id']+"   "+item['name'] + extra
+            if args.element=="servers" or args.element=="networks": extra = " "+item['status']
+            if args.element in ("hosts","networks","ports") and not item['admin_state_up']: extra += " admin_state_up=false"
+            print item['id']+"   "+item['name'].ljust(20) + extra
             if verbose>0:
                 r2,c2 = vim_read(url + "/"+ item['id'])
                 if r2>0:
@@ -799,6 +799,37 @@ def openflow_action(args):
     if args.action=='port-list':
         url = "http://%s:%s/openvim/networks/openflow/ports" %(vim_config["HOST"], vim_config["PORT"])
         r,c = vim_read(url)
+    elif args.action=='reinstall':
+        if "ADMIN_PORT" not in vim_config:
+            print "OPENVIM_ADMIN_PORT variable not defined"
+            return
+        if args.name!=None:
+            url = "http://%s:%s/openvim/networks" %(vim_config["HOST"], vim_config["PORT"])
+            if check_valid_uuid(args.name):
+                url += "?id=" + str(args.name)
+            else:
+                url += "?name=" + str(args.name)
+            r,c = vim_read(url)
+            if r<0:           
+                print "Error:", c
+                return
+            if len (c["networks"]) == 0:
+                print "  Network not found"
+                return
+            if len (c["networks"]) > 1:
+                print "  More than one net with this name found. Use uuid instead of name to concretize"
+                return
+            network = c["networks"][0]["id"]
+        else:
+            network="all"
+        url = "http://%s:%s/openvim/networks/%s/openflow" %(vim_config["HOST"], vim_config["ADMIN_PORT"], network)
+        r,c = vim_edit(url, None)
+    elif args.action=='clear-all':
+        if "ADMIN_PORT" not in vim_config:
+            print "OPENVIM_ADMIN_PORT variable not defined"
+            return
+        url = "http://%s:%s/openvim/networks/openflow/clear" %(vim_config["HOST"], vim_config["ADMIN_PORT"])
+        r,c = vim_delete(url)
     else:
         return
     if r<0:           
@@ -906,6 +937,13 @@ if __name__=="__main__":
     #openflow rules
     openflow_list_action = subparsers.add_parser("openflow-port-list", help="list openflow switch ports name")
     openflow_list_action.set_defaults(func=openflow_action, action="port-list")
+    
+    openflow_list_action = subparsers.add_parser("openflow-clear-all", help="removes all openflow rules")
+    openflow_list_action.set_defaults(func=openflow_action, action="clear-all")
+
+    openflow_list_action = subparsers.add_parser("openflow-network-resinstall", help="reinstall the openflow rules for a network")
+    openflow_list_action.add_argument("name", nargs='?', help="network name, if missing all")
+    openflow_list_action.set_defaults(func=openflow_action, action="reinstall")
     
     argcomplete.autocomplete(main_parser)
     

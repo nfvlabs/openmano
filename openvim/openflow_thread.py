@@ -161,7 +161,7 @@ class openflow_thread(threading.Thread):
                 self.db_lock.release()
 
             elif task[0] == 'clear-all':
-                self.clear_all_flows(task[1])
+                self.clear_all_flows()
             elif task[0] == 'exit':
                 self.terminate()
                 return 0

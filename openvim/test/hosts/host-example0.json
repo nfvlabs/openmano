@@ -226,6 +226,8 @@
                     "source_name": "eth8",
                     "Mbps": 10000,
                     "pci": "0000:08:00.0",
+                    "switch_port": "port0/2",
+                    "switch_dpid": "00:01:02:03:04:05:06:07",
                     "sriovs": [
                         {
                             "mac": "a6:12:27:bd:2d:ef",
@@ -282,6 +284,8 @@
                     "source_name": "eth17",
                     "Mbps": 10000,
                     "pci": "0000:08:00.1",
+                    "switch_port": "port0/3",
+                    "switch_dpid": "00:01:02:03:04:05:06:07",
                     "sriovs": [
                         {
                             "mac": "92:0e:27:0c:ad:eb",
@@ -338,6 +342,8 @@
                     "source_name": "eth26",
                     "Mbps": 10000,
                     "pci": "0000:06:00.0",
+                    "switch_port": "port0/0",
+                    "switch_dpid": "00:01:02:03:04:05:06:07",
                     "sriovs": [
                         {
                             "mac": "02:79:15:02:ad:cc",
@@ -394,6 +400,8 @@
                     "source_name": "eth35",
                     "Mbps": 10000,
                     "pci": "0000:06:00.1",
+                    "switch_port": "port0/1",
+                    "switch_dpid": "00:01:02:03:04:05:06:07",
                     "sriovs": [
                         {
                             "mac": "a2:08:55:fe:c5:db",
