@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ##
-# Copyright 2015 TelefÃ³nica InvestigaciÃ³n y Desarrollo, S.A.U.
+# Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
 # This file is part of openmano
 # All Rights Reserved.
 #
