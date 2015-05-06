@@ -894,7 +894,15 @@ class vim_db():
                 with self.con:
                     #delete host
                     self.cur = self.con.cursor()
-                    cmd = "DELETE FROM %s WHERE %s = '%s'" % (table, key, value)
+                    cmd = "DELETE FROM %s" % (table)
+                    if key!=None:
+                        if value!=None:
+                            cmd += " WHERE %s = '%s'" % (key, value)
+                        else:
+                            cmd += " WHERE %s is null" % (key)
+                    else: #delete all
+                        pass
+                    print cmd
                     if self.debug: print cmd
                     self.cur.execute(cmd)
                     deleted = self.cur.rowcount

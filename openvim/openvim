@@ -799,12 +799,15 @@ def openflow_action(args):
     if args.action=='port-list':
         url = "http://%s:%s/openvim/networks/openflow/ports" %(vim_config["HOST"], vim_config["PORT"])
         r,c = vim_read(url)
-    elif args.action=='reinstall':
-        if "ADMIN_PORT" not in vim_config:
-            print "OPENVIM_ADMIN_PORT variable not defined"
-            return
+    elif args.action=='rules-list' or args.action=='reinstall':
+        PORT = vim_config["PORT"]
+        if args.action=='reinstall':
+            if "ADMIN_PORT" not in vim_config:
+                print "OPENVIM_ADMIN_PORT variable not defined"
+                return
+            PORT = vim_config["ADMIN_PORT"]
         if args.name!=None:
-            url = "http://%s:%s/openvim/networks" %(vim_config["HOST"], vim_config["PORT"])
+            url = "http://%s:%s/openvim/networks" %(vim_config["HOST"], PORT)
             if check_valid_uuid(args.name):
                 url += "?id=" + str(args.name)
             else:
@@ -822,8 +825,11 @@ def openflow_action(args):
             network = c["networks"][0]["id"]
         else:
             network="all"
-        url = "http://%s:%s/openvim/networks/%s/openflow" %(vim_config["HOST"], vim_config["ADMIN_PORT"], network)
-        r,c = vim_edit(url, None)
+        url = "http://%s:%s/openvim/networks/%s/openflow" %(vim_config["HOST"], PORT, network)
+        if args.action=='reinstall':
+            r,c = vim_edit(url, None)
+        else:
+            r,c = vim_read(url)
     elif args.action=='clear-all':
         if "ADMIN_PORT" not in vim_config:
             print "OPENVIM_ADMIN_PORT variable not defined"
@@ -941,10 +947,14 @@ if __name__=="__main__":
     openflow_list_action = subparsers.add_parser("openflow-clear-all", help="removes all openflow rules")
     openflow_list_action.set_defaults(func=openflow_action, action="clear-all")
 
-    openflow_list_action = subparsers.add_parser("openflow-network-resinstall", help="reinstall the openflow rules for a network")
-    openflow_list_action.add_argument("name", nargs='?', help="network name, if missing all")
+    openflow_list_action = subparsers.add_parser("openflow-net-resinstall", help="reinstall the openflow rules for a network")
+    openflow_list_action.add_argument("name", nargs='?', help="network name, if missing all networks")
     openflow_list_action.set_defaults(func=openflow_action, action="reinstall")
     
+    openflow_list_action = subparsers.add_parser("openflow-net-list", help="list installed openflow rules for a network")
+    openflow_list_action.add_argument("name", nargs='?', help="network name, if missing all networks")
+    openflow_list_action.set_defaults(func=openflow_action, action="rules-list")
+
     argcomplete.autocomplete(main_parser)
     
     try:

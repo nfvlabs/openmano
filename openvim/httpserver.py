@@ -1386,13 +1386,12 @@ def http_post_networks():
     
     result, content = my.db.new_row('nets', network, True, True)
     
-            
     if result >= 0:
         if bridge_net!=None:
             bridge_net[3] = content
-        print "http_post_networks error %d %s" % (result, content)
         return http_get_network_id(content)
     else:
+        print "http_post_networks error %d %s" % (result, content)
         bottle.abort(-result, content)
         return
 
@@ -1467,6 +1466,24 @@ def http_delete_network_id(network_id):
 #
 # OPENFLOW
 #
+@bottle.route(url_base + '/networks/<network_id>/openflow', method='GET')
+def http_get_openflow_id(network_id):
+    '''To obtain the list of openflow rules of a network
+    '''
+    my = config_dic['http_threads'][ threading.current_thread().name ]
+    #ignore input data
+    if network_id=='all':
+        where_={}
+    else:
+        where_={"net_id": network_id}
+    result, content = my.db.get_table(SELECT=("name","net_id","priority","vlan_id","ingress_port","src_mac","dst_mac","actions"),
+            WHERE=where_, FROM='of_flows')
+    if result < 0:
+        bottle.abort(-result, content)
+        return
+    data={'openflow-rules' : content}
+    return format_out(data)
+
 @bottle.route(url_base + '/networks/<network_id>/openflow', method='PUT')
 def http_put_openflow_id(network_id):
     '''To make actions over the net. The action is to reinstall the openflow rules
@@ -1513,7 +1530,7 @@ def http_clear_openflow_rules():
         bottle.abort(HTTP_Internal_Server_Error, c)
         return
 
-    data={'result' : " All openflow rules have been cleared"}
+    data={'result' : " Clearing openflow rules in process"}
     return format_out(data)
 
 @bottle.route(url_base + '/networks/openflow/ports', method='GET')

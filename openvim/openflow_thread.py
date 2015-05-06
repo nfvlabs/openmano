@@ -282,14 +282,16 @@ class openflow_thread(threading.Thread):
 
 
     def clear_all_flows(self):
-        if self.test:
-            return 0, None
         try:
-            of_response = requests.get(self.url+"/wm/staticflowentrypusher/clear/"+str(self.dpid)+"/json")
-            print self.name, ": clear_all_flows:", of_response
-            if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
-
+            if not self.test:
+                of_response = requests.get(self.url+"/wm/staticflowentrypusher/clear/"+str(self.dpid)+"/json")
+                print self.name, ": clear_all_flows:", of_response
+                if of_response.status_code != 200:
+                    raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+            #remove from database
+            self.db_lock.acquire()
+            self.db.delete_row_by_key('of_flows', None, None) #this will delete all lines
+            self.db_lock.release()
             return 0, None
         except requests.exceptions.RequestException, e:
             print self.name, ": clear_all_flows Exception:", str(e)
