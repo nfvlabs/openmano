@@ -902,7 +902,6 @@ class vim_db():
                             cmd += " WHERE %s is null" % (key)
                     else: #delete all
                         pass
-                    print cmd
                     if self.debug: print cmd
                     self.cur.execute(cmd)
                     deleted = self.cur.rowcount
