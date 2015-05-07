@@ -33,8 +33,9 @@ It loads the configuration file and launches the http_server thread that will li
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$26-aug-2014 11:09:29$"
-__version__="0.2.0-r355"
-version_date="Mar 2015"
+__version__="0.2.2-r378"
+version_date="May 2015"
+database_version="0.1"      #expected database schema version
 
 import httpserver
 import time
@@ -161,6 +162,13 @@ if __name__=="__main__":
         mydb = nfvo_db.nfvo_db();
         if mydb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
             print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
+            exit(-1)
+        r = mydb.get_db_version()
+        if r[0]<0:
+            print "Error DATABASE is not a MANO one or it is a '0.0' version. Try to upgrade to version '%s' with './database_utils/migrate_mano_db.sh'" % database_version
+            exit(-1)
+        elif r[1]!=database_version:
+            print "Error DATABASE wrong version '%s'. Try to upgrade/downgrade to version '%s' with './database_utils/migrate_mano_db.sh'" % (r[1], database_version)
             exit(-1)
         
         nfvo.global_config=global_config

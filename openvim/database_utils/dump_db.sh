@@ -36,14 +36,14 @@ DIRNAME=`dirname $0`
  
 function usage(){
     echo -e "Usage: $0 OPTIONS"
-    echo -e "Dump openvim database content"
+    echo -e "  Dumps openvim database content"
     echo -e "  OPTIONS"
-    echo -e "     -u USER  database user (it tries '$DBUSER' by default, asks if fail)"
-    echo -e "     -p PASS  database password. Asks if fail"
-    echo -e "     -P PORT  database port ($DBPORT by default)"
-    echo -e "     -h HOST  database host ($DBHOST by default)"
-    echo -e "     -d NAME  database name (it tries '$DBNAME' by default, asks if fail)"
-    echo -e "     --help   show this help"
+    echo -e "     -u USER  database user. '$DBUSER' by default. Prompts if DB access fails"
+    echo -e "     -p PASS  database password. 'No password' by default. Prompts if DB access fails"
+    echo -e "     -P PORT  database port. '$DBPORT' by default"
+    echo -e "     -h HOST  database host. '$DBHOST' by default"
+    echo -e "     -d NAME  database name. '$DBNAME' by default.  Prompts if DB access fails"
+    echo -e "     --help   shows this help"
 }
 
 while getopts ":u:p:P:h:-:" o; do
@@ -90,7 +90,7 @@ DBPASS_=""
 [ -n "$DBPASS" ] && DBPASS_="-p$DBPASS"
 DBHOST_="-h$DBHOST"
 DBPORT_="-P$DBPORT"
-while !  echo ";" | mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ $DBNAME >/dev/null
+while !  echo ";" | mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ $DBNAME >/dev/null 2>&1
 do
         [ -n "$logintry" ] &&  echo -e "\nInvalid database credentials!!!. Try again (Ctrl+c to abort)"
         [ -z "$logintry" ] &&  echo -e "\nProvide database name and credentials"
@@ -106,14 +106,17 @@ do
 done
 
  
-#mysqldump -h $HOST -P $PORT -u $MUSER -p$MPASS --no-data $MDB > "$MDB"_structure.sql
+#echo structure, including the content of schema_version
 mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --no-data --add-drop-table --add-drop-database --routines --databases $DBNAME > ${DIRNAME}/${DBNAME}_structure.sql
 echo -e "\n\n\n\n" >> ${DIRNAME}/${DBNAME}_structure.sql
 mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --no-create-info $DBNAME --tables schema_version 2>/dev/null  >> ${DIRNAME}/${DBNAME}_structure.sql
 echo "    ${DIRNAME}/${DBNAME}_structure.sql"
 
+#echo only data
 mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --no-create-info $DBNAME > ${DIRNAME}/${DBNAME}_data.sql
 echo "    ${DIRNAME}/${DBNAME}_data.sql"
 
+#echo all
 mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --add-drop-table --add-drop-database --routines --databases $DBNAME > ${DIRNAME}/${DBNAME}_all.sql
 echo "    ${DIRNAME}/${DBNAME}_all.sql"
+

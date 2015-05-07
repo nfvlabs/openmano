@@ -71,6 +71,7 @@ class vim_db():
         except mdb.Error, e:
             print "Error connecting to DB %s@%s -> %s Error %d: %s" % (self.user, self.host, self.database, e.args[0], e.args[1])
             return -1
+
     def get_db_version(self):
         ''' Obtain the database schema version.
         Return: (negative, text) if error or version 0.0 where schema_version table is missing

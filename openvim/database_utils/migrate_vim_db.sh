@@ -39,15 +39,15 @@ DIRNAME=`dirname $0`
 
 function usage(){
     echo -e "Usage: $0 OPTIONS  [{openvim_version}]"
-    echo -e "  Upgrade/Downgrade openvim database preserving the content"
-    echo -e "  if openvim_version is not provided it tries to get from openvimd.py using relative path"
+    echo -e "  Upgrades/Downgrades openvim database preserving the content"
+    echo -e "   if openvim_version is not provided it tries to get from openvimd.py using relative path"
     echo -e "  OPTIONS"
-    echo -e "     -u USER  database user (it tries '$DBUSER' by default, asks if fail)"
-    echo -e "     -p PASS  database password. Asks if fail"
-    echo -e "     -P PORT  database port ($DBPORT by default)"
-    echo -e "     -h HOST  database host ($DBHOST by default)"
-    echo -e "     -d NAME  database name (it tries '$DBNAME' by default, asks if fail)"
-    echo -e "     --help   show this help"
+    echo -e "     -u USER  database user. '$DBUSER' by default. Prompts if DB access fails"
+    echo -e "     -p PASS  database password. 'No password' by default. Prompts if DB access fails"
+    echo -e "     -P PORT  database port. '$DBPORT' by default"
+    echo -e "     -h HOST  database host. '$DBHOST' by default"
+    echo -e "     -d NAME  database name. '$DBNAME' by default.  Prompts if DB access fails"
+    echo -e "     --help   shows this help"
 }
 
 while getopts ":u:p:P:h:d:-:" o; do
@@ -96,7 +96,7 @@ then
     OPENVIM_VER=`${DIRNAME}/../openvimd.py -v`
     OPENVIM_VER=${OPENVIM_VER%%-r*}
     OPENVIM_VER=${OPENVIM_VER##*version }
-    echo "Detected openvim version $OPENVIM_VER"
+    echo "    Detected openvim version $OPENVIM_VER"
 fi
 VERSION_1=`echo $OPENVIM_VER | cut -f 1 -d"."`
 VERSION_2=`echo $OPENVIM_VER | cut -f 2 -d"."`
@@ -107,7 +107,7 @@ then
     [ -z "$1" ] && echo "Can not get openvim version" >&2
     exit -1
 fi
-OPENVIM_VER_NUM="${VERSION_1}${VERSION_2}${VERSION_3}"
+OPENVIM_VER_NUM=`printf "%d%03d%03d" ${VERSION_1} ${VERSION_2} ${VERSION_3}`
 
 #check and ask for database user password
 DBUSER_="-u$DBUSER"
@@ -154,8 +154,8 @@ fi
 
 #GET DATABASE TARGET VERSION
 DATABASE_TARGET_VER_NUM=0
-[ $OPENVIM_VER_NUM -gt 0191 ] && DATABASE_TARGET_VER_NUM=1   #0.2.00 =>  1
-[ $OPENVIM_VER_NUM -ge 0203 ] && DATABASE_TARGET_VER_NUM=2   #0.2.03 =>  2
+[ $OPENVIM_VER_NUM -gt 1091 ] && DATABASE_TARGET_VER_NUM=1   #>0.1.91 =>  1
+[ $OPENVIM_VER_NUM -ge 2003 ] && DATABASE_TARGET_VER_NUM=2   #0.2.03 =>  2
 #TODO ... put next versions here
 
 
@@ -262,7 +262,7 @@ function downgrade_from_2(){
 #TODO ... put funtions here
 
 
-[ $DATABASE_TARGET_VER_NUM -eq $DATABASE_VER_NUM ] && echo "current database version $DATABASE_VER is ok"
+[ $DATABASE_TARGET_VER_NUM -eq $DATABASE_VER_NUM ] && echo "    current database version $DATABASE_VER is ok"
 #UPGRADE DATABASE step by step
 while [ $DATABASE_TARGET_VER_NUM -gt $DATABASE_VER_NUM ]
 do

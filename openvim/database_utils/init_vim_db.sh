@@ -35,15 +35,15 @@ DIRNAME=`dirname $0`
 
 function usage(){
     echo -e "Usage: $0 OPTIONS"
-    echo -e "Inits openvim database; deletes previous one and loads from ${DBNAME}_structure.sql"
-    echo -e "    and data from host_ranking.sql, nets.sql, of_ports_pci_correspondece*.sql"
+    echo -e "  Inits openvim database; deletes previous one and loads from ${DBNAME}_structure.sql"
+    echo -e "   and data from host_ranking.sql, nets.sql, of_ports_pci_correspondece*.sql"
     echo -e "  OPTIONS"
-    echo -e "     -u USER  database user (it tries '$DBUSER' by default, asks if fail)"
-    echo -e "     -p PASS  database password. Asks if fail"
-    echo -e "     -P PORT  database port ($DBPORT by default)"
-    echo -e "     -h HOST  database host ($DBHOST by default)"
-#    echo -e "     -d NAME  database name (it tries '$DBNAME' by default, asks if fail)"
-    echo -e "     --help   show this help"
+    echo -e "     -u USER  database user. '$DBUSER' by default. Prompts if DB access fails"
+    echo -e "     -p PASS  database password. 'No password' by default. Prompts if DB access fails"
+    echo -e "     -P PORT  database port. '$DBPORT' by default"
+    echo -e "     -h HOST  database host. '$DBHOST' by default"
+#    echo -e "     -d NAME  database name. '$DBNAME' by default.  Prompts if DB access fails"
+    echo -e "     --help   shows this help"
 }
 
 while getopts ":u:p:P:h:-:" o; do
@@ -90,7 +90,7 @@ DBPASS_=""
 [ -n "$DBPASS" ] && DBPASS_="-p$DBPASS"
 DBHOST_="-h$DBHOST"
 DBPORT_="-P$DBPORT"
-while !  echo ";" | mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ >/dev/null
+while !  echo ";" | mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ >/dev/null 2>&1
 do
         [ -n "$logintry" ] &&  echo -e "\nInvalid database credentials!!!. Try again (Ctrl+c to abort)"
         [ -z "$logintry" ] &&  echo -e "\nProvide database credentials"
@@ -101,7 +101,7 @@ do
         read -e -s -p "mysql password: " DBPASS
         [ -n "$DBPASS" ] && DBPASS_="-p$DBPASS"
         [ -z "$DBPASS" ] && DBPASS_=""
-        logintry="yes"
+        logintry="yes":
         echo
 done
 
