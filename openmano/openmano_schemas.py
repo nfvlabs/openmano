@@ -562,8 +562,8 @@ vnfc_schema = {
     "additionalProperties": False
 }
 
-vnfd_schema = {
-    "title":"vnf information schema",
+vnfd_schema_v01 = {
+    "title":"vnfd information schema v0.1",
     "$schema": "http://json-schema.org/draft-04/schema#",
     "type":"object",
     "properties":{
@@ -585,6 +585,33 @@ vnfd_schema = {
     },
     "required": ["vnf"],
     "additionalProperties": False
+}
+
+#Future VNFD schema to be defined
+vnfd_schema_v02 = {
+    "title":"vnfd information schema v0.2",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type":"object",
+    "properties":{
+        "version": {"type": "string", "pattern":"^v0.2$"},
+        "vnf":{
+            "type":"object",
+            "properties":{
+                "name": name_schema,
+            },
+            "required": ["name"],
+            "additionalProperties": True
+        }
+    },
+    "required": ["vnf", "version"],
+    "additionalProperties": False
+}
+
+vnfd_schema = {
+    "title":"vnfd information schema v0.2",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    #"oneOf": [vnfd_schema_v01, vnfd_schema_v02]
+    "oneOf": [vnfd_schema_v01]
 }
 
 get_processor_rankings_response_schema = {
@@ -610,8 +637,8 @@ get_processor_rankings_response_schema = {
 }
 
 
-scenario_new_schema = {
-    "title":"new scenario information schema",
+nsd_schema_v01 = {
+    "title":"network scenario descriptor information schema v0.1",
     "$schema": "http://json-schema.org/draft-04/schema#",
     "type":"object",
     "properties":{
@@ -654,6 +681,33 @@ scenario_new_schema = {
     },
     "required": ["name","topology"],
     "additionalProperties": False
+}
+
+#Future NSD schema to be defined
+nsd_schema_v02 = {
+    "title":"network scenario descriptor information schema v0.2",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type":"object",
+    "properties":{
+        "version": {"type": "string", "pattern":"^v0.2$"},
+        "topology":{
+            "type":"object",
+            "properties":{
+                "name": name_schema,
+            },
+            "required": ["name"],
+            "additionalProperties": True
+        }
+    },
+    "required": ["topology", "version"],
+    "additionalProperties": False
+}
+
+scenario_new_schema = {
+    "title":"new scenario information schema",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    #"oneOf": [nsd_schema_v01, nsd_schema_v02]
+    "oneOf": [nsd_schema_v01]
 }
 
 scenario_edit_schema = {

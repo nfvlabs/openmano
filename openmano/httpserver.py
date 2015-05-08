@@ -495,7 +495,7 @@ def http_delete_datacenter_id( datacenter_id):
         return format_out({"result":"datacenter " + data + " deleted"})
 
 @bottle.route(url_base + '/<tenant_id>/datacenters/<datacenter_id>', method='POST')
-def http_ssociate_datacenters(tenant_id, datacenter_id):
+def http_associate_datacenters(tenant_id, datacenter_id):
     '''associate an existing datacenter to a this tenant. '''
     #parse input data
     http_content = format_in( datacenter_associate_schema )
@@ -613,8 +613,8 @@ def http_post_vnfs(tenant_id):
     print "Parsing the YAML file of the VNF"
     #parse input data
     http_content = format_in( vnfd_schema )
-    r = af.remove_extra_items(http_content, vnfd_schema)
-    if r is not None: print "http_post_vnfs: Warning: remove extra items ", r
+    #r = af.remove_extra_items(http_content, vnfd_schema)
+    #if r is not None: print "http_post_vnfs: Warning: remove extra items ", r
     result, data = nfvo.new_vnf(mydb,tenant_id,http_content)
     if result < 0:
         print "http_post_vnfs error %d %s" % (-result, data)
