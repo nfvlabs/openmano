@@ -183,6 +183,9 @@ def new_image_at_vim(myvimURL, myvim, myvim_tenant, path, metadata, name, descri
 def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacenter=None,vim_tenant=None):
     global global_config
     
+    # TODO: With future versions of the VNFD, different code might be applied for each version.
+    # Depending on the new structure of the VNFD (identified by version in vnf_descriptor), we should have separate code for each version, or integrated code with small changes.  
+    
     # Step 1. Check the VNF descriptor
     #TODO:
     #WARNING!!!!!!!!!!!!!. For the moment, this check is dummy and returns 200
@@ -491,6 +494,9 @@ def get_hosts(mydb, nfvo_tenant_id):
     return result, datacenter
 
 def new_scenario(mydb, nfvo_tenant_id, topo):
+    # TODO: With future versions of the NSD, different code might be applied for each version.
+    # Depending on the new structure of the NSD (identified by version in topo), we should have separate code for each version, or integrated code with small changes.  
+
     result, vim_dict = get_vim(mydb, nfvo_tenant_id)
     if result < 0:
         return result, vim_dict
