@@ -76,7 +76,7 @@
 	 */
 	function addifaces( nfvobj, dicIfaces, edit){
 		var anchorsArray = null;
-		var maxConn = ((nfvobj["type"] == "VNF") ? 1 : 10); 
+		var maxConn = ((nfvobj["type"] == "VNF") ? 1 : 20); 
 		var ifaces = {};
 		nfvobj["bottom_ifaces"] = []; 
 		nfvobj["left_ifaces"]   = [];

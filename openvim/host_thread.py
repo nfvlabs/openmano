@@ -588,6 +588,8 @@ class host_thread(threading.Thread):
                 if windows_os:
                     text += self.tab() + "<target dev='vnet" + str(net_nb)+ "'/>" +\
                         self.tab() + "<alias name='net" + str(net_nb)+ "'/>"
+                elif model==None:
+                    text += self.tab() + "<model type='virtio'/>"
                 if v.get('mac_address', None) != None:
                     text+= self.tab() +"<mac address='" +v['mac_address']+ "'/>"
                 text += self.pci2xml(v.get('vpci',None))
