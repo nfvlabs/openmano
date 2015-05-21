@@ -589,7 +589,7 @@ class host_thread(threading.Thread):
                     text += self.tab() + "<target dev='vnet" + str(net_nb)+ "'/>" +\
                         self.tab() + "<alias name='net" + str(net_nb)+ "'/>"
                 elif model==None:
-                    text += self.tab() + "<model type='virtio'/>"
+                    text += self.tab() + "<model type='e1000'/>" #e1000 is more probable to be supported than 'virtio'
                 if v.get('mac_address', None) != None:
                     text+= self.tab() +"<mac address='" +v['mac_address']+ "'/>"
                 text += self.pci2xml(v.get('vpci',None))
