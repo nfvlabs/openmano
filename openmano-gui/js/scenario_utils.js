@@ -125,23 +125,28 @@
 				eth.bind("contextmenu", function(ep, event_) {
 					//var event_x= event_.screenX;
 					//var event_y= event_.screenY;
-					var vnfy=ep.endpoint.y-30;
-					var vnfx=ep.endpoint.x-30;
+					var vnfy=ep.endpoint.y - 30;
+					var vnfx=ep.endpoint.x - 40;
 					jsPlumbSelectedEndPoint = ep,
-					console.log("click en la interfaz :"+ep.name, vnfx, vnfy);
+					console.log("click iterface "+ep.name, vnfx, vnfy);
 					var newIfacePosition = $('<div>');
 					newIfacePosition.attr('id','Iface_Position').addClass('text_div');
 					newIfacePosition.append(
-						$('<img style="position:relative;margin-left: auto;margin-right: auto;margin-bottom:auto;margin-top:auto;display:inline" src="images/ifaces/IfacePosition.png" ></img>')
+						$('<img style="position:relative;display:inline" src="images/ifaces/IfacePosition.png" ></img>')
+						//$('<img style="position:relative;margin-left: auto;margin-right: auto;margin-bottom:auto;margin-top:auto;display:inline" src="images/ifaces/IfacePosition.png" ></img>')
 					);
 					newIfacePosition.css({'top': vnfy,'left': vnfx});
 					newIfacePosition.click(function(e){
-						//console.log(e.screenX - event_x, e.screenY-event_y);
+						//console.log(e.screenX - event_x+40, e.screenY-event_y+30);
 						var x = e.offsetX; //e.pageX - e.target.x;
 						var y = e.offsetY; //e.pageY - e.target.y;
+						if (x==undefined){ //firefox
+							x=e.originalEvent.layerX; 
+							y=e.originalEvent.layerY;
+						}
 						var vnfSelected = jsPlumbSelectedEndPoint.vnf;
 						var iface = vnfSelected[jsPlumbSelectedEndPoint.side + "_ifaces"][jsPlumbSelectedEndPoint.pos-1];
-						console.log(x +","+y+"    "+e.pageX+","+e.pageY);
+						//console.log(x +","+y+"    "+e.pageX+","+e.pageY);
 						console.log("removing iface", jsPlumbSelectedEndPoint.side, jsPlumbSelectedEndPoint.pos);
 						vnfSelected[jsPlumbSelectedEndPoint.side + "_ifaces"].splice(jsPlumbSelectedEndPoint.pos-1,1);
 						if (x<28 && y<28){         vnfSelected["left_ifaces"].splice(0,0,iface); console.log("left top");} 

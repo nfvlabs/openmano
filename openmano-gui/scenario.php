@@ -144,7 +144,8 @@
 		$(".lpnode").click(function(){
 			console.log("click on scenario " + this.id);
 			selected_item["uuid"] = this.id;
-			selected_item["name"] = this.innerText;
+			//selected_item["name"] = this.innerText; //not valid for firefox
+			selected_item["name"] = this.textContent;
 			selected_item["type"] = 'scenario';
 			console.log(selected_item["name"]);
 			$(".scenarioNew").show();
@@ -276,7 +277,7 @@
 	}
 	
 	function delete_scenario_instance(what){
-		var name = confirm("Delete " + what +" "+ selected_item.uuid +": " + selected_item.name + " ?");
+		var name = confirm("Delete " + what + " '" + selected_item.name + "' ?");
 		if (name == true) {
 		
 			$.ajaxSetup({headers:{'Accept':'application/yaml','Content-Type':'application/yaml'}});  //ALF
@@ -370,7 +371,7 @@
 	}
 
 	$("#editButton").click(function(e){ 
-		var result = confirm("Save changes of scenario "+ selected_item.uuid +": " + selected_item.name + " ?");
+		var result = confirm("Save changes of scenario '" + selected_item.name + "' ?");
 		if (result == true) {
 			var name =        $("#scenario_name").text();
 			var description = $("#scenario_description").text();
@@ -446,10 +447,10 @@
 	function start_reserve_scenario(start_reserve){
 		var prompt_;
 		if (start_reserve=="start")
-			prompt_ = "Deploy Scenario";
+			prompt_ = "Deploying scenario '";
 		else
-			prompt_ = "Deploy Scenario without startinfg VMs ";
-                var name = prompt(prompt_ + selected_item.uuid +": " + selected_item.name + " Insert a name?", selected_item.name);
+			prompt_ = "Deploying scenario without startinfg VMs '";
+                var name = prompt(prompt_ + selected_item.name + "'. Insert an instance name?", selected_item.name);
                 if (name != null) {
 
                         $.ajaxSetup({headers:{'Accept':'application/yaml','Content-Type':'application/yaml'}});  //ALF
