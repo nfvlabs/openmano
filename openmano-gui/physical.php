@@ -80,7 +80,7 @@ $(document).ready(function(){
 	$(".lpnode").click(function(){
 		console.log("click on host " + this.id);
 		selected_item["uuid"] = this.id;
-		selected_item["name"] = this.innerText;
+		selected_item["name"] = this.textContent;   //innerText is not valid for firefox;
 		selected_item["type"] = 'host';
 		console.log(selected_item["name"]);
 	
@@ -91,7 +91,7 @@ $(document).ready(function(){
 	$(".lpson").click(function(){
 		console.log("click on instance-scenario " + this.id);
 		selected_item["uuid"] = this.id;
-		selected_item["name"] = this.innerText;
+		selected_item["name"] = this.textContent;   //innerText is not valid for firefox;
 		selected_item["type"] = 'vm';
 		console.log(selected_item["name"]);
 		

@@ -144,8 +144,7 @@
 		$(".lpnode").click(function(){
 			console.log("click on scenario " + this.id);
 			selected_item["uuid"] = this.id;
-			//selected_item["name"] = this.innerText; //not valid for firefox
-			selected_item["name"] = this.textContent;
+			selected_item["name"] = this.textContent; //innerText is not valid for firefox
 			selected_item["type"] = 'scenario';
 			console.log(selected_item["name"]);
 			$(".scenarioNew").show();
@@ -160,7 +159,7 @@
 		$(".lpson").click(function(){
 			console.log("click on instance-scenario " + this.id);
 			selected_item["uuid"] = this.id;
-			selected_item["name"] = this.innerText;
+			selected_item["name"] = this.textContent;   //innerText is not valid for firefox
 			selected_item["type"] = 'instance';
 			console.log(selected_item["name"]);
 			$(".scenarioNew").hide();
