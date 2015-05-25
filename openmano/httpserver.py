@@ -305,7 +305,7 @@ def http_edit_tenant_id(tenant_id):
     if r is not None: print "http_edit_tenant_id: Warning: remove extra items ", r
     
     #obtain data, check that only one exist
-    result, content = mydb.get_table_by_uuid_name('tenants', tenant_id)
+    result, content = mydb.get_table_by_uuid_name('nfvo_tenants', tenant_id)
     if result < 0:
         print "http_edit_tenant_id error %d %s" % (result, content)
         bottle.abort(-result, content)
@@ -313,12 +313,12 @@ def http_edit_tenant_id(tenant_id):
     #edit data 
     tenant_id = content['uuid']
     where={'uuid': content['uuid']}
-    result, content = mydb.update_rows('tenants', http_content['tenant'], where)
+    result, content = mydb.update_rows('nfvo_tenants', http_content['tenant'], where)
     if result < 0:
         print "http_edit_tenant_id error %d %s" % (result, content)
         bottle.abort(-result, content)
 
-    return http_get_tenant_id('any', tenant_id)
+    return http_get_tenant_id(tenant_id)
 
 @bottle.route(url_base + '/tenants/<tenant_id>', method='DELETE')
 def http_delete_tenant_id(tenant_id):
@@ -606,7 +606,6 @@ def http_get_vnf_id(tenant_id,vnf_id):
             data['vnf']['external-connections'] = content
     return format_out(data)
 
-
 @bottle.route(url_base + '/<tenant_id>/vnfs', method='POST')
 def http_post_vnfs(tenant_id):
     '''insert a vnf into the catalogue. Creates the flavor and images in the VIM, and creates the VNF and its internal structure in the OPENMANO DB'''
@@ -621,7 +620,6 @@ def http_post_vnfs(tenant_id):
         bottle.abort(-result, data)
     else:
         return http_get_vnf_id(tenant_id,data)
-
             
 @bottle.route(url_base + '/<tenant_id>/vnfs/<vnf_id>', method='DELETE')
 def http_delete_vnf_id(tenant_id,vnf_id):

@@ -630,9 +630,9 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
             elif r==0:
                 print "nfvo.new_scenario Error" +error_text+ " is not present at database"
                 return -HTTP_Bad_Request, "unknown " +error_text+ " at " + error_pos
-            elif r>1:
-                print "nfvo.new_scenario Error more than one external_network for " +error_text+ " is present at database" 
-                return -HTTP_Bad_Request, "more than one external_network for " +error_text+ "at "+ error_pos + " Concrete with 'net_id'" 
+            #elif r>1:
+            #    print "nfvo.new_scenario Error more than one external_network for " +error_text+ " is present at database" 
+            #    return -HTTP_Bad_Request, "more than one external_network for " +error_text+ "at "+ error_pos + " Concrete with 'net_id'" 
             other_nets[k].update(net_db[0])
     
     net_list={}
@@ -770,12 +770,13 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
     myvimURL =  content['vim_url']
     myvim_tenant = content['vim_tenant_id']
     datacenter_id = content['datacenter_id']
+    datacenter_name = content['datacenter_name']
     vim_tenants_uuid = content['vim_tenants_uuid']
 
     myvim = vimconnector.vimconnector()
     
     print "Checking that the scenario_id exists and getting the scenario dictionary"
-    result, scenarioDict = mydb.get_scenario(scenario_id, nfvo_tenant)
+    result, scenarioDict = mydb.get_scenario(scenario_id, nfvo_tenant, datacenter_id)
     if result < 0:
         print "start_scenario error. Error interacting with NFVO DB"
         return result, scenarioDict
@@ -826,6 +827,15 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             auxNetDict['scenario'][sce_net['uuid']] = network_id
             instanceNetList.append(network_id)
         else:
+            if sce_net['vim_id'] == None:
+                error_text = "Error, datacenter '%s' can not contian external network '%s'." % (datacenter_name, sce_net['name'])
+                result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList)
+                if result2:
+                    error_text += " Rollback successful."
+                else:
+                    error_text += " Rollback fail: you need to access VIM and delete manually: " + message
+                print "start_scenario: " + error_text
+                return -HTTP_Bad_Request, error_text
             print "Using existent VIM network for scenario %s. Network id %s" % (scenarioDict['name'],sce_net['vim_id'])
             auxNetDict['scenario'][sce_net['uuid']] = sce_net['vim_id']
     
@@ -847,13 +857,14 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
     
             result, network_id = myvim.new_tenant_network(myvimURL, myvim_tenant, myNetName, myNetType)
             if result < 0:
+                error_text="Error creating network: %s." % network_id
                 result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList)
                 if result2:
-                    print "Error creating network: %s. Rollback successful." %network_id
-                    return result, "Error creating network: %s. Rollback successful" %network_id
+                    error_text += " Rollback successful."
                 else:
-                    return result, "Error creating network: %s. Rollback fail: you need to access VIM and delete manually: %s" % (network_id, message)
-            
+                    error_text += " Rollback fail: you need to access VIM and delete manually: " + message
+                print "start_scenario: " + error_text
+                return result, error_text
             print "VIM network id for scenario %s: %s" % (scenarioDict['name'],network_id)
             net['vim_id'] = network_id
             if sce_vnf['uuid'] not in auxNetDict:
@@ -912,13 +923,15 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                     myVMDict['imageRef'],myVMDict['flavorRef'],myVMDict['networks'],vm['interfaces'])
             
             if result < 0:
+                error_text = "Error creating vm instance: %s." % vm_id
                 result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList, instanceVMList)
+                result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList)
                 if result2:
-                    print "Error creating vm instance: %s. Rollback successful." %vm_id
-                    return result, "Error creating vm instance: %s. Rollback successful" %vm_id
+                    error_text += " Rollback successful."
                 else:
-                    return result, "Error creating vm instance: %s. Rollback fail: you need to access VIM and delete manually: %s" % (vm_id, message)
-            
+                    error_text += " Rollback fail: you need to access VIM and delete manually: " + message
+                print "start_scenario: " + error_text
+                return result, error_text
             print "VIM vm instance id (server id) for scenario %s: %s" % (scenarioDict['name'],vm_id)
             vm['vim_id'] = vm_id
             instanceVMList.append(vm_id)
@@ -951,23 +964,30 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                     continue
                 result, port_id = myvim.connect_port_network(myvimURL, interface['vim_id'], net_nfvo2vim[net_id])
                 if result < 0:
+                    error_text = "Error attaching port to network: %s." % port_id
                     result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList, instanceVMList)
                     if result2:
-                        print "Error attaching port to network: %s. Rollback successful." % port_id
-                        return result, "Error attaching port to network: %s. Rollback successful" %port_id
+                        error_text += " Rollback successful."
                     else:
-                        return result, "Error attaching port to network: %s. Rollback fail: you need to access VIM and delete manually: %s" % (port_id, message)
-    
+                        error_text += " Rollback fail: you need to access VIM and delete manually: " + message
+                    print "start_scenario: " + error_text
+                    return result, error_text
+
     
     print "==================Deployment done=========="
     scenarioDict['vim_tenants_uuid'] = vim_tenants_uuid
     print json.dumps(scenarioDict, indent=4)
     #r,c = mydb.new_instance_scenario_as_a_whole(nfvo_tenant,scenarioDict['name'],scenarioDict)
-    r,c = mydb.new_instance_scenario_as_a_whole(nfvo_tenant,instance_scenario_name, instance_scenario_description, scenarioDict)
-    if r <0: 
+    result,c = mydb.new_instance_scenario_as_a_whole(nfvo_tenant,instance_scenario_name, instance_scenario_description, scenarioDict)
+    if result <0:
+        error_text = c + "." 
         result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList, instanceVMList)
-        if result2: return r, c+". Rollback successful"
-        else: return r,c+". Rollback fail: you need to access VIM and delete manually: "+ message
+        if result2:
+            error_text += " Rollback successful."
+        else:
+            error_text += " Rollback fail: you need to access VIM and delete manually: " + message
+        print "start_scenario: " + error_text
+        return result, error_text
         
     return mydb.get_instance_scenario(c)
 

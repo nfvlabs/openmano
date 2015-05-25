@@ -1014,9 +1014,10 @@ class nfvo_db():
 #             print "nfvo_db.get_instance_scenario DB Exception %d: %s" % (e.args[0], e.args[1])
 #             return self.format_error(e)
 
-    def get_scenario(self, scenario_id, nfvo_tenant_id=None):
+    def get_scenario(self, scenario_id, nfvo_tenant_id=None, datacenter_id=None):
         '''Obtain the scenario information, filtering by one or serveral of the tenant, uuid or name
         scenario_id is the uuid or the name if it is not a valid uuid format
+        if datacenter_id is provided, it supply aditional vim_id fields with the matching vim uuid 
         Only one scenario must mutch the filtering or an error is returned
         ''' 
         for retry_ in range(0,2):
@@ -1068,15 +1069,16 @@ class nfvo_db():
                     for net in scenario_dict['nets']:
                         if str(net['external']) == 'false':
                             continue
-                        self.cur.execute("SELECT vim_net_id FROM datacenter_nets WHERE name='"+ net['name'] + "'") #TODO: includes datacenter_id 
+                        WHERE_=" WHERE name='%s'" % net['name']
+                        if datacenter_id!=None:
+                            WHERE_ += " AND datacenter_id='%s'" % datacenter_id 
+                        self.cur.execute("SELECT vim_net_id FROM datacenter_nets" + WHERE_ ) 
                         d_net = self.cur.fetchone()
-                        if d_net is None:
-                            print "nfvo_db.get_scenario() WARNING external net %s not found"  % net['name']
+                        if d_net==None or datacenter_id==None:
+                            #print "nfvo_db.get_scenario() WARNING external net %s not found"  % net['name']
                             net['vim_id']=None
                         else:
                             net['vim_id']=d_net['vim_net_id']
-                        
-                    
                     
                     af.convert_datetime2str(scenario_dict)
                     af.convert_str2boolean(scenario_dict, ('public','shared','external') )
