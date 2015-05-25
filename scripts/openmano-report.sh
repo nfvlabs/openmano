@@ -26,129 +26,28 @@
 DIRNAME=`dirname $0`
 OMCLIENT=$DIRNAME/../openmano/openmano
 OVCLIENT=$DIRNAME/../openvim/openvim
-verbose=""
+
+#get screen log files at the beginning
+echo
+echo "-------------------------------"
+echo "log files"
+echo "-------------------------------"
 echo "-------------------------------"
 echo "OPENMANO"
 echo "-------------------------------"
-echo "$OMCLIENT config"
-$OMCLIENT config
-echo "-------------------------------"
-echo "$OMCLIENT tenant-list"
-$OMCLIENT tenant-list $verbose
-echo "-------------------------------"
-echo "$OMCLIENT datacenter-list --all"
-$OMCLIENT datacenter-list --all
-echo "-------------------------------"
-echo "$OMCLIENT datacenter-list"
-$OMCLIENT datacenter-list $verbose
-echo "-------------------------------"
-dclist=`$OMCLIENT datacenter-list |awk '{print $1}'`
-for dc in $dclist; do
-  echo "$OMCLIENT datacenter-net-list $dc $verbose"
-  $OMCLIENT datacenter-net-list $dc $verbose
-  echo "-------------------------------"
-done
-echo "$OMCLIENT vnf-list"
-$OMCLIENT vnf-list $verbose
-echo "-------------------------------"
-echo "$OMCLIENT scenario-list"
-$OMCLIENT scenario-list $verbose
-echo "-------------------------------"
-echo "$OMCLIENT instance-scenario-list"
-$OMCLIENT instance-scenario-list $verbose
-echo "-------------------------------"
+echo "cat $DIRNAME/../openmano/screenlog.?"
+cat $DIRNAME/../openmano/screenlog.?
 echo
 echo "-------------------------------"
 echo "OPENVIM"
 echo "-------------------------------"
-echo "$OVCLIENT config"
-$OVCLIENT config
-echo "-------------------------------"
-echo "$OVCLIENT tenant-list"
-$OVCLIENT tenant-list $verbose
-echo "-------------------------------"
-echo "$OVCLIENT host-list"
-$OVCLIENT host-list $verbose
-echo "-------------------------------"
-echo "$OVCLIENT net-list"
-$OVCLIENT net-list $verbose
-echo "-------------------------------"
-echo "$OVCLIENT port-list"
-$OVCLIENT port-list $verbose
-echo "-------------------------------"
-echo "$OVCLIENT flavor-list"
-$OVCLIENT flavor-list $verbose
-echo "-------------------------------"
-echo "$OVCLIENT image-list"
-$OVCLIENT image-list $verbose
-echo "-------------------------------"
-echo "$OVCLIENT vm-list"
-$OVCLIENT vm-list $verbose
-echo "-------------------------------"
+echo "cat $DIRNAME/../openvim/screenlog.?"
+cat $DIRNAME/../openvim/screenlog.?
 echo
 echo "-------------------------------"
-echo "Verbose"
-echo "-------------------------------"
-verbose="-vvv"
-echo "-------------------------------"
-echo "OPENMANO"
-echo "-------------------------------"
-echo "$OMCLIENT config"
-$OMCLIENT config
-echo "-------------------------------"
-echo "$OMCLIENT tenant-list"
-$OMCLIENT tenant-list $verbose
-echo "-------------------------------"
-echo "$OMCLIENT datacenter-list --all"
-$OMCLIENT datacenter-list --all
-echo "-------------------------------"
-echo "$OMCLIENT datacenter-list"
-$OMCLIENT datacenter-list $verbose
-echo "-------------------------------"
-dclist=`$OMCLIENT datacenter-list |awk '{print $1}'`
-for dc in $dclist; do
-  echo "$OMCLIENT datacenter-net-list $dc $verbose"
-  $OMCLIENT datacenter-net-list $dc $verbose
-  echo "-------------------------------"
-done
-echo "$OMCLIENT vnf-list"
-$OMCLIENT vnf-list $verbose
-echo "-------------------------------"
-echo "$OMCLIENT scenario-list"
-$OMCLIENT scenario-list $verbose
-echo "-------------------------------"
-echo "$OMCLIENT instance-scenario-list"
-$OMCLIENT instance-scenario-list $verbose
-echo "-------------------------------"
 echo
-echo "-------------------------------"
-echo "OPENVIM"
-echo "-------------------------------"
-echo "$OVCLIENT config"
-$OVCLIENT config
-echo "-------------------------------"
-echo "$OVCLIENT tenant-list"
-$OVCLIENT tenant-list $verbose
-echo "-------------------------------"
-echo "$OVCLIENT host-list"
-$OVCLIENT host-list $verbose
-echo "-------------------------------"
-echo "$OVCLIENT net-list"
-$OVCLIENT net-list $verbose
-echo "-------------------------------"
-echo "$OVCLIENT port-list"
-$OVCLIENT port-list $verbose
-echo "-------------------------------"
-echo "$OVCLIENT flavor-list"
-$OVCLIENT flavor-list $verbose
-echo "-------------------------------"
-echo "$OVCLIENT image-list"
-$OVCLIENT image-list $verbose
-echo "-------------------------------"
-echo "$OVCLIENT vm-list"
-$OVCLIENT vm-list $verbose
-echo "-------------------------------"
-echo
+
+#get configuration files
 echo "-------------------------------"
 echo "Configuration files"
 echo "-------------------------------"
@@ -163,4 +62,70 @@ echo "-------------------------------"
 echo "cat $DIRNAME/../openvim/openvimd.cfg"
 cat $DIRNAME/../openvim/openvimd.cfg
 echo "-------------------------------"
+echo
 
+#get list of items
+for verbose in "" "-vvv"
+do
+  echo "-------------------------------"
+  echo "OPENMANO$verbose"
+  echo "-------------------------------"
+  echo "$OMCLIENT config $verbose"
+  $OMCLIENT config
+  echo "-------------------------------"
+  echo "$OMCLIENT tenant-list $verbose"
+  $OMCLIENT tenant-list $verbose
+  echo "-------------------------------"
+  echo "$OMCLIENT datacenter-list --all"
+  $OMCLIENT datacenter-list --all
+  echo "-------------------------------"
+  echo "$OMCLIENT datacenter-list $verbose"
+  $OMCLIENT datacenter-list $verbose
+  echo "-------------------------------"
+  dclist=`$OMCLIENT datacenter-list |awk '{print $1}'`
+  for dc in $dclist; do
+    echo "$OMCLIENT datacenter-net-list $dc $verbose"
+    $OMCLIENT datacenter-net-list $dc $verbose
+    echo "-------------------------------"
+  done
+  echo "$OMCLIENT vnf-list $verbose"
+  $OMCLIENT vnf-list $verbose
+  echo "-------------------------------"
+  echo "$OMCLIENT scenario-list $verbose"
+  $OMCLIENT scenario-list $verbose
+  echo "-------------------------------"
+  echo "$OMCLIENT instance-scenario-list $verbose"
+  $OMCLIENT instance-scenario-list $verbose
+  echo "-------------------------------"
+  echo
+  echo "-------------------------------"
+  echo "OPENVIM$verbose"
+  echo "-------------------------------"
+  echo "$OVCLIENT config"
+  $OVCLIENT config
+  echo "-------------------------------"
+  echo "$OVCLIENT tenant-list $verbose"
+  $OVCLIENT tenant-list $verbose
+  echo "-------------------------------"
+  echo "$OVCLIENT host-list $verbose"
+  $OVCLIENT host-list $verbose
+  echo "-------------------------------"
+  echo "$OVCLIENT net-list $verbose"
+  $OVCLIENT net-list $verbose
+  echo "-------------------------------"
+  echo "$OVCLIENT port-list $verbose"
+  $OVCLIENT port-list $verbose
+  echo "-------------------------------"
+  echo "$OVCLIENT flavor-list $verbose"
+  $OVCLIENT flavor-list $verbose
+  echo "-------------------------------"
+  echo "$OVCLIENT image-list $verbose"
+  $OVCLIENT image-list $verbose
+  echo "-------------------------------"
+  echo "$OVCLIENT vm-list $verbose"
+  $OVCLIENT vm-list $verbose
+  echo "-------------------------------"
+  echo
+
+done
+echo

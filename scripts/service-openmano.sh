@@ -23,8 +23,8 @@
 
 #launch openmano components inside a screen. It assumes a relative path ../openvim ../openmano ../../floodlight-0.90
 
-DIRNAME=`dirname $0`
-FLD=${DIRNAME}/../../floodlight-0.90
+DIRNAME=$(readlink -f $(dirname ${BASH_SOURCE[0]}))
+FLD=$(readlink -f ${DIRNAME}/../../floodlight-0.90)
 
 function usage(){
     echo -e "Usage: $0 [floodlight] [openvim] [openmano] start|stop|restart|status"
@@ -47,14 +47,14 @@ function kill_pid(){
 }
 
 #obtain parameters
-openmano_list=""
-#openmano_action="start"  #uncoment to get a default action
+om_list=""
+#om_action="start"  #uncoment to get a default action
 for param in $*
 do
-    [ "$param" == "start" -o "$param" == "stop"  -o "$param" == "restart" -o "$param" == "status" ] && openmano_action=$param  && continue
-    [ "$param" == "openvim" -o "$param" == "vim"  ]    && openmano_list="$openmano_list vim"              && continue
-    [ "$param" == "openmano" -o "$param" == "mano" ]   && openmano_list="$openmano_list mano"             && continue
-    [ "$param" == "openflow" -o "$param" == "flow" -o "$param" == "floodlight" ] && openmano_list="flow $openmano_list" && continue
+    [ "$param" == "start" -o "$param" == "stop"  -o "$param" == "restart" -o "$param" == "status" ] && om_action=$param  && continue
+    [ "$param" == "openvim" -o "$param" == "vim"  ]    && om_list="$om_list vim"              && continue
+    [ "$param" == "openmano" -o "$param" == "mano" ]   && om_list="$om_list mano"             && continue
+    [ "$param" == "openflow" -o "$param" == "flow" -o "$param" == "floodlight" ] && om_list="flow $om_list" && continue
     [ "$param" == "-h" -o "$param" == "--help" ] && usage && exit 0
     #note flow that it must be the first element, because openvim relay on this
     
@@ -65,68 +65,71 @@ do
 done
 
 #check action is provided
-[ -z "$openmano_action" ] && usage >&2 && exit -1
+[ -z "$om_action" ] && usage >&2 && exit -1
 
 #if no componenets supplied assume all
-[ -z "$openmano_list" ] && openmano_list="flow vim mano"
+[ -z "$om_list" ] && om_list="flow vim mano"
  
-for openmano_component in $openmano_list
+for om_component in $om_list
 do
-    [ "${openmano_component}" == "flow" ] && openmano_cmd="floodlight.jar"  && openmano_name="floodlight"
-    [ "${openmano_component}" == "vim" ]  && openmano_cmd="openvimd.py"     && openmano_name="openvim"
-    [ "${openmano_component}" == "mano" ] && openmano_cmd="openmanod.py"    && openmano_name="openmano"
+    [ "${om_component}" == "flow" ] && om_cmd="floodlight.jar" && om_name="floodlight" && om_dir=$FLD
+    [ "${om_component}" == "vim" ]  && om_cmd="openvimd.py"    && om_name="openvim   " && om_dir=$(readlink -f ${DIRNAME}/../openvim)
+    [ "${om_component}" == "mano" ] && om_cmd="openmanod.py"   && om_name="openmano  " && om_dir=$(readlink -f ${DIRNAME}/../openmano)
     #obtain PID of program
-    component_id=`ps -o pid,cmd -U $USER -u $USER | grep -v grep | grep ${openmano_cmd} | awk '{print $1}'`
+    component_id=`ps -o pid,cmd -U $USER -u $USER | grep -v grep | grep ${om_cmd} | awk '{print $1}'`
 
     #status
-    if [ "$openmano_action" == "status" ]
+    if [ "$om_action" == "status" ]
     then
-        #terminates program
-        [ -n "$component_id" ] && echo "    $openmano_name running, pid $component_id"
-        [ -z "$component_id" ] && echo "    $openmano_name stopped"
+        [ -n "$component_id" ] && echo "    $om_name running, pid $component_id"
+        [ -z "$component_id" ] && echo "    $om_name stopped"
     fi
 
     #stop
-    if [ "$openmano_action" == "stop" -o "$openmano_action" == "restart" ]
+    if [ "$om_action" == "stop" -o "$om_action" == "restart" ]
     then
         #terminates program
-        [ -n "$component_id" ] && echo -n "    stopping $openmano_name ... " && kill_pid $component_id 
+        [ -n "$component_id" ] && echo -n "    stopping $om_name ... " && kill_pid $component_id 
         component_id=""
         #terminates screen
-        if screen -wipe | grep -q .$openmano_component
+        if screen -wipe | grep -q .$om_component
         then
-            screen -S $openmano_component -p 0 -X stuff "exit\n"
+            screen -S $om_component -p 0 -X stuff "exit\n"
             sleep 1
         fi
     fi
 
     #start
-    if [ "$openmano_action" == "start" -o "$openmano_action" == "restart" ]
+    if [ "$om_action" == "start" -o "$om_action" == "restart" ]
     then
         #check already running
-        [ -n "$component_id" ] && echo "    $openmano_name is already running. Skipping" && continue
+        [ -n "$component_id" ] && echo "    $om_name is already running. Skipping" && continue
         #create screen if not created
-        echo -n "    starting $openmano_name ... "
-        if ! screen -wipe | grep -q .${openmano_component}
+        echo -n "    starting $om_name ... "
+        if ! screen -wipe | grep -q .${om_component}
         then
-            screen -dmS ${openmano_component}  bash
+            pushd ${om_dir} > /dev/null
+            rm -f screenlog.?
+            screen -dmS ${om_component}  bash
             sleep 1
+            screen -S ${om_component} -p 0 -X log
+            popd > /dev/null
         else
-            echo -n " using existing screen '${openmano_component}' ... "
+            echo -n " using existing screen '${om_component}' ... "
         fi
         #launch command to screen
-        [ "${openmano_component}" != "flow" ] && screen -S ${openmano_component} -p 0 -X stuff "cd ${DIRNAME}/../open${openmano_component}\n" && sleep 1
-        [ "${openmano_component}" == "flow" ] && screen -S flow -p 0 -X stuff "java  -Dlogback.configurationFile=${DIRNAME}/flow-logback.xml -jar ${FLD}/target/floodlight.jar -cf ${DIRNAME}/flow.properties\n"
-        [ "${openmano_component}" != "flow" ] && screen -S ${openmano_component} -p 0 -X stuff "./${openmano_cmd}\n"
+        #[ "${om_component}" != "flow" ] && screen -S ${om_component} -p 0 -X stuff "cd ${DIRNAME}/../open${om_component}\n" && sleep 1
+        [ "${om_component}" == "flow" ] && screen -S flow -p 0 -X stuff "java  -Dlogback.configurationFile=${DIRNAME}/flow-logback.xml -jar ./target/floodlight.jar -cf ${DIRNAME}/flow.properties\n"
+        [ "${om_component}" != "flow" ] && screen -S ${om_component} -p 0 -X stuff "./${om_cmd}\n"
         sleep 10
 
         #check if is running
-        if !  ps -f -U $USER -u $USER | grep -v grep | grep -q ${openmano_cmd}
+        if !  ps -f -U $USER -u $USER | grep -v grep | grep -q ${om_cmd}
         then
-            echo "ERROR, it has exited. Run 'screen -x ${openmano_component}' to see the error"
+            echo "ERROR, it has exited. See logs at '${om_dir}/screenlog.0'"
             #exit 0
         else
-            echo "running, execute 'screen -x ${openmano_component}' and Ctrl+c to terminate"
+            echo "running on 'screen -x ${om_component}'"
         fi
     fi
 done
