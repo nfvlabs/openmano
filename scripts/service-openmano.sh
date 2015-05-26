@@ -23,8 +23,11 @@
 
 #launch openmano components inside a screen. It assumes a relative path ../openvim ../openmano ../../floodlight-0.90
 
-DIRNAME=$(readlink -f $(dirname ${BASH_SOURCE[0]}))
-FLD=$(readlink -f ${DIRNAME}/../../floodlight-0.90)
+
+DIRNAME=$(readlink -f ${BASH_SOURCE[0]})
+DIRNAME=$(dirname $DIRNAME )
+DIR_OM=$(dirname $DIRNAME )
+FLD=$(readlink -f ${DIR_OM}/../floodlight-0.90)
 
 function usage(){
     echo -e "Usage: $0 [floodlight] [openvim] [openmano] start|stop|restart|status"
@@ -73,8 +76,8 @@ done
 for om_component in $om_list
 do
     [ "${om_component}" == "flow" ] && om_cmd="floodlight.jar" && om_name="floodlight" && om_dir=$FLD
-    [ "${om_component}" == "vim" ]  && om_cmd="openvimd.py"    && om_name="openvim   " && om_dir=$(readlink -f ${DIRNAME}/../openvim)
-    [ "${om_component}" == "mano" ] && om_cmd="openmanod.py"   && om_name="openmano  " && om_dir=$(readlink -f ${DIRNAME}/../openmano)
+    [ "${om_component}" == "vim" ]  && om_cmd="openvimd.py"    && om_name="openvim   " && om_dir=$(readlink -f ${DIR_OM}/openvim)
+    [ "${om_component}" == "mano" ] && om_cmd="openmanod.py"   && om_name="openmano  " && om_dir=$(readlink -f ${DIR_OM}/openmano)
     #obtain PID of program
     component_id=`ps -o pid,cmd -U $USER -u $USER | grep -v grep | grep ${om_cmd} | awk '{print $1}'`
 
@@ -109,16 +112,20 @@ do
         if ! screen -wipe | grep -q .${om_component}
         then
             pushd ${om_dir} > /dev/null
-            rm -f screenlog.?
             screen -dmS ${om_component}  bash
             sleep 1
-            screen -S ${om_component} -p 0 -X log
             popd > /dev/null
         else
             echo -n " using existing screen '${om_component}' ... "
+            screen -S ${om_component} -p 0 -X log off
+            screen -S ${om_component} -p 0 -X stuff "cd ${om_dir}\n"
+            sleep 1
         fi
+        rm -f ${om_dir}/screenlog.0
+        screen -S ${om_component} -p 0 -X logfile ${om_dir}/screenlog.0
+        screen -S ${om_component} -p 0 -X log on
         #launch command to screen
-        #[ "${om_component}" != "flow" ] && screen -S ${om_component} -p 0 -X stuff "cd ${DIRNAME}/../open${om_component}\n" && sleep 1
+        #[ "${om_component}" != "flow" ] && screen -S ${om_component} -p 0 -X stuff "cd ${DIR_OM}/open${om_component}\n" && sleep 1
         [ "${om_component}" == "flow" ] && screen -S flow -p 0 -X stuff "java  -Dlogback.configurationFile=${DIRNAME}/flow-logback.xml -jar ./target/floodlight.jar -cf ${DIRNAME}/flow.properties\n"
         [ "${om_component}" != "flow" ] && screen -S ${om_component} -p 0 -X stuff "./${om_cmd}\n"
         sleep 10
@@ -129,7 +136,7 @@ do
             echo "ERROR, it has exited. See logs at '${om_dir}/screenlog.0'"
             #exit 0
         else
-            echo "running on 'screen -x ${om_component}'"
+            echo "running on 'screen -x ${om_component}'    logging to '${om_dir}/screenlog.0'"
         fi
     fi
 done

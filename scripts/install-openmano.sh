@@ -57,16 +57,16 @@ function install_packets(){
 
 #Discover Linux distribution
 #try redhat type
-[ -f   /etc/redhat-release ] && _DISTRO=$(cat /etc/redhat-release 2>/dev/null | cut  -d" " -f1) 
-#try ubuntu type
-[ ! -f /etc/redhat-release ] && _DISTRO=$(lsb_release -is  2>/dev/null)            
+[ -f /etc/redhat-release ] && _DISTRO=$(cat /etc/redhat-release 2>/dev/null | cut  -d" " -f1) 
+#if not assuming ubuntu type
+[ -f /etc/redhat-release ] || _DISTRO=$(lsb_release -is  2>/dev/null)            
 if [ "$_DISTRO" == "Ubuntu" ]
 then
     _RELEASE="14"
     if ! lsb_release -rs | grep -q "14."
     then 
         read -e -p "WARNING! Not tested Ubuntu version. Continue assuming a '$_RELEASE' type? (y/N)" KK
-        [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Canceled" && exit 0
+        [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Cancelled" && exit 0
     fi
 elif [ "$_DISTRO" == "CentOS" ]
 then
@@ -74,14 +74,14 @@ then
     if ! cat /etc/redhat-release | grep -q "7."
     then
         read -e -p "WARNING! Not tested CentOS version. Continue assuming a '_RELEASE' type? (y/N)" KK
-        [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Canceled" && exit 0
+        [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Cancelled" && exit 0
     fi
 else  #[ "$_DISTRO" != "Ubuntu" -a "$_DISTRO" != "CentOS" ] 
     _DISTRO_DISCOVER=$_DISTRO
     [ -x /usr/bin/apt-get ] && _DISTRO="Ubuntu" && _RELEASE="14"
     [ -x /usr/bin/yum ]     && _DISTRO="CentOS" && _RELEASE="7"
     read -e -p "WARNING! Not tested Linux distribution '$_DISTRO_DISCOVER '. Continue assuming a '$_DISTRO $_RELEASE' type? (y/N)" KK
-    [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Canceled" && exit 0
+    [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Cancelled" && exit 0
 fi
 
 
@@ -169,9 +169,9 @@ echo "CREATE USER 'mano'@'localhost' identified by 'manopw';"   | mysql -u$DBUSE
 echo "GRANT ALL PRIVILEGES ON mano_db.* TO 'mano'@'localhost';" | mysql -u$DBUSER $DBPASSWD
 
 echo "vim database"
-su $SUDO_USER -c './openmano/openvim/database_utils/init_vim_db.sh vim vimpw vim_db'
+su $SUDO_USER -c './openmano/openvim/database_utils/init_vim_db.sh -u vim -p vimpw'
 echo "mano database"
-su $SUDO_USER -c './openmano/openmano/database_utils/init_mano_db.sh mano manopw mano_db'
+su $SUDO_USER -c './openmano/openmano/database_utils/init_mano_db.sh -u mano -p manopw'
 
 
 echo '
@@ -218,6 +218,7 @@ ln -s ${PWD}/openmano/openmano-gui /var/www/html/openmano
 #allow apache user: apache(centos), or www-data(ubuntu) grant access to the files, changing user owner
 grep -q "^www-data:" /etc/passwd && chown -R www-data ./openmano/openmano-gui
 grep -q "^apache:"   /etc/passwd && chown -R apache   ./openmano/openmano-gui
+chmod -R g+w ./openmano/openmano-gui  #allow user to write using group permission
 
 #ensure parent folders can be access by apache user
 su $SUDO_USER -c 'chmod o+x ./openmano .'
@@ -231,6 +232,35 @@ done
 #Allow SELinux security over openmano-gui
 [ "$_DISTRO" == "CentOS" ] && chcon -R --reference=/var/www ${PWD}/openmano/openmano-gui || true
 
+if [ "$_DISTRO" == "CentOS" ]
+then
+    echo '
+#################################################################
+#####        CONFIGURE firewalld                            #####
+#################################################################'
+    read -e -p "Configure firewalld for openmanod port 9090? (Y/n)" KK
+    if [ "$KK" != "n" -a  "$KK" != "no" ]
+    then
+        #Creates a service file for openmano
+        echo '<?xml version="1.0" encoding="utf-8"?>
+<service>
+ <short>openmanod</short>
+ <description>openmanod service</description>
+ <port protocol="tcp" port="9090"/>
+</service>' > /etc/firewalld/services/openmanod.xml
+        #put proper permissions
+        pushd /etc/firewalld/services > /dev/null
+        restorecon openmanod.xml
+        chmod 640 openmanod.xml
+        popd > /dev/null
+        #Add the openmanod service to the default zone permanently and reload the firewall configuration
+        firewall-cmd --permanent --add-service=openmanod > /dev/null
+        firewall-cmd --reload > /dev/null
+        echo "done." 
+    else
+        echo "skipping."
+    fi
+fi
 
 echo '
 #################################################################
@@ -242,6 +272,7 @@ rm -f /home/${SUDO_USER}/bin/openvim
 rm -f /home/${SUDO_USER}/bin/openmano
 ln -s ${PWD}/openmano/openvim/openvim   /home/${SUDO_USER}/bin/openvim
 ln -s ${PWD}/openmano/openmano/openmano /home/${SUDO_USER}/bin/openmano
+ln -s ${PWD}/openmano/scripts/service-openmano.sh  /home/${SUDO_USER}/bin/service-openmano
 
 #insert /home/<user>/bin in the PATH
 #skiped because normally this is done authomatically when ~/bin exist
