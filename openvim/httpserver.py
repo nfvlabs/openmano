@@ -1136,7 +1136,7 @@ def http_server_action(server_id, tenant_id, action):
         return
     server.update(content[0]) 
 
-    #TODO checkear que la accion a realizar es correcta
+    #TODO check a right content
     new_status = None
     if 'terminate' in action:
         new_status='DELETING'

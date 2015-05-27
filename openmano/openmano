@@ -28,8 +28,8 @@ openmano client used to interact with openmano-server (openmanod)
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$09-oct-2014 09:09:48$"
-__version__="0.2.0-r365"
-version_date="Mar 2015"
+__version__="0.2.1-r3815"
+version_date="May 2015"
 
 from argcomplete.completers import FilesCompleter
 import os
@@ -61,15 +61,16 @@ def config(args):
 
 def _print_verbose(mano_response, verbose_level=0):
     content = mano_response.json()
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
     if type(content)!=dict or len(content)!=1:
         #print "Non expected format output"
         print str(content)
-        return
+        return result
     
     val=content.values()[0]
     if type(val)==str:
         print val
-        return
+        return result
     elif type(val) == list:
         content_list = val
     elif type(val)==dict:
@@ -77,14 +78,14 @@ def _print_verbose(mano_response, verbose_level=0):
     else:
         #print "Non expected dict/list format output"
         print str(content)
-        return
+        return result
     
     #print content_list
     if verbose_level==None:
         verbose_level=0
     if verbose_level >= 3:
         print yaml.safe_dump(content, indent=4, default_flow_style=False)
-        return
+        return result
 
     if mano_response.status_code == 200:
         for content in content_list:
@@ -101,6 +102,7 @@ def _print_verbose(mano_response, verbose_level=0):
             print myoutput
     else:
         print content['error']['description']
+    return result
 
 def parser_json_yaml(file_name):
     #Check config file exists
@@ -163,13 +165,13 @@ def vnf_create(args):
     r,myvnf = parser_json_yaml(args.file)
     if not r:
         print myvnf
-        return
+        return -1
 
     if args.name or args.description:
         #print args.name
         if not 'vnf' in myvnf: 
             print 'Wrong file. Not a VNF descriptor. Expecting the following text: "vnf"'
-            return
+            return -1
         if args.name:
             myvnf['vnf']['name'] = args.name
         if args.description:
@@ -180,8 +182,7 @@ def vnf_create(args):
         
     URLrequest = "http://%s:%s/openmano/%s/vnfs" %(mano_host, mano_port, mano_tenant)
     mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
-    _print_verbose(mano_response, args.verbose)
-    return
+    return _print_verbose(mano_response, args.verbose)
 
 def vnf_list(args):
     #print "vnf-list",args
@@ -195,14 +196,15 @@ def vnf_list(args):
     #print json.dumps(content, indent=4)
     if args.verbose==None:
         args.verbose=0
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
     if mano_response.status_code == 200:
         if not args.name:
             if args.verbose >= 3:
                 print yaml.safe_dump(content, indent=4, default_flow_style=False)
-                return
+                return result
             if len(content['vnfs']) == 0:
                 print "No VNFs were found."
-                return
+                return 404 #HTTP_Not_Found
             for vnf in content['vnfs']:
                 myoutput = "%s %s" %(vnf['uuid'].ljust(38),vnf['name'].ljust(20))
                 if args.verbose >=1:
@@ -214,7 +216,7 @@ def vnf_list(args):
         else:
             if args.verbose:
                 print yaml.safe_dump(content, indent=4, default_flow_style=False)
-                return
+                return result
             vnf = content['vnf']
             print "%s %s %s" %(vnf['uuid'].ljust(38),vnf['name'].ljust(20), vnf['created_at'].ljust(20))
             print "  Description: %s" %vnf['description']
@@ -236,24 +238,25 @@ def vnf_list(args):
         print content['error']['description']
         if args.verbose:
             print yaml.safe_dump(content, indent=4, default_flow_style=False)
-    return
+    return result
 
 def vnf_delete(args):
     #print "vnf-delete",args
     if not args.force:
         r = raw_input("Delete VNF %s (y/N)? " %(args.name))
         if  not (len(r)>0  and r[0].lower()=="y"):
-            return
+            return 0
     URLrequest = "http://%s:%s/openmano/%s/vnfs/%s" %(mano_host, mano_port, mano_tenant, args.name)
     mano_response = requests.delete(URLrequest)
     #print mano_response
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
     if mano_response.status_code == 200:
         print content['result']
     else:
         print content['error']['description']
-    return
+    return result
 
 def scenario_create(args):
     #print "scenario-create",args
@@ -267,7 +270,7 @@ def scenario_create(args):
         myscenario = yaml.load(payload_req)
         if not 'topology' in myscenario: 
             print 'Wrong file. Not a scenario descriptor. Expecting the following text: "topology"'
-            return
+            return -1
         if args.name:
             myscenario['name'] = args.name
         if args.description:
@@ -278,8 +281,7 @@ def scenario_create(args):
         
     URLrequest = "http://%s:%s/openmano/%s/scenarios" %(mano_host, mano_port, mano_tenant)
     mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
-    _print_verbose(mano_response, args.verbose)
-    return
+    return _print_verbose(mano_response, args.verbose)
 
 def scenario_list(args):
     #print "scenario-list",args
@@ -294,14 +296,15 @@ def scenario_list(args):
     if args.verbose==None:
         args.verbose=0
 
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
     if mano_response.status_code == 200:
         if not args.name:
             if args.verbose >= 3:
                 print yaml.safe_dump(content, indent=4, default_flow_style=False)
-                return
+                return result
             if len(content['scenarios']) == 0:
                 print "No scenarios were found."
-                return
+                return 404 #HTTP_Not_Found
             for scenario in content['scenarios']:
                 myoutput = "%s %s" %(scenario['uuid'].ljust(38),scenario['name'].ljust(20))
                 if args.verbose >=1:
@@ -312,7 +315,7 @@ def scenario_list(args):
         else:
             if args.verbose:
                 print yaml.safe_dump(content, indent=4, default_flow_style=False)
-                return
+                return result
             scenario = content['scenario']
             myoutput = "%s %s %s" %(scenario['uuid'].ljust(38),scenario['name'].ljust(20), scenario['created_at'].ljust(20))
             print myoutput
@@ -335,24 +338,25 @@ def scenario_list(args):
         print content['error']['description']
         if args.verbose:
             print yaml.safe_dump(content, indent=4, default_flow_style=False)
-    return
+    return result
 
 def scenario_delete(args):
     #print "scenario-delete",args
     if not args.force:
         r = raw_input("Delete scenario %s (y/N)? " %(args.name))
         if  not (len(r)>0  and r[0].lower()=="y"):
-            return
+            return 0
     URLrequest = "http://%s:%s/openmano/%s/scenarios/%s" %(mano_host, mano_port, mano_tenant, args.name)
     mano_response = requests.delete(URLrequest)
     #print mano_response
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
     if mano_response.status_code == 200:
         print content['result']
     else:
         print content['error']['description']
-    return
+    return result
 
 def scenario_deploy(args):
     #print "scenario-deploy",args
@@ -378,11 +382,12 @@ def scenario_deploy(args):
     if args.verbose==None:
         args.verbose=0
     
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
     if args.verbose >= 3:
         print yaml.safe_dump(content, indent=4, default_flow_style=False)
-        return
+        return result
 
     if mano_response.status_code == 200:
         myoutput = "%s %s" %(content['uuid'].ljust(38),content['name'].ljust(20))
@@ -396,7 +401,7 @@ def scenario_deploy(args):
         print "openmano instance-scenario-list <instance_id>"
     else:
         print content['error']['description']
-    return
+    return result
 
 def scenario_verify(args):
     #print "scenario-verify",args
@@ -410,13 +415,14 @@ def scenario_verify(args):
     URLrequest = "http://%s:%s/openmano/%s/scenarios/%s/action" %(mano_host, mano_port, mano_tenant, args.scenario)
     mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
     
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
     if mano_response.status_code == 200:
         print content['result']
     else:
         print content['error']['description']
-    return
+    return result
 
 def instance_scenario_list(args):
     #print "instance-scenario-list",args
@@ -431,14 +437,15 @@ def instance_scenario_list(args):
     if args.verbose==None:
         args.verbose=0
 
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
     if mano_response.status_code == 200:
         if not args.name:
             if args.verbose >= 3:
                 print yaml.safe_dump(content, indent=4, default_flow_style=False)
-                return
+                return result
             if len(content['instances']) == 0:
                 print "No scenario instances were found."
-                return
+                return result
             for instance in content['instances']:
                 myoutput = "%s %s" %(instance['uuid'].ljust(38),instance['name'].ljust(20))
                 if args.verbose >=1:
@@ -449,7 +456,7 @@ def instance_scenario_list(args):
         else:
             if args.verbose:
                 print yaml.safe_dump(content, indent=4, default_flow_style=False)
-                return
+                return result
             instance = content
             print "%s %s %s" %(instance['uuid'].ljust(38),instance['name'].ljust(20),instance['created_at'].ljust(20))
             print "Description: %s" %instance['description']
@@ -480,12 +487,11 @@ def instance_scenario_list(args):
         print content['error']['description']
         if args.verbose:
             print yaml.safe_dump(content, indent=4, default_flow_style=False)
-    
-    return
+    return result
 
 def instance_scenario_status(args):
     print "instance-scenario-status"
-    return
+    return 0
 
 def instance_scenario_delete(args):
     #print "instance-scenario-delete",args
@@ -496,21 +502,22 @@ def instance_scenario_delete(args):
     URLrequest = "http://%s:%s/openmano/%s/instances/%s" %(mano_host, mano_port, mano_tenant, args.name)
     mano_response = requests.delete(URLrequest)
     #print mano_response
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
     if mano_response.status_code == 200:
         print content['result']
     else:
         print content['error']['description']
-    return
+    return result
 
 def instance_vnf_list(args):
     print "instance-vnf-list"
-    return
+    return 0
 
 def instance_vnf_status(args):
     print "instance-vnf-status"
-    return
+    return 0
 
 def tenant_create(args):
     headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
@@ -523,8 +530,7 @@ def tenant_create(args):
         
     URLrequest = "http://%s:%s/openmano/tenants" %(mano_host, mano_port)
     mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
-    _print_verbose(mano_response, args.verbose)
-    return
+    return _print_verbose(mano_response, args.verbose)
 
 def tenant_list(args):
     #print "tenant-list",args
@@ -537,25 +543,25 @@ def tenant_list(args):
         args.verbose=0
     if args.name!=None:
         args.verbose += 1
-    _print_verbose(mano_response, args.verbose)
-    return
+    return _print_verbose(mano_response, args.verbose)
 
 def tenant_delete(args):
     #print "tenant-delete",args
     if not args.force:
         r = raw_input("Delete tenant %s (y/N)? " %(args.name))
         if  not (len(r)>0  and r[0].lower()=="y"):
-            return
+            return 0
     URLrequest = "http://%s:%s/openmano/tenants/%s" %(mano_host, mano_port, args.name)
     mano_response = requests.delete(URLrequest)
     #print mano_response
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
     if mano_response.status_code == 200:
         print content['result']
     else:
         print content['error']['description']
-    return
+    return result
 
 def datacenter_attach(args):
     headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
@@ -571,13 +577,14 @@ def datacenter_attach(args):
         
     URLrequest = "http://%s:%s/openmano/%s/datacenters/%s" %(mano_host, mano_port, mano_tenant, args.name)
     mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
-    _print_verbose(mano_response, args.verbose)
+    result = _print_verbose(mano_response, args.verbose)
     #provide addional information if error
     if mano_response.status_code != 200:
         content = mano_response.json()
         if "already in use for  'name'" in content['error']['description'] and \
                 "to database vim_tenants table" in content['error']['description']:
             print "Try to specify a different name with --vim-tenant-name"
+    return result
 
 def datacenter_detach(args):
     headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
@@ -585,11 +592,12 @@ def datacenter_detach(args):
     mano_response = requests.delete(URLrequest, headers=headers_req)
     content = mano_response.json()
     #print json.dumps(content, indent=4)
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
     if mano_response.status_code == 200:
         print content['result']
     else:
         print content['error']['description']
-    return
+    return result
 
 def datacenter_create(args):
     headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
@@ -606,25 +614,25 @@ def datacenter_create(args):
         
     URLrequest = "http://%s:%s/openmano/datacenters" %(mano_host, mano_port)
     mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
-    _print_verbose(mano_response, args.verbose)
-    return
+    return _print_verbose(mano_response, args.verbose)
 
 def datacenter_delete(args):
     #print "datacenter-delete",args
     if not args.force:
         r = raw_input("Delete datacenter %s (y/N)? " %(args.name))
         if  not (len(r)>0  and r[0].lower()=="y"):
-            return
+            return 0
     URLrequest = "http://%s:%s/openmano/datacenters/%s" %(mano_host, mano_port, args.name)
     mano_response = requests.delete(URLrequest)
     #print mano_response
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
     if mano_response.status_code == 200:
         print content['result']
     else:
         print content['error']['description']
-    return
+    return result
 
 def datacenter_list(args):
     #print "datacenter-list",args
@@ -638,8 +646,7 @@ def datacenter_list(args):
         args.verbose=0
     if args.name!=None:
         args.verbose += 1
-    _print_verbose(mano_response, args.verbose)
-    return
+    return _print_verbose(mano_response, args.verbose)
 
 
 def datacenter_net_action(args):
@@ -664,7 +671,7 @@ def datacenter_net_action(args):
             if  len(r)>0  and r[0].lower()=="y":
                 pass
             else:
-                return
+                return 0
         if args.action=="net-update":
             payload={args.action : None}
         else:
@@ -675,8 +682,7 @@ def datacenter_net_action(args):
         payload_req = json.dumps(payload)
         #print payload_req
         mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
-    _print_verbose(mano_response, args.verbose)
-    return
+    return _print_verbose(mano_response, args.verbose)
 
 def element_edit(args):
     headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
@@ -692,14 +698,13 @@ def element_edit(args):
         if  len(r)>0  and r[0].lower()=="y":
             pass
         else:
-            return
+            return 0
     mano_response = requests.put(URLrequest, headers=headers_req, data=payload_req)
     if args.verbose==None:
         args.verbose=0
     if args.name!=None:
         args.verbose += 1
-    _print_verbose(mano_response, args.verbose)
-    return
+    return _print_verbose(mano_response, args.verbose)
 
 
 global mano_host
@@ -865,13 +870,19 @@ if __name__=="__main__":
     
     try:
         args = main_parser.parse_args()
-        args.func(args)
+        result = args.func(args)
+        if result == None:
+            result = 0
+        #for some reason it fails if call exit inside try instance. Need to call exit at the end !?
     except (requests.exceptions.ConnectionError):
         print "Connection error: not possible to contact OPENMANO-SERVER (openmanod)"
+        result = -2
     except (KeyboardInterrupt):
         print 'Exiting openmano'
+        result = -3
     except (SystemExit, ArgumentParserError):
-        pass
-        
-    exit()
+        result = -4
+    
+    #print result
+    exit(result)
 

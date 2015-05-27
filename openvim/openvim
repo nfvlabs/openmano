@@ -29,7 +29,7 @@ Useful for human CLI management of items at openvim
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$26-nov-2014 19:09:29$"
-__version__="0.1.04-r365"
+__version__="0.1.05-r381"
 version_date="Mar 2015"
 name="openvim"
 
@@ -190,7 +190,7 @@ def check_configuration(*exception ):
     for item in config_items:
         if item not in exception and vim_config[item]==None:
             print "OPENVIM_"+item+" variable not defined. Try '" + name + " config file_cfg' or 'export OPENVIM_"+item+"=something'"
-            exit();
+            exit(-401); #HTTP_Unauthorized
 
 def check_valid_uuid(uuid):
     '''
@@ -435,7 +435,7 @@ def config(args):
             f.close()
         except IOError, e:
             print " Error opening file '" + args.file + "': " + e.args[1]
-            return
+            return -1
         try:
             data = yaml.load(read_data)
             #print data
@@ -449,21 +449,20 @@ def config(args):
                 print "  export OPENVIM_ADMIN_PORT="+ str(data["http_admin_port"])
             if "tenant_id" in data:
                 print "  export OPENVIM_TENANT="+ data["tenant_id"]
-            return
+            return 0
         except yaml.YAMLError, exc:
             error_pos = ""
             if hasattr(exc, 'problem_mark'):
                 mark = exc.problem_mark
                 error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
                 print " Error yaml/json format error at '"+ args.file +"'"+error_pos
-            return
-
-        
+            return -1
         print args.file
     print "OPENVIM_HOST: %s" %vim_config["HOST"]
     print "OPENVIM_PORT: %s" %vim_config["PORT"]
     print "OPENVIM_ADMIN_PORT: %s" %vim_config["ADMIN_PORT"]
     print "OPENVIM_TENANT: %s" %vim_config["TENANT"]
+    return 0
 
 def element_new(args):
     #print args
@@ -477,11 +476,11 @@ def element_new(args):
         
     if args.file==None:
         payload= template[args.element[:-1] ]
-        payload = yaml.load(str(payload))  #with this trik we make a completey copy of the data, so to not modified the original one
+        payload = yaml.load(str(payload))  #with this trick we make a completely copy of the data, so to not modified the original one
         r,c= change_var(payload)
         if r<0:
             print "Template error", c
-            return 
+            return -1
         payload=c
     else:
         payload=load_file_or_yaml(args.file)
@@ -508,6 +507,7 @@ def element_new(args):
         r,c = vim_create(url, payload)
     if r<0:
         print c
+        return -r
     else:
         #print c
         item=c[ args.element[:-1] ]
@@ -518,7 +518,7 @@ def element_new(args):
         print " " + uuid +"   "+ name.ljust(20) + " Created"
         for e in ('warning', 'error', 'last_error'):
             if e in item:    print e + "\n" + item[e]
-    return
+    return 0
 
 def element_action(args):
     filter_qs = ""
@@ -549,9 +549,9 @@ def element_action(args):
     r,c = vim_read(url + filter_qs)
     if r<0:           
         print "Error:", c
-        return
+        return -r
     if args.action=='createImage':
-        payload={ args.action: {"name":args.name} }
+        payload={ args.action: {"name":args.imageName} }
         if args.description != None:
             payload[args.action]["description"]=args.description
         if args.path != None:
@@ -562,7 +562,8 @@ def element_action(args):
     item_list = c[ args.element ]
     if len(item_list)==0:
         print  " Not found " + args.element + " " + args.name
-        return
+        return 404 #HTTP_Not_Found
+    result = 0
     for item in item_list:
         uuid=item.get('id', None)
         if uuid is None:
@@ -583,9 +584,10 @@ def element_action(args):
             r,c = vim_action(url + "/" + uuid + "/action", payload)
         if r<0:
             print " " + uuid +"   "+ name.ljust(20) + "   " + c
+            result = -r
         else:
             print " " + uuid +"   "+ name.ljust(20) + "   "+ args.action
-    return
+    return result
 
 def element_edit(args):
     filter_qs = ""
@@ -617,7 +619,7 @@ def element_edit(args):
     r,c = vim_read(url + filter_qs)
     if r<0:           
         print "Error:", c
-        return
+        return -r
 
     payload=load_file_or_yaml(args.file)
     if args.element[:-1] not in payload:
@@ -627,7 +629,8 @@ def element_edit(args):
     item_list = c[ args.element ]
     if len(item_list)==0:
         print  " Not found " + args.element + " " + args.name
-        return
+        return 404 #HTTP_Not_Found
+    result = 0
     for item in item_list:
         uuid=item.get('id', None)
         if uuid is None:
@@ -648,9 +651,10 @@ def element_edit(args):
             r,c = vim_edit(url + "/" + uuid, payload)
         if r<0:
             print " " + uuid +"   "+ name.ljust(20) + " " + c
+            result = -r
         else:
             print " " + uuid +"   "+ name.ljust(20) + " edited"
-    return
+    return result
 
 def element_action_edit(args):
     #print args
@@ -663,7 +667,7 @@ def element_action_edit(args):
         args.file='admin_state_up: true'
     if args.action=='down':
         args.file='admin_state_up: false'
-    element_edit(args)
+    return element_edit(args)
     
 def element_delete(args):
     filter_qs = ""
@@ -695,19 +699,21 @@ def element_delete(args):
     r,c = vim_read(url + filter_qs)
     if r<0:           
         print "Error:", c
-        return
+        return -r
 
     #print json.dumps(c, indent=4)
     item_list = c[ args.element ]
     if len(item_list)==0:
         print  " Not found " + args.element + " " + args.name
-        return
+        return 404 #HTTP_Not_Found
+    result = 0
     for item in item_list:
         uuid=item.get('id', None)
         if uuid is None:
             uuid=item.get('uuid', None)
         if uuid is None:
             print "Id not found"
+            result = -500
             continue
         name = item.get('name', '')
         if not args.force:
@@ -722,9 +728,10 @@ def element_delete(args):
             r,c = vim_delete(url + "/" + uuid)
         if r<0:
             print " " + uuid +"   "+ name.ljust(20) + " " + c
+            result = -r
         else:
             print " " + uuid +"   "+ name.ljust(20) + " deleted"
-    return
+    return result
 
 def element_list(args):
     #print "element_list", args
@@ -754,46 +761,47 @@ def element_list(args):
     r,c = vim_read(url + filter_qs)
     if r<0:           
         print "Error:", c
-    else:
-        #print json.dumps(c, indent=4)
-        item_list = c[ args.element ]
-        verbose=0
-        if args.name!=None and len(item_list)==1:
-            verbose+=1
-        if args.verbose!=None:
-            verbose += args.verbose
-        for item in item_list:
-            extra=""
-            if args.element=="servers" or args.element=="networks": extra = " "+item['status']
-            if args.element in ("hosts","networks","ports") and not item['admin_state_up']: extra += " admin_state_up=false"
-            print item['id']+"   "+item['name'].ljust(20) + extra
-            if verbose>0:
-                r2,c2 = vim_read(url + "/"+ item['id'])
-                if r2>0:
-                    data = c2[ args.element[:-1] ]
-                    if verbose==1 or verbose==2:
-                        data2= dict((k,v) for (k,v) in data.iteritems() if k in show_at_verbose1 and v!=None)
-                        if 'image' in data and 'id' in data['image']:
-                            data2['image'] = data['image']['id']
-                        if 'flavor' in data and 'id' in data['flavor']:
-                            data2['flavor'] = data['flavor']['id']
-                        if verbose==2:
-                            #TODO add more intems in a digest mode, extended, numas ...
-                            pass
-                            #if "numas" in data
-                            #if "extended" in data
-                    else:
-                        data2= data
-                    #print json.dumps(c2, indent=4)
+        return -r
+    #print json.dumps(c, indent=4)
+    result = 0
+    item_list = c[ args.element ]
+    verbose=0
+    if args.name!=None and len(item_list)==1:
+        verbose+=1
+    if args.verbose!=None:
+        verbose += args.verbose
+    for item in item_list:
+        extra=""
+        if args.element=="servers" or args.element=="networks": extra = " "+item['status']
+        if args.element in ("hosts","networks","ports") and not item['admin_state_up']: extra += " admin_state_up=false"
+        print item['id']+"   "+item['name'].ljust(20) + extra
+        if verbose>0:
+            r2,c2 = vim_read(url + "/"+ item['id'])
+            if r2>0:
+                data = c2[ args.element[:-1] ]
+                if verbose==1 or verbose==2:
+                    data2= dict((k,v) for (k,v) in data.iteritems() if k in show_at_verbose1 and v!=None)
+                    if 'image' in data and 'id' in data['image']:
+                        data2['image'] = data['image']['id']
+                    if 'flavor' in data and 'id' in data['flavor']:
+                        data2['flavor'] = data['flavor']['id']
+                    if verbose==2:
+                        #TODO add more intems in a digest mode, extended, numas ...
+                        pass
+                        #if "numas" in data
+                        #if "extended" in data
+                else:
+                    data2= data
+                #print json.dumps(c2, indent=4)
 #                     keys = data.keys()
 #                     for key in keys:
 #                         if data[key]==None: del data[key]
 #                         elif key=='id' or key=='name' or key=='links': del data[key]
-                        
-                    #print json.dumps(data2, indent=4)
-                    data2={args.element[:-1]: data2}
-                    print yaml.safe_dump(data2, indent=4, default_flow_style=False)
-    return
+                    
+                #print json.dumps(data2, indent=4)
+                data2={args.element[:-1]: data2}
+                print yaml.safe_dump(data2, indent=4, default_flow_style=False)
+    return result
 
 def openflow_action(args):
     if args.action=='port-list':
@@ -804,7 +812,7 @@ def openflow_action(args):
         if args.action=='reinstall':
             if "ADMIN_PORT" not in vim_config:
                 print "OPENVIM_ADMIN_PORT variable not defined"
-                return
+                return 404 #HTTP_Not_Found
             PORT = vim_config["ADMIN_PORT"]
         if args.name!=None:
             url = "http://%s:%s/openvim/networks" %(vim_config["HOST"], PORT)
@@ -815,13 +823,13 @@ def openflow_action(args):
             r,c = vim_read(url)
             if r<0:           
                 print "Error:", c
-                return
+                return -r
             if len (c["networks"]) == 0:
                 print "  Network not found"
-                return
+                return 404 #HTTP_Not_Found
             if len (c["networks"]) > 1:
                 print "  More than one net with this name found. Use uuid instead of name to concretize"
-                return
+                return 404 #HTTP_Not_Found
             network = c["networks"][0]["id"]
         else:
             network="all"
@@ -833,15 +841,17 @@ def openflow_action(args):
     elif args.action=='clear-all':
         if "ADMIN_PORT" not in vim_config:
             print "OPENVIM_ADMIN_PORT variable not defined"
-            return
+            return 401 # HTTP_Unauthorized
         url = "http://%s:%s/openvim/networks/openflow/clear" %(vim_config["HOST"], vim_config["ADMIN_PORT"])
         r,c = vim_delete(url)
     else:
-        return
+        return 400 #HTTP_Bad_Request
     if r<0:           
         print "Error:", c
+        return -r
     else:
         print yaml.safe_dump(c, indent=4, default_flow_style=False)
+        return 0
 
 if __name__=="__main__":
     
@@ -959,13 +969,19 @@ if __name__=="__main__":
     
     try:
         args = main_parser.parse_args()
-        args.func(args)
+        result = args.func(args)
+        if result == None:
+            result = 0
+        #for some reason it fails if call exit inside try instance. Need to call exit at the end !?
     except (requests.exceptions.ConnectionError):
         print "Connection error: not possible to contact OPENVIM-SERVER (openvimd)"
+        result = -2
     except (KeyboardInterrupt):
         print 'Exiting openVIM'
+        result = -3
     except (SystemExit, ArgumentParserError):
-        pass
+        result = -4
     
-    exit()
+    #print result
+    exit(result)
 
