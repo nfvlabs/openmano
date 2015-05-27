@@ -324,7 +324,12 @@ class vimconnector():
             #print text
             return -vim_response.status_code,text
 
-
+    def refresh_tenant_network(self, vimURI, tenant_id, net_id):
+        '''Refreshes the status of the tenant network'''
+        '''Returns: 0 if no error,
+                    <0 if error'''
+        return 0
+    
     def new_tenant_flavor(self,vimURI,tenant_id,flavor_data):
         '''Adds a tenant flavor to VIM'''
         '''Returns the flavor identifier'''
@@ -579,7 +584,7 @@ class vimconnector():
         else:
             print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to add new vm instance. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to get vm instance. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
         
@@ -606,6 +611,93 @@ class vimconnector():
             #print text
             return -vim_response.status_code, text
 
+    def refresh_tenant_vms_and_nets(self, vimURI, tenant_id, vmDict, netDict):
+        '''Refreshes the status of the dictionaries of VM instances and nets passed as arguments. It modifies the dictionaries'''
+        '''Returns:
+            - result: 0 if all elements could be refreshed (even if its status didn't change)
+                      n>0, the number of elements that couldn't be refreshed,
+                      <0 if error (foreseen)
+            - error_msg: text with reference to possible errors
+        '''
+        #vms_refreshed = []
+        #nets_refreshed = []
+        vms_unrefreshed = []
+        nets_unrefreshed = []
+        for vm_id in vmDict:
+            print "VIMConnector refresh_tenant_vms and nets: Getting tenant VM instance information from VIM"
+            headers_req = {'content-type': 'application/json'}
+        
+            url = vimURI+'/'+tenant_id+'/servers/'+ vm_id
+            print url
+            try:
+                vim_response = requests.get(url, headers = headers_req)
+            except requests.exceptions.RequestException, e:
+                print "VIMConnector refresh_tenant_elements. Exception: ", e.args
+                vms_unrefreshed.append(vm_id)
+                continue
+            #print vim_response
+            #print vim_response.status_code
+            if vim_response.status_code == 200:
+                #print vim_response.json()
+                #print json.dumps(vim_response.json(), indent=4)
+                res,http_content = af.format_in(vim_response, openmano_schemas.new_vminstance_response_schema)
+                if res:
+                    #print json.dumps(http_content, indent=4)
+                    #OLD:
+                    #status = http_content['server']['status']
+                    #if vmDict[vm_id] != status:
+                    #    vmDict[vm_id] = status
+                    #    vms_refreshed.append(vm_id)
+                    #NEW:
+                    vmDict[vm_id] = http_content['server']['status']
+                    #print http_content['server']['hostId']
+                else:
+                    vms_unrefreshed.append(vm_id)
+            else:
+                #print vim_response.text
+                jsonerror = af.format_jsonerror(vim_response)
+                print 'VIMConnector refresh_tenant_vms_and_nets. Error in VIM "%s": not possible to get VM instance. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+                vms_unrefreshed.append(vm_id)
+        
+        #print "VMs refreshed: %s" % str(vms_refreshed)
+        for net_id in netDict:
+            print "VIMConnector refresh_tenant_vms_and_nets: Getting tenant network from VIM (tenant: " + str(tenant_id) + "): "
+            headers_req = {'content-type': 'application/json'}
+            try:
+                vim_response = requests.get(vimURI+'/networks/'+net_id, headers = headers_req)
+            except requests.exceptions.RequestException, e:
+                print "get_tenant_network Exception: ", e.args
+                nets_unrefreshed.append(net_id)
+            #print vim_response
+            #print vim_response.status_code
+            if vim_response.status_code == 200:
+                #print vim_response.json()
+                #print vim_response.status_code
+                #print json.dumps(vim_response.json(), indent=4)
+                http_content=vim_response.json()
+                # OLD:
+                #status = http_content['network']['status']
+                #if netDict[net_id] != status:
+                #    netDict[net_id] = status
+                #    nets_refreshed.append(net_id)
+                # NEW:
+                netDict[net_id] = http_content['network']['status']
+            else:
+                #print vim_response.text
+                jsonerror = af.format_jsonerror(vim_response)
+                print 'VIMConnector refresh_tenant_vms_and_nets. Error in VIM "%s": not possible to get tenant network. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+                nets_unrefreshed.append(net_id)
+
+        #print "Nets refreshed: %s" % str(nets_refreshed)
+        
+        error_msg=""
+        if len(vms_unrefreshed)+len(nets_unrefreshed)>0:
+            error_msg += "VMs unrefreshed: " + str(vms_unrefreshed) + "; nets unrefreshed: " + str(nets_unrefreshed)
+            print error_msg
+
+        #return len(vms_unrefreshed)+len(nets_unrefreshed), error_msg, vms_refreshed, nets_refreshed
+        return len(vms_unrefreshed)+len(nets_unrefreshed), error_msg
+    
     def action_tenant_vminstance(self,vimURI,tenant_id, vm_id, action_dict):
         '''Send and action over a VM instance from VIM'''
         '''Returns the status'''

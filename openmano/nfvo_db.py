@@ -1236,7 +1236,7 @@ class nfvo_db():
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
     def get_instance_scenario(self, instance_id, nfvo_tenant_id=None):
-        '''Obtain the instance information, filtering by one or serveral of the tenant, uuid or name
+        '''Obtain the instance information, filtering by one or several of the tenant, uuid or name
         instance_id is the uuid or the name if it is not a valid uuid format
         Only one instance must mutch the filtering or an error is returned
         ''' 

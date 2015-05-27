@@ -501,7 +501,7 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
     if result < 0:
         return result, vim_dict
 #1: parse input
-#1.1: get VNFs and external_ports. 
+#1.1: get VNFs and external_networks (other_nets). 
     vnfs={}
     other_nets={}  #external_networks, bridge_networks and data_networkds
     nodes = topo['topology']['nodes']
@@ -517,7 +517,7 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
             other_nets[k]['external']=False
         
 
-#1.2: Check VNF are present at database table vnfs. Insert uuid
+#1.2: Check that VNF are present at database table vnfs. Insert uuid, desctiption and external interfaces
     for name,vnf in vnfs.items():
         WHERE_={}
         error_text = ""
@@ -537,7 +537,7 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
             print "nfvo.new_scenario Error" + error_text + " is not present at database"
             return -HTTP_Bad_Request, "unknown" + error_text + " at " + error_pos
         elif r>1:
-            print "nfvo.new_scenario Error more than one" + error_text + " is present at database"
+            print "nfvo.new_scenario Error more than one" + error_text + " are present at database"
             return -HTTP_Bad_Request, "more than one" + error_text + " at " + error_pos + " Concrete with 'vnf_id'"
         vnf['uuid']=vnf_db[0]['uuid']
         vnf['description']=vnf_db[0]['description']
@@ -562,7 +562,7 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
             conection_pair_list = map(lambda x: x.items(), conections[k]['nodes'] )
             for k2 in conection_pair_list:
                 ifaces_list += k2
-        conections_list.append(set(ifaces_list)) #from list to set to operate as a set
+        conections_list.append(set(ifaces_list)) #from list to set to operate as a set (this conversion removes elements that are repeated in a list)
         #print set(ifaces_list)
     #check valid VNF and iface names
         for iface in ifaces_list:
@@ -636,7 +636,7 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
             other_nets[k].update(net_db[0])
     
     net_list={}
-    net_nb=0
+    net_nb=0  #Number of nets
     for con in conections_list:
         #check if this is connected to a external net
         other_net_index=-1
@@ -659,7 +659,7 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
             if other_net_index>=0:
                 del con[other_net_index]
                 if other_nets[net_target]['external'] :
-                    type_='data' if len(con)>1 else 'ptp'  #an external net is connectect to a external port, so it is ptp if only one connection is done to this net
+                    type_='data' if len(con)>1 else 'ptp'  #an external net is connected to a external port, so it is ptp if only one connection is done to this net
                     if type_=='data' and other_nets[net_target]['type']=="ptp":
                         error_text = "Error connecting %d nodes on a not multipoint net %s" % (len(con), net_target)
                         print "nfvo.new_scenario " + error_text
@@ -696,11 +696,11 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
             #raise e
             return -HTTP_Bad_Request, error_text
 
-#1.5: Connect to management net all not already connected interfaces of type 'mgmt'
-    #1.5.1 obtain management net 
+#1.8: Connect to management net all not already connected interfaces of type 'mgmt'
+    #1.8.1 obtain management net 
     r,mgmt_net = mydb.get_table(SELECT=('uuid','name','description','type','shared'),
         FROM='datacenter_nets', WHERE={'name':'mgmt'} )
-    #1.5.2 check all interfaces from all vnfs 
+    #1.8.2 check all interfaces from all vnfs 
     if r>0:
         add_mgmt_net = False
         for vnf in vnfs.values():
@@ -828,13 +828,13 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             instanceNetList.append(network_id)
         else:
             if sce_net['vim_id'] == None:
-                error_text = "Error, datacenter '%s' can not contian external network '%s'." % (datacenter_name, sce_net['name'])
+                error_text = "Error, datacenter '%s' does not have external network '%s'." % (datacenter_name, sce_net['name'])
                 result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList)
                 if result2:
                     error_text += " Rollback successful."
                 else:
                     error_text += " Rollback fail: you need to access VIM and delete manually: " + message
-                print "start_scenario: " + error_text
+                print "nfvo.start_scenario: " + error_text
                 return -HTTP_Bad_Request, error_text
             print "Using existent VIM network for scenario %s. Network id %s" % (scenarioDict['name'],sce_net['vim_id'])
             auxNetDict['scenario'][sce_net['uuid']] = sce_net['vim_id']
@@ -854,7 +854,8 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             myNetDict["network"]["type"] = myNetType
             myNetDict["network"]["tenant_id"] = myvim_tenant
             print myNetDict
-    
+            #TODO:
+            #We should use the dictionary as input parameter for new_tenant_network
             result, network_id = myvim.new_tenant_network(myvimURL, myvim_tenant, myNetName, myNetType)
             if result < 0:
                 error_text="Error creating network: %s." % network_id
@@ -897,7 +898,8 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             for iface in vm['interfaces']:
                 if iface['type']!="data":
                     netDict = {}
-                    if "vpci" in iface: netDict['vpci'] = iface['vpci']
+                    if "vpci" in iface and iface["vpci"] is not None:
+                        netDict['vpci'] = iface['vpci']
                     netDict['name'] = iface['internal_name']
                     if "model" in iface and iface["model"]!=None:
                         netDict['model']=iface['model']
@@ -1043,10 +1045,104 @@ def delete_instance(mydb,nfvo_tenant,instance_id):
             #if result == -HTTP_Not_Found: net_fail_list.append(net)
             print "Error " + str(-result) + " deleting NET uuid '" + net['uuid'] + "', VIM id '" + net['vim_net_id'] + "':"  + net_id
 
-    if len(error_msg)>0: 
-        return 1, 'instance ' + instance_id + ' deleted but Some elements could not be deleted, or already deleted (error: 404) from VIM: ' + error_msg
+    if len(error_msg)>0:
+        return 1, 'instance ' + instance_id + ' deleted but some elements could not be deleted, or already deleted (error: 404) from VIM: ' + error_msg
     else:
         return 1, 'instance ' + instance_id + ' deleted'
+
+def refresh_instance(mydb, nfvo_tenant, instanceDict, datacenter=None, vim_tenant=None):
+    '''Refreshes a scenario instance. It modifies instanceDict'''
+    '''Returns:
+         - result: <0 if there is any unexpected error, n>=0 if no errors where n is the number of vms and nets that couldn't be updated in the database
+         - error_msg
+    '''
+    # Assumption: nfvo_tenant and instance_id were checked before entering into this function
+    print "nfvo.refresh_instance begins"
+    #print json.dumps(instanceDict, indent=4)
+    
+    print "Getting the VIM URL and the VIM tenant_id"
+    result, content = get_vim(mydb, nfvo_tenant, instanceDict['datacenter_id'])
+    if result < 0:
+        print "nfvo.refresh_instance() error. Datacenter not found"
+        return result, content
+    myvimURL =  content['vim_url']
+    myvim_tenant = content['vim_tenant_id']
+    myvim = vimconnector.vimconnector()
+     
+    # 1. Getting the status of all VMs
+    vmDict = {}
+    netDict = {}
+    for sce_vnf in instanceDict['vnfs']:
+        for vm in sce_vnf['vms']:
+            vmDict[vm['vim_vm_id']]=vm['status']
+    
+    # 2. Getting the status of all nets
+    # TODO: update nets inside a vnf
+    for net in instanceDict['nets']:
+        #if net['external']:
+        #    continue #skip not created nets
+        netDict[net['vim_net_id']]=net['status']
+ 
+    # 3. Refresh the status of VMs and nets from VIM. IT updates vmDict and netDict
+    result, refresh_message = myvim.refresh_tenant_vms_and_nets(myvimURL, myvim_tenant, vmDict, netDict)
+    if result < 0:
+        return result, refresh_message
+    
+    # 4. Update the status of VMs in the instanceDict, while collects the VMs whose status changed     
+    vms_updated = {} #Dictionary of VM instance uuids in openmano that were updated
+    for sce_vnf in instanceDict['vnfs']:
+        for vm in sce_vnf['vms']:
+            status = vmDict[vm['vim_vm_id']]
+            if vm['status']!=status:
+                vm['status']=status
+                vms_updated[vm['uuid']]=status
+    
+    # 5. Update the status of nets in the instanceDict, while collects the nets whose status changed     
+    nets_updated = {} #Dictionary of net instance uuids in openmano that were updated
+    # TODO: update nets inside a vnf  
+    for net in instanceDict['nets']:
+        #if net['external']:
+        #    continue #skip not created nets
+        status = netDict[net['vim_net_id']]
+        if net['status']!=status:
+            net['status']=status
+            nets_updated[net['uuid']]=status
+
+    # 6. Update in openmano DB the VMs whose status changed
+    vms_notupdated=[]
+    for vm in vms_updated:
+        result2, content = mydb.update_rows('instance_vms', UPDATE={'status':vms_updated[vm]}, 
+                                WHERE={'uuid':vm})
+        if result2<0:
+            vms_updated.pop(vm)
+            vms_notupdated.append(vm)
+        elif result2==0:
+            print "WARNING: status of vm instance %s should have been updated to %s" %(vm,vms_updated[vm])
+
+    # 7. Update in openmano DB the nets whose status changed
+    nets_notupdated=[]
+    for net in nets_updated:
+        result2, content = mydb.update_rows('instance_nets', UPDATE={'status':nets_updated[net]}, 
+                                WHERE={'uuid':net})
+        if result2<0:
+            nets_updated.pop(net)
+            nets_notupdated.append(net)
+        elif result2==0:
+            print "WARNING: status of net instance %s should have been updated to %s" %(net,nets_updated[net])
+            
+    # Returns appropriate output
+    print "nfvo.refresh_instance finishes"
+    print "VMs updated in the database: %s; nets updated in the database %s; VMs not updated: %s; nets not updated: %s" \
+                % (str(vms_updated), str(nets_updated), str(vms_notupdated), str(nets_notupdated)) 
+    instance_id = instanceDict['uuid']
+    error_msg=refresh_message
+    if len(vms_notupdated)+len(nets_notupdated)>0:
+        if len(refresh_message)>0:
+            error_msg += "; "
+        error_msg += "VMs not updated: " + str(vms_notupdated) + "; nets not updated: " + str(nets_notupdated)
+        return len(vms_notupdated)+len(nets_notupdated), 'Scenario instance ' + instance_id + ' refreshed but some elements could not be updated in the database: ' + error_msg
+    
+    return 0, 'Scenario instance ' + instance_id + ' refreshed. ' + error_msg
 
 def instance_action(mydb,nfvo_tenant,instance_id, action_dict):
     print "Checking that the instance_id exists and getting the instance dictionary"

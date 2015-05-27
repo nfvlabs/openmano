@@ -23,7 +23,8 @@
 
 #It generates a report for debugging
 
-DIRNAME=`dirname $0`
+DIRNAME=$(readlink -f ${BASH_SOURCE[0]})
+DIRNAME=$(dirname $DIRNAME )
 OMCLIENT=$DIRNAME/../openmano/openmano
 OVCLIENT=$DIRNAME/../openvim/openvim
 
@@ -43,6 +44,26 @@ echo "OPENVIM"
 echo "-------------------------------"
 echo "cat $DIRNAME/../openvim/screenlog.?"
 cat $DIRNAME/../openvim/screenlog.?
+echo
+echo "-------------------------------"
+echo
+
+#get version
+echo
+echo "-------------------------------"
+echo "version"
+echo "-------------------------------"
+echo "-------------------------------"
+echo "OPENMANO"
+echo "-------------------------------"
+echo "cat $DIRNAME/../openmano/openmanod.py|grep ^__version__"
+cat $DIRNAME/../openmano/openmanod.py|grep ^__version__
+echo
+echo "-------------------------------"
+echo "OPENVIM"
+echo "-------------------------------"
+echo "cat $DIRNAME/../openvim/openvimd.py|grep ^__version__"
+cat $DIRNAME/../openvim/openvimd.py|grep ^__version__
 echo
 echo "-------------------------------"
 echo

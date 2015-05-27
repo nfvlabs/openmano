@@ -149,10 +149,10 @@ def convert_datetime2str(var):
 
 def convert_str2boolean(data, items):
     '''Check recursively the content of data, and if there is an key contained in items, convert value from string to boolean 
-    Done recursivelly
+    Done recursively
     Attributes:
-        'data': dictionary variable to be checked. None or empty is consideted valid
-        'items': typle of keys to convert
+        'data': dictionary variable to be checked. None or empty is considered valid
+        'items': tuple of keys to convert
     Return:
         None
     '''

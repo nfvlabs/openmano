@@ -202,8 +202,8 @@ def filter_query_string(qs, http2db, allowed):
     '''Process query string (qs) checking that contains only valid tokens for avoiding SQL injection
     Attributes:
         'qs': bottle.FormsDict variable to be processed. None or empty is considered valid
-        'allowed': list of allowed string tokens (API http naming). All the keys of 'qs' must be one of 'allowed'
         'http2db': dictionary with change from http API naming (dictionary key) to database naming(dictionary value)
+        'allowed': list of allowed string tokens (API http naming). All the keys of 'qs' must be one of 'allowed'
     Return: A tuple with the (select,where,limit) to be use in a database query. All of then transformed to the database naming
         select: list of items to retrieve, filtered by query string 'field=token'. If no 'field' is present, allowed list is returned
         where: dictionary with key, value, taken from the query string token=value. Empty if nothing is provided
@@ -879,30 +879,36 @@ def http_get_instance_id(tenant_id, instance_id):
     '''get instances details, can use both uuid or name'''
     #check valid tenant_id
     if not nfvo.check_tenant(mydb, tenant_id): 
-        print 'httpserver.http_get_instances() tenant %s not found' % tenant_id
+        print 'httpserver.http_get_instance_id() tenant %s not found' % tenant_id
         bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
         return
-
-    #obtain data
+  
+    #obtain data (first time is only to check that the instance exists)
     result, data = mydb.get_instance_scenario(instance_id, tenant_id)
     if result < 0:
         print "http_get_instance_id error %d %s" % (-result, data)
         bottle.abort(-result, data)
         return
     
-#     print "Query: %s", bottle.request.query
-#     refresh=True
-#     if refresh:
-#         r,c = nfvo.refresh_instance(mydb, tenant_id, data, datacenter=None, vim_tenant=None)
-#         if r<0:
-#             print "WARNING: nfvo.refresh_instance had a problem: %s" %c
-#         #obtain data
-#         result, data = mydb.get_instance_scenario(instance_id, tenant_id)
-#         if result < 0:
-#             print "http_get_instance_id error %d %s" % (-result, data)
-#             bottle.abort(-result, data)
-#             return
-            
+#     OLD:
+#     qs = bottle.request.query
+#     if type(qs) is not bottle.FormsDict:
+#         print '!!!!!!!!!!!!!!invalid query string not a dictionary'
+#         bottle.abort(HTTP_Internal_Server_Error, "ttpserver.http_get_instance_id(): unexpected query string")
+#     else:
+#         print "Query: %s" %qs.dict
+#         if 'refresh' in qs and qs.get('refresh')=="yes":
+#             print "REFRESH: %s" %qs.get('refresh')
+#             #refresh the instance
+#             r,c = nfvo.refresh_instance(mydb, tenant_id, data)
+#             if r<0:
+#                 print "WARNING: nfvo.refresh_instance couldn't refresh the status of the instance: %s" %c
+#         else:
+#             print "NO REFRESH"
+
+    r,c = nfvo.refresh_instance(mydb, tenant_id, data)
+    if r<0:
+        print "WARNING: nfvo.refresh_instance couldn't refresh the status of the instance: %s" %c
     print json.dumps(data, indent=4)
     return format_out(data)
 
