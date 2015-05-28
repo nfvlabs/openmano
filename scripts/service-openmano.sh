@@ -27,7 +27,7 @@
 DIRNAME=$(readlink -f ${BASH_SOURCE[0]})
 DIRNAME=$(dirname $DIRNAME )
 DIR_OM=$(dirname $DIRNAME )
-FLD=$(readlink -f ${DIR_OM}/../floodlight-0.90)
+FLD=$(dirname ${DIR_OM})/floodlight-0.90
 
 function usage(){
     echo -e "Usage: $0 [floodlight] [openvim] [openmano] start|stop|restart|status"
@@ -105,6 +105,9 @@ do
     #start
     if [ "$om_action" == "start" -o "$om_action" == "restart" ]
     then
+        #calculates log file name
+        logfile=""
+        mkdir -p $DIR_OM/logs && logfile=$DIR_OM/logs/open${om_component}.0 || echo "can not create logs directory  $DIR_OM/logs"
         #check already running
         [ -n "$component_id" ] && echo "    $om_name is already running. Skipping" && continue
         #create screen if not created
@@ -121,9 +124,13 @@ do
             screen -S ${om_component} -p 0 -X stuff "cd ${om_dir}\n"
             sleep 1
         fi
-        rm -f ${om_dir}/screenlog.0
-        screen -S ${om_component} -p 0 -X logfile ${om_dir}/screenlog.0
-        screen -S ${om_component} -p 0 -X log on
+        #deletes old log file and command screen to log again
+        if [[ -n $logfile ]]
+        then
+            rm -f $logfile
+            screen -S ${om_component} -p 0 -X logfile ${logfile}
+            screen -S ${om_component} -p 0 -X log on
+        fi
         #launch command to screen
         #[ "${om_component}" != "flow" ] && screen -S ${om_component} -p 0 -X stuff "cd ${DIR_OM}/open${om_component}\n" && sleep 1
         [ "${om_component}" == "flow" ] && screen -S flow -p 0 -X stuff "java  -Dlogback.configurationFile=${DIRNAME}/flow-logback.xml -jar ./target/floodlight.jar -cf ${DIRNAME}/flow.properties\n"
@@ -133,11 +140,12 @@ do
         #check if is running
         if !  ps -f -U $USER -u $USER | grep -v grep | grep -q ${om_cmd}
         then
-            echo "ERROR, it has exited. See logs at '${om_dir}/screenlog.0'"
+            echo -n "ERROR, it has exited."
             #exit 0
         else
-            echo "running on 'screen -x ${om_component}'    logging to '${om_dir}/screenlog.0'"
+            echo -n "running on 'screen -x ${om_component}'."
         fi
+        [[ -n $logfile ]] && echo "  Logging at '${logfile}'" || echo
     fi
 done
 

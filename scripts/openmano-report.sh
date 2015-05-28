@@ -36,14 +36,14 @@ echo "-------------------------------"
 echo "-------------------------------"
 echo "OPENMANO"
 echo "-------------------------------"
-echo "cat $DIRNAME/../openmano/screenlog.?"
-cat $DIRNAME/../openmano/screenlog.?
+echo "cat $DIRNAME/../logs/openmano.?"
+cat $DIRNAME/../logs/openmano.?
 echo
 echo "-------------------------------"
 echo "OPENVIM"
 echo "-------------------------------"
-echo "cat $DIRNAME/../openvim/screenlog.?"
-cat $DIRNAME/../openvim/screenlog.?
+echo "cat $DIRNAME/../logs/openvim.?"
+cat $DIRNAME/../logs/openvim.?
 echo
 echo "-------------------------------"
 echo

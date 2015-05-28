@@ -29,8 +29,8 @@ Useful for human CLI management of items at openvim
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$26-nov-2014 19:09:29$"
-__version__="0.1.05-r381"
-version_date="Mar 2015"
+__version__="0.1.06-r382"
+version_date="May 2015"
 name="openvim"
 
 from argcomplete.completers import FilesCompleter
@@ -142,7 +142,7 @@ template={
     "image":{
         "${}":[
             "${name} image name",
-            "${path} image path (/mnt/powervault/virtualization/vnfs/os/US1404user.qcow2)",
+            "${path} image path (/path/to/shared/compute/host/folder/image.qcow2)",
             "${description} image description (${name})"
         ],
         "image":{
@@ -203,6 +203,32 @@ def check_valid_uuid(uuid):
     except js_e.ValidationError:
         return False
 
+def _print_verbose(row_data, element, verbose=0):
+    #print row_data
+    data = row_data[element]
+    if verbose==1 or verbose==2:
+        data2= dict((k,v) for (k,v) in data.iteritems() if k in show_at_verbose1 and v!=None)
+        if 'image' in data and 'id' in data['image']:
+            data2['image'] = data['image']['id']
+        if 'flavor' in data and 'id' in data['flavor']:
+            data2['flavor'] = data['flavor']['id']
+        if verbose==2:
+            #TODO add more intems in a digest mode, extended, numas ...
+            pass
+            #if "numas" in data
+            #if "extended" in data
+    else:
+        data2= data
+    #print json.dumps(c2, indent=4)
+#                     keys = data.keys()
+#                     for key in keys:
+#                         if data[key]==None: del data[key]
+#                         elif key=='id' or key=='name' or key=='links': del data[key]
+        
+    #print json.dumps(data2, indent=4)
+    data2={element: data2}
+    print yaml.safe_dump(data2, indent=4, default_flow_style=False)
+    
 def vim_read(url):
     '''
     Send a GET http to VIM
@@ -274,6 +300,14 @@ def vim_create(url, payload):
     return 1, vim_response.json()
 
 def parse_yaml_json(text):
+    if '\t' in text: #try parse in json format, because yaml does not admit tabs
+        try:
+            data = json.loads(text) 
+            return 0, data
+        except:
+            error_pos="TODO: get error position"
+            return -1, "Error json format at "+error_pos
+    #try to parse in yaml format
     try:
         data = yaml.load(text)
         return 0, data
@@ -348,10 +382,11 @@ def chage_var_recursively(data, var_list):
             elif type(data[k]) is str:
                 data[k] = change_string(data[k], var_list)
 
-def change_var(data):
+def change_var(data, default_values={}):
     ''' Look for a text "${}" key at 'data' that indicates that this json contains 
     variables that must be ask for values to the user and changes in the text of 
     the dictionary
+    'default_values' contain a dictionary of values that must be used and not be asked   
     Useful for creating templates
     "${}" entry contain a list with the text:
         ${var-name} prompt text to show user (Default value to allocate if user type CR)
@@ -374,6 +409,9 @@ def change_var(data):
         if d_start>0 and d_end>=d_start:
             default = var[d_start:d_end]
         else: default=None
+        if var[2:r-1] in default_values:
+            var_list[ var[:r] ] = default_values[ var[2:r-1] ]
+            continue
         v = raw_input(var[r:] + "? ")
         if v=="":
             if default != None:
@@ -381,7 +419,6 @@ def change_var(data):
             else:
                 v = raw_input("  empty string? try again: ")
         var_list[ var[:r] ] = str(v) 
-    
     del data["${}"]
     chage_var_recursively(data, var_list)
     return 0, data
@@ -395,22 +432,13 @@ def load_file(file_, parse=False):
             return 0, read_data
     except IOError, e:
         return -1, " Error opening file '" + file_ + "': " + e.args[1]
-    
-    try:
-        data = yaml.load(read_data)
-        return change_var(data)
-    except yaml.YAMLError, exc:
-        error_pos = ""
-        if hasattr(exc, 'problem_mark'):
-            mark = exc.problem_mark
-            error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
-        return -2, " Error yaml/json format error at '"+ file_ +"'"+error_pos
+    return parse_yaml_json(read_data)
 
 def load_file_or_yaml(content):
     '''
     'content' can be or a yaml/json file or a text containing a yaml/json text format
-    This function autodetect, trying to load and parse the file,
-    if fails trying to parse the 'content' text
+    This function autodetect, trying to load and parse the filename 'content',
+    if fails trying to parse the 'content' as text
     Returns the dictionary once parsed, or print an error and finish the program
     '''
     r,payload = load_file(content, parse=True)
@@ -474,16 +502,23 @@ def element_new(args):
         check_configuration("ADMIN_PORT", "TENANT")
         tenant=""
         
+    default_values={}
+    if args.name != None:
+        default_values["name"] = args.name
+    if "description" in args and args.description != None:
+        default_values["description"] = args.description
+    if "path" in args and args.path != None:
+        default_values["path"] = args.path
     if args.file==None:
         payload= template[args.element[:-1] ]
         payload = yaml.load(str(payload))  #with this trick we make a completely copy of the data, so to not modified the original one
-        r,c= change_var(payload)
-        if r<0:
-            print "Template error", c
-            return -1
-        payload=c
     else:
         payload=load_file_or_yaml(args.file)
+    r,c= change_var(payload, default_values)
+    if r<0:
+        print "Template error", c
+        return -1
+    payload=c
     #print payload
     if args.element[:-1] not in payload:
         payload = {args.element[:-1]: payload }
@@ -497,8 +532,10 @@ def element_new(args):
         
     if args.name != None:
         item["name"] = args.name
-    if args.description != None:
-        item["description"] = args.name
+    if "description" in args and args.description != None:
+        item["description"] = args.description
+    if "path" in args and args.path != None:
+        item["path"] = args.path
     
 
     r,c = vim_create(url, payload)
@@ -518,7 +555,9 @@ def element_new(args):
         print " " + uuid +"   "+ name.ljust(20) + " Created"
         for e in ('warning', 'error', 'last_error'):
             if e in item:    print e + "\n" + item[e]
-    return 0
+        if args.verbose!=None:
+            _print_verbose(c, args.element[:-1], args.verbose)
+        return 0
 
 def element_action(args):
     filter_qs = ""
@@ -586,7 +625,13 @@ def element_action(args):
             print " " + uuid +"   "+ name.ljust(20) + "   " + c
             result = -r
         else:
-            print " " + uuid +"   "+ name.ljust(20) + "   "+ args.action
+            if args.action == "createImage":  #response contain an {image: {...} }, not a {server: {...} }.
+                print " " + c["image"]["id"] +"   "+ c["image"]["name"].ljust(20)
+                args.element="images"
+            else:
+                print " " + uuid             +"   "+ name.ljust(20) + "   "+ args.action
+            if "verbose" in args and args.verbose!=None:
+                _print_verbose(c, args.element[:-1], args.verbose)
     return result
 
 def element_edit(args):
@@ -622,6 +667,11 @@ def element_edit(args):
         return -r
 
     payload=load_file_or_yaml(args.file)
+    r,c= change_var(payload)
+    if r<0:
+        print "Template error", c
+        return -1
+    payload=c
     if args.element[:-1] not in payload:
         payload = {args.element[:-1]: payload }
 
@@ -654,6 +704,8 @@ def element_edit(args):
             result = -r
         else:
             print " " + uuid +"   "+ name.ljust(20) + " edited"
+            if "verbose" in args and args.verbose!=None:
+                _print_verbose(c, args.element[:-1], args.verbose)
     return result
 
 def element_action_edit(args):
@@ -778,29 +830,8 @@ def element_list(args):
         if verbose>0:
             r2,c2 = vim_read(url + "/"+ item['id'])
             if r2>0:
-                data = c2[ args.element[:-1] ]
-                if verbose==1 or verbose==2:
-                    data2= dict((k,v) for (k,v) in data.iteritems() if k in show_at_verbose1 and v!=None)
-                    if 'image' in data and 'id' in data['image']:
-                        data2['image'] = data['image']['id']
-                    if 'flavor' in data and 'id' in data['flavor']:
-                        data2['flavor'] = data['flavor']['id']
-                    if verbose==2:
-                        #TODO add more intems in a digest mode, extended, numas ...
-                        pass
-                        #if "numas" in data
-                        #if "extended" in data
-                else:
-                    data2= data
-                #print json.dumps(c2, indent=4)
-#                     keys = data.keys()
-#                     for key in keys:
-#                         if data[key]==None: del data[key]
-#                         elif key=='id' or key=='name' or key=='links': del data[key]
-                    
-                #print json.dumps(data2, indent=4)
-                data2={args.element[:-1]: data2}
-                print yaml.safe_dump(data2, indent=4, default_flow_style=False)
+                _print_verbose(c2, args.element[:-1], verbose)
+
     return result
 
 def openflow_action(args):
@@ -888,7 +919,11 @@ if __name__=="__main__":
             element_new_parser = subparsers.add_parser(item+'-create', help="creates a new "+item_dict[item][:-1])
         element_new_parser.add_argument("file", nargs='?', help="json/yaml text or file with content").completer = FilesCompleter
         element_new_parser.add_argument("--name", action="store", help="Use this name")
-        element_new_parser.add_argument("--description", action="store", help="Use this descrition")
+        if item!="network":
+            element_new_parser.add_argument("--description", action="store", help="Use this descrition")
+        if item=="image":
+            element_new_parser.add_argument("--path", action="store", help="Use this path")
+        element_new_parser.add_argument('--verbose', '-v', action='count', help="increment the verbosity")
         element_new_parser.set_defaults(func=element_new, element=item_dict[item])
         #DELETE
         if item=='host':
@@ -905,6 +940,7 @@ if __name__=="__main__":
         element_edit_parser.add_argument("file", help="json/yaml text or file with the changes").completer = FilesCompleter
         element_edit_parser.add_argument("-F","--filter", action="store", help="filter query string")
         element_edit_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+        element_edit_parser.add_argument('--verbose', '-v', action='count', help="increment the verbosity")
         element_edit_parser.set_defaults(func=element_edit, element=item_dict[item])
         #ACTION
         if item=='vm':
@@ -921,6 +957,7 @@ if __name__=="__main__":
             vm_action_image_parser.add_argument("--path", action="store", help="Provide a new image complete path")
             vm_action_image_parser.add_argument("-F","--filter", action="store", help="filter query string")
             vm_action_image_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+            vm_action_image_parser.add_argument('--verbose', '-v', action='count', help="increment the verbosity")
             vm_action_image_parser.set_defaults(func=element_action, element="servers", action="createImage" )
         #ACTION that are implemented with EDITION
         if item=='port':
