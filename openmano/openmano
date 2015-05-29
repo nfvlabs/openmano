@@ -129,7 +129,7 @@ def parser_json_yaml(file_name):
         try:
             config = json.loads(text) 
         except:
-            error_pos="todo: parsear donde esta el error"
+            error_pos="TODO: get error position"
             return (False, "Error loading file '"+file_name+"'"+error_pos+": content format error: Failed to parse json format")
 
     return True, config

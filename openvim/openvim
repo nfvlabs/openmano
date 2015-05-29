@@ -599,7 +599,7 @@ def element_action(args):
         payload={ args.action: None}
     #print json.dumps(c, indent=4)
     item_list = c[ args.element ]
-    if len(item_list)==0:
+    if len(item_list)==0 and args.name != None:
         print  " Not found " + args.element + " " + args.name
         return 404 #HTTP_Not_Found
     result = 0
@@ -667,17 +667,17 @@ def element_edit(args):
         return -r
 
     payload=load_file_or_yaml(args.file)
-    r,c= change_var(payload)
-    if r<0:
-        print "Template error", c
+    r2,c2= change_var(payload)
+    if r2<0:
+        print "Template error", c2
         return -1
-    payload=c
+    payload=c2
     if args.element[:-1] not in payload:
         payload = {args.element[:-1]: payload }
 
     #print json.dumps(c, indent=4)
     item_list = c[ args.element ]
-    if len(item_list)==0:
+    if len(item_list)==0 and args.name != None:
         print  " Not found " + args.element + " " + args.name
         return 404 #HTTP_Not_Found
     result = 0
@@ -755,7 +755,7 @@ def element_delete(args):
 
     #print json.dumps(c, indent=4)
     item_list = c[ args.element ]
-    if len(item_list)==0:
+    if len(item_list)==0 and args.name != None:
         print  " Not found " + args.element + " " + args.name
         return 404 #HTTP_Not_Found
     result = 0
@@ -994,7 +994,7 @@ if __name__=="__main__":
     openflow_list_action = subparsers.add_parser("openflow-clear-all", help="removes all openflow rules")
     openflow_list_action.set_defaults(func=openflow_action, action="clear-all")
 
-    openflow_list_action = subparsers.add_parser("openflow-net-resinstall", help="reinstall the openflow rules for a network")
+    openflow_list_action = subparsers.add_parser("openflow-net-reinstall", help="reinstall the openflow rules for a network")
     openflow_list_action.add_argument("name", nargs='?', help="network name, if missing all networks")
     openflow_list_action.set_defaults(func=openflow_action, action="reinstall")
     

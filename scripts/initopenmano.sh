@@ -60,6 +60,9 @@ DIRNAME=$(dirname $(readlink -f ${BASH_SOURCE[0]}))
 DIRvim=$(dirname $DIRNAME)/openvim
 DIRmano=$(dirname $DIRNAME)/openmano
 
+echo "deleting deployed vm"
+openvim vm-delete -f | grep -q deleted && sleep 10 #give some time to get virtual machines deleted
+
 echo "Stopping openmano"
 $DIRNAME/service-openmano.sh stop
 
