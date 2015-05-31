@@ -744,12 +744,17 @@ def http_post_tenant_id(tenant_id):
 def http_delete_tenant_id(tenant_id):
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check permissions
-    tenants_flavors = my.db.get_table(FROM='tenants_flavors', SELECT=('flavor_id',), WHERE={'tenant_id': tenant_id})
-    tenants_images  = my.db.get_table(FROM='tenants_images',  SELECT=('image_id',),  WHERE={'tenant_id': tenant_id})
+    r, tenants_flavors = my.db.get_table(FROM='tenants_flavors', SELECT=('flavor_id','tenant_id'), WHERE={'tenant_id': tenant_id})
+    if r<=0:
+        tenants_flavors=()
+    r, tenants_images  = my.db.get_table(FROM='tenants_images',  SELECT=('image_id','tenant_id'),  WHERE={'tenant_id': tenant_id})
+    if r<=0:
+        tenants_images=()
     result, content = my.db.delete_row('tenants', tenant_id)
     if result == 0:
         bottle.abort(HTTP_Not_Found, content)
     elif result >0:
+        print "alf", tenants_flavors, tenants_images
         for flavor in tenants_flavors:
             my.db.delete_row_by_key("flavors", "uuid",  flavor['flavor_id'])
         for image in tenants_images:
