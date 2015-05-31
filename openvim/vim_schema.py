@@ -49,7 +49,7 @@ vlan_schema={"type":"integer","minimum":1,"maximun":4095}
 vlan1000_schema={"type":"integer","minimum":1000,"maximun":4095}
 mac_schema={"type":"string", "pattern":"^[0-9a-fA-F][02468aceACE](:[0-9a-fA-F]{2}){5}$"}  #must be unicast LSB bit of MSB byte ==0 
 net_bind_schema={"oneOf":[{"type":"null"},{"type":"string", "pattern":"^(default|((bridge|macvtap):[0-9a-zA-Z]{1,10}))$"}]}
-
+yes_no_schema={"type":"string", "enum":["yes", "no"]}
 
 config_schema = {
     "title":"main configuration information schema",
@@ -97,7 +97,7 @@ metadata_schema={
     "type":"object",
     "properties":{
         "architecture": {"type":"string"},
-        "use_incremental": {"type":"string","enum":["yes","no"]},
+        "use_incremental": yes_no_schema,
         "vpci": pci_schema,
         "os_distro": {"type":"string"},
         "os_type": {"type":"string"},
@@ -373,8 +373,31 @@ flavor_new_schema = {
                 "ram":integer0_schema,
                 "vcpus":integer0_schema,
                 "extended": extended_schema,
+                "public": yes_no_schema
             },
             "required": ["name"]
+        }
+    },
+    "required": ["flavor"],
+    "additionalProperties": False
+}
+flavor_update_schema = {
+    "title":"flavor update information schema",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type":"object",
+    "properties":{
+        "flavor":{
+            "type":"object",
+            "properties":{
+                "name":name_schema,
+                "description":description_schema,
+                "ram":integer0_schema,
+                "vcpus":integer0_schema,
+                "extended": extended_schema,
+                "public": yes_no_schema
+            },
+            "minProperties": 1,
+            "additionalProperties": False
         }
     },
     "required": ["flavor"],
@@ -394,8 +417,31 @@ image_new_schema = {
                 "description":description_schema,
                 "name":name_schema,
                 "metadata":metadata_schema,
+                "public": yes_no_schema
             },
             "required": ["name","path"]
+        }
+    },
+    "required": ["image"],
+    "additionalProperties": False
+}
+
+image_update_schema = {
+    "title":"image update information schema",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type":"object",
+    "properties":{
+        "image":{
+            "type":"object",
+            "properties":{
+                "path":path_schema,
+                "description":description_schema,
+                "name":name_schema,
+                "metadata":metadata_schema,
+                "public": yes_no_schema
+            },
+            "minProperties": 1,
+            "additionalProperties": False
         }
     },
     "required": ["image"],

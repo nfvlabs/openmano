@@ -586,6 +586,8 @@ def element_action(args):
     
 
     r,c = vim_read(url + filter_qs)
+    if r==-401 and url_admin!=None and url != url_admin: #Unauthorized, try with admin privileges
+        r,c = vim_read(url_admin + filter_qs)
     if r<0:           
         print "Error:", c
         return -r
@@ -662,6 +664,8 @@ def element_edit(args):
     
 
     r,c = vim_read(url + filter_qs)
+    if r==-401 and url_admin!=None and url != url_admin: #Unauthorized, try with admin privileges
+        r,c = vim_read(url_admin + filter_qs)
     if r<0:           
         print "Error:", c
         return -r
@@ -749,6 +753,8 @@ def element_delete(args):
     
 
     r,c = vim_read(url + filter_qs)
+    if r==-401 and url_admin!=None and url != url_admin: #Unauthorized, try with admin privileges
+        r,c = vim_read(url_admin + filter_qs)
     if r<0:           
         print "Error:", c
         return -r
@@ -798,6 +804,10 @@ def element_list(args):
     #if args.name:
     #    what += "/" + args.name
     url = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["PORT"], tenant, args.element)
+    if "ADMIN_PORT" in vim_config and vim_config["ADMIN_PORT"]!=None:
+        url_admin = "http://%s:%s/openvim%s/%s" %(vim_config["HOST"], vim_config["ADMIN_PORT"], tenant, args.element)
+    else:
+        url_admin = None
     #print " get", what, "     >>>>>>>> ",
     if args.filter:
         filter_qs += "?" + args.filter
@@ -811,6 +821,8 @@ def element_list(args):
     
 
     r,c = vim_read(url + filter_qs)
+    if r==-401 and url_admin!=None and url != url_admin: #Unauthorized, try with admin privileges
+        r,c = vim_read(url_admin + filter_qs)
     if r<0:           
         print "Error:", c
         return -r
@@ -818,8 +830,8 @@ def element_list(args):
     result = 0
     item_list = c[ args.element ]
     verbose=0
-    if args.name!=None and len(item_list)==1:
-        verbose+=1
+    #if args.name!=None and len(item_list)==1:
+    #    verbose+=1
     if args.verbose!=None:
         verbose += args.verbose
     for item in item_list:
@@ -829,6 +841,9 @@ def element_list(args):
         print item['id']+"   "+item['name'].ljust(20) + extra
         if verbose>0:
             r2,c2 = vim_read(url + "/"+ item['id'])
+            if r2==-401 and url_admin!=None and url != url_admin: #Unauthorized, try with admin privileges
+                url=url_admin
+                r2,c2 = vim_read(url + "/"+ item['id'])
             if r2>0:
                 _print_verbose(c2, args.element[:-1], verbose)
 

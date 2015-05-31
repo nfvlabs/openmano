@@ -643,11 +643,11 @@ class vim_db():
                 r,c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
-    def new_flavor(self, flavor_dict, tenant_id = None):
+    def new_flavor(self, flavor_dict, tenant_id ):
         '''Add new flavor into the database. Create uuid if not provided
         Atributes
             flavor_dict: flavor dictionary with the key: value to insert. Must be valid flavors columns
-            tenant_id: if provided, it match this flavor/tenant inserting at tenants_flavors table
+            tenant_id: if not 'any', it matches this flavor/tenant inserting at tenants_flavors table
         Return: (result, data) where result can be
             negative: error at inserting. data contain text
             1, inserted, data contain inserted uuid flavor
@@ -681,17 +681,16 @@ class vim_db():
                     #if result != 1: return -1, "Database Error while inserting at flavors table"
 
                     #insert tenants_flavors
-                    if tenant_id is not None:
-                        cmd = "INSERT INTO tenants_flavors (tenant_id,flavor_id) VALUES ('%s','%s')" % (str(tenant_id), uuid)
+                    if tenant_id != 'any':
+                        cmd = "INSERT INTO tenants_flavors (tenant_id,flavor_id) VALUES ('%s','%s')" % (tenant_id, uuid)
                         if self.debug: print cmd
                         self.cur.execute(cmd)
 
                     #inserting new log
-                    tenant_str = str(tenant_id) if tenant_id is not None else 'Null'
                     del flavor_dict['uuid']
                     if 'extended' in flavor_dict: del flavor_dict['extended'] #remove two many information
                     cmd = "INSERT INTO logs (related,level,uuid, tenant_id, description) VALUES ('flavors','debug','%s','%s',\"new flavor: %s\")" \
-                        % (uuid, tenant_str, str(flavor_dict))
+                        % (uuid, tenant_id, str(flavor_dict))
                     if self.debug: print cmd
                     self.cur.execute(cmd)                    
 
@@ -703,60 +702,11 @@ class vim_db():
                 r,c = self.format_error(e, "update", tenant_id)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
         
-    def delete_flavor(self, flavor_id, tenant_id):
-        for retry_ in range(0,2):
-            deleted = -1
-            deleted_flavor = -1
-            result = (-HTTP_Internal_Server_Error, "internal error")
-            cmd=""
-            try:
-                with self.con:
-                    self.cur = self.con.cursor()
-                    cmd = "DELETE FROM tenants_flavors WHERE flavor_id = '%s' AND tenant_id = '%s'" % (flavor_id, tenant_id)
-                    if self.debug: print cmd
-                    self.cur.execute(cmd)
-                    deleted = self.cur.rowcount
-                    if deleted == 1:
-                        #inserting new log
-                        cmd = "INSERT INTO logs (related,level,uuid,tenant_id,description) VALUES ('flavors','debug','%s','%s','delete flavor reference for this tenant')" % (flavor_id, tenant_id)
-                        if self.debug: print cmd
-                        self.cur.execute(cmd)
-
-                        #commit transaction
-                        self.cur.close()
-                if deleted==1:
-                    with self.con:
-                        self.cur = self.con.cursor()
-
-                        #delete flavor if not public
-                        cmd = "DELETE FROM flavors WHERE uuid = '%s' AND public = 'no'" % flavor_id
-                        if self.debug: print cmd
-                        self.cur.execute(cmd)
-                        deleted_flavor = self.cur.rowcount
-                        if deleted_flavor == 1:
-                            #delete uuid
-                            cmd = "DELETE FROM uuids WHERE uuid = '%s'" % flavor_id
-                            if self.debug: print cmd
-                            self.cur.execute(cmd)
-                            #inserting new log
-                            cmd = "INSERT INTO logs (related,level,uuid,tenant_id,description) VALUES ('flavors','debug','%s','%s','delete flavor completely')" % (flavor_id, tenant_id)
-                            if self.debug: print cmd
-                            self.cur.execute(cmd)
-            except (mdb.Error, AttributeError), e:
-                if not self.debug: print cmd
-                print "delete_flavor DB Exception %d: %s" % (e.args[0], e.args[1])
-                if deleted <0: result = self.format_error(e, "delete", "servers")
-            finally:
-                if deleted==1: return 1, "flavor %s from tenant %s %sdeleted" % (flavor_id, tenant_id, "completely " if deleted_flavor==1 else "")
-                elif deleted==0: return 0, "flavor %s from tenant %s not found" % (flavor_id, tenant_id)
-                else: 
-                    if result[0]!=-HTTP_Request_Timeout or retry_==1: return result 
-
-    def new_image(self, image_dict, tenant_id = None):
+    def new_image(self, image_dict, tenant_id):
         '''Add new image into the database. Create uuid if not provided
         Atributes
             image_dict: image dictionary with the key: value to insert. Must be valid images columns
-            tenant_id: if provided, it match this image/tenant inserting at tenants_images table
+            tenant_id: if not 'any', it matches this image/tenant inserting at tenants_images table
         Return: (result, data) where result can be
             negative: error at inserting. data contain text
             1, inserted, data contain inserted uuid image
@@ -790,14 +740,13 @@ class vim_db():
                     #if result != 1: return -1, "Database Error while inserting at images table"
 
                     #insert tenants_images
-                    if tenant_id is not None:
-                        cmd = "INSERT INTO tenants_images (tenant_id,image_id) VALUES ('%s','%s')" % (str(tenant_id), uuid)
+                    if tenant_id != 'any':
+                        cmd = "INSERT INTO tenants_images (tenant_id,image_id) VALUES ('%s','%s')" % (tenant_id, uuid)
                         if self.debug: print cmd
                         self.cur.execute(cmd)
 
                     #inserting new log
-                    tenant_str = str(tenant_id) if tenant_id is not None else 'Null'
-                    cmd = "INSERT INTO logs (related,level,uuid, tenant_id, description) VALUES ('images','debug','%s','%s',\"new image: %s path: %s\")" % (uuid, tenant_str, image_dict['name'], image_dict['path'])
+                    cmd = "INSERT INTO logs (related,level,uuid, tenant_id, description) VALUES ('images','debug','%s','%s',\"new image: %s path: %s\")" % (uuid, tenant_id, image_dict['name'], image_dict['path'])
                     if self.debug: print cmd
                     self.cur.execute(cmd)                    
 
@@ -809,52 +758,92 @@ class vim_db():
                 r,c = self.format_error(e, "update", tenant_id)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
         
-    def delete_image(self, image_id, tenant_id):
+    def delete_image_flavor(self, item_type, item_id, tenant_id):
+        '''deletes an image or flavor from database
+        item_type must be a 'image' or 'flavor'
+        item_id is the uuid
+        tenant_id is the asociated tenant, can be 'any' with means all
+        If tenan_id is not any, it deletes from tenants_images/flavors,
+        which means this image/flavor is used by this tenant, and if success, 
+        it tries to delete from images/flavors in case this is not public, 
+        that only will success if image is private and not used by other tenants
+        If tenant_id is any, it tries to delete from both tables at the same transaction
+        so that image/flavor is completely deleted from all tenants or nothing
+        '''
         for retry_ in range(0,2):
             deleted = -1
-            deleted_image = -1
+            deleted_item = -1
             result = (-HTTP_Internal_Server_Error, "internal error")
             cmd=""
             try:
                 with self.con:
                     self.cur = self.con.cursor()
-                    cmd = "DELETE FROM tenants_images WHERE image_id = '%s' AND tenant_id = '%s'" % (image_id, tenant_id)
+                    cmd = "DELETE FROM tenants_%ss WHERE %s_id = '%s'" % (item_type, item_type, item_id)
+                    if tenant_id != 'any':
+                        cmd += " AND tenant_id = '%s'" % tenant_id
                     if self.debug: print cmd
                     self.cur.execute(cmd)
                     deleted = self.cur.rowcount
+                    if tenant_id == 'any': #delete from images/flavors in the SAME transaction
+                        cmd = "DELETE FROM %ss WHERE uuid = '%s'" % (item_type, item_id)
+                        if self.debug: print cmd
+                        self.cur.execute(cmd)
+                        deleted = self.cur.rowcount
+                        if deleted>=1:
+                            #delete uuid
+                            cmd = "DELETE FROM uuids WHERE uuid = '%s'" % item_id
+                            if self.debug: print cmd
+                            self.cur.execute(cmd)
+                            #inserting new log
+                            cmd = "INSERT INTO logs (related,level,uuid,tenant_id,description) \
+                                   VALUES ('%ss','debug','%s','%s','delete %s completely')" % \
+                                   (item_type, item_id, tenant_id, item_type)
+                            if self.debug: print cmd
+                            self.cur.execute(cmd)
+                            return deleted, "%s '%s' completely deleted" % (item_type, item_id)
+                        return 0, "%s '%s' not found" % (item_type, item_id)
+                    
                     if deleted == 1:
                         #inserting new log
-                        cmd = "INSERT INTO logs (related,level,uuid,tenant_id,description) VALUES ('images','debug','%s','%s','delete image reference for this tenant')" % (image_id, tenant_id)
+                        cmd = "INSERT INTO logs (related,level,uuid,tenant_id,description) \
+                                VALUES ('%ss','debug','%s','%s','delete %s reference for this tenant')" % \
+                                (item_type, item_id, tenant_id, item_type)
                         if self.debug: print cmd
                         self.cur.execute(cmd)
 
                         #commit transaction
                         self.cur.close()
+                #if tenant!=any  delete from images/flavors in OTHER transaction. If fails is because dependencies so that not return error
                 if deleted==1:
                     with self.con:
                         self.cur = self.con.cursor()
 
-                        #delete image if not public
-                        cmd = "DELETE FROM images WHERE uuid = '%s' AND public = 'no'" % image_id
+                        #delete image/flavor if not public
+                        cmd = "DELETE FROM %ss WHERE uuid = '%s' AND public = 'no'" % (item_type, item_id)
                         if self.debug: print cmd
                         self.cur.execute(cmd)
-                        deleted_image = self.cur.rowcount
-                        if deleted_image == 1:
+                        deleted_item = self.cur.rowcount
+                        if deleted_item == 1:
                             #delete uuid
-                            cmd = "DELETE FROM uuids WHERE uuid = '%s'" % image_id
+                            cmd = "DELETE FROM uuids WHERE uuid = '%s'" % item_id
                             if self.debug: print cmd
                             self.cur.execute(cmd)
                             #inserting new log
-                            cmd = "INSERT INTO logs (related,level,uuid,tenant_id,description) VALUES ('images','debug','%s','%s','delete image completely')" % (image_id, tenant_id)
+                            cmd = "INSERT INTO logs (related,level,uuid,tenant_id,description) \
+                                   VALUES ('%ss','debug','%s','%s','delete %s completely')" % \
+                                   (item_type, item_id, tenant_id, item_type)
                             if self.debug: print cmd
                             self.cur.execute(cmd)
             except (mdb.Error, AttributeError), e:
                 if not self.debug: print cmd
-                print "delete_image DB Exception %d: %s" % (e.args[0], e.args[1])
+                print "delete_%s DB Exception %d: %s" % (item_type, e.args[0], e.args[1])
                 if deleted <0: result = self.format_error(e, "delete", "servers")
             finally:
-                if deleted==1: return 1, "image %s from tenant %s %sdeleted" % (image_id, tenant_id, "completely " if deleted_image==1 else "")
-                elif deleted==0: return 0, "image %s from tenant %s not found" % (image_id, tenant_id)
+                if deleted==1:
+                    return 1, "%s '%s' from tenant '%s' %sdeleted" % \
+                    (item_type, item_id, tenant_id, "completely " if deleted_item==1 else "")
+                elif deleted==0:
+                    return 0, "%s '%s' from tenant '%s' not found" % (item_type, item_id, tenant_id)
                 else: 
                     if result[0]!=-HTTP_Request_Timeout or retry_==1: return result  
             
@@ -915,6 +904,53 @@ class vim_db():
                 print "delete_row_by_key DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e, "delete", 'instances' if table=='hosts' or table=='tenants' else 'dependencies')
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
+                
+    def delete_row_by_dict(self, **sql_dict):
+        ''' Deletes rows from a table.
+        Attribute sql_dir: dictionary with the following key: value
+            'FROM': string of table name (Mandatory)
+            'WHERE': dict of key:values, translated to key=value AND ... (Optional)
+            'WHERE_NOT': dict of key:values, translated to key<>value AND ... (Optional)
+            'WHERE_NOTNULL': (list or tuple of items that must not be null in a where ... (Optional)
+            'LIMIT': limit of number of rows (Optional)
+        Return: the (number of items deleted, descriptive test) if ok; (negative, descriptive text) if error
+        '''
+        #print sql_dict
+        from_  = "FROM " + str(sql_dict['FROM'])
+        #print 'from_', from_
+        if 'WHERE' in sql_dict and len(sql_dict['WHERE']) > 0:
+            w=sql_dict['WHERE']
+            where_ = "WHERE " + " AND ".join(map( lambda x: str(x) + (" is Null" if w[x] is None else "='"+str(w[x])+"'"),  w.keys()) ) 
+        else: where_ = ""
+        if 'WHERE_NOT' in sql_dict and len(sql_dict['WHERE_NOT']) > 0: 
+            w=sql_dict['WHERE_NOT']
+            where_2 = " AND ".join(map( lambda x: str(x) + (" is not Null" if w[x] is None else "<>'"+str(w[x])+"'"),  w.keys()) )
+            if len(where_)==0:   where_ = "WHERE " + where_2
+            else:                where_ = where_ + " AND " + where_2
+        if 'WHERE_NOTNULL' in sql_dict and len(sql_dict['WHERE_NOTNULL']) > 0: 
+            w=sql_dict['WHERE_NOTNULL']
+            where_2 = " AND ".join(map( lambda x: str(x) + " is not Null",  w) )
+            if len(where_)==0:   where_ = "WHERE " + where_2
+            else:                where_ = where_ + " AND " + where_2
+        #print 'where_', where_
+        limit_ = "LIMIT " + str(sql_dict['LIMIT']) if 'LIMIT' in sql_dict else ""
+        #print 'limit_', limit_
+        cmd =  " ".join( ("DELETE", from_, where_, limit_) )
+        if self.debug: print cmd
+        for retry_ in range(0,2):
+            try:
+                with self.con:
+                    #delete host
+                    self.cur = self.con.cursor()
+                    self.cur.execute(cmd)
+                    deleted = self.cur.rowcount
+                return deleted, "%d deleted from %s" % (deleted, sql_dict['FROM'][:-1] )
+            except (mdb.Error, AttributeError), e:
+                if not self.debug: print cmd
+                print "delete_row_by_dict DB Exception %d: %s" % (e.args[0], e.args[1])
+                r,c =  self.format_error(e, "delete", 'dependencies')
+                if r!=-HTTP_Request_Timeout or retry_==1: return r,c
+
     
     def get_instance(self, instance_id):
         for retry_ in range(0,2):

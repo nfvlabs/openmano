@@ -70,8 +70,12 @@ class openflow_thread(threading.Thread):
                 raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
             info = of_response.json()
             
+            if info is not list:
+                return -1, "unexpected openflow response, not a list. Wrong version?"
             index = -1
             for i in range(0,len(info)):
+                if "dpid" not in info:
+                    return -1, "unexpected openflow response. Not 'dpdi' in field. Wrong version?"
                 if info[i]["dpid"] == self.dpid:
                     index = i
                     break

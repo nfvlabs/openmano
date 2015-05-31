@@ -38,8 +38,10 @@ from utils import RADclass
 from jsonschema import validate as js_v, exceptions as js_e
 import host_thread as ht
 from vim_schema import host_new_schema, host_edit_schema, tenant_new_schema, \
-    tenant_edit_schema, flavor_new_schema, image_new_schema, server_new_schema, \
-    server_action_schema, network_new_schema, network_update_schema, \
+    tenant_edit_schema, \
+    flavor_new_schema, flavor_update_schema, \
+    image_new_schema, image_update_schema, \
+    server_new_schema, server_action_schema, network_new_schema, network_update_schema, \
     port_new_schema, port_update_schema
 
 global my
@@ -128,7 +130,7 @@ def check_extended(extended, allow_net_attach=False):
 http2db_host={'id':'uuid'}
 http2db_tenant={'id':'uuid'}
 http2db_flavor={'id':'uuid','imageRef':'image_id'}
-http2db_image={'id':'uuid', 'created':'created_at', 'updated':'modified_at'}
+http2db_image={'id':'uuid', 'created':'created_at', 'updated':'modified_at', 'public': 'public'}
 http2db_server={'id':'uuid','hostId':'host_id','flavorRef':'flavor_id','imageRef':'image_id','created':'created_at'}
 http2db_network={'id':'uuid','provider:vlan':'vlan', 'provider:physical': 'bind'}
 http2db_port={'id':'uuid', 'network_id':'net_id', 'mac_address':'mac', 'device_owner':'type','device_id':'instance_id','binding:switch_port':'switch_port','binding:vlan':'vlan', 'bandwidth':'Mbps'}
@@ -322,7 +324,7 @@ def filter_query_string(qs, http2db, allowed):
     limit=100
     select=[]
     if type(qs) is not bottle.FormsDict:
-        print '!!!!!!!!!!!!!!ivalid query string not a dictionary'
+        print '!!!!!!!!!!!!!!invalid query string not a dictionary'
         #bottle.abort(HTTP_Internal_Server_Error, "call programmer")
     else:
         for k in qs:
@@ -424,8 +426,16 @@ def convert_datetime2str(var):
         for v in var:
             convert_datetime2str(v)
 
+def check_valid_tenant(my, tenant_id):
+    if tenant_id=='any':
+        if not my.admin:
+            return HTTP_Unauthorized, "Needed admin privileges"
+    else:
+        result, _ = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id})
+        if result<=0:
+            return HTTP_Not_Found, "tenant '%s' not found" % tenant_id
+    return 0, None
 
-  
 
 @bottle.error(400)
 @bottle.error(401) 
@@ -734,10 +744,16 @@ def http_post_tenant_id(tenant_id):
 def http_delete_tenant_id(tenant_id):
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check permissions
+    tenants_flavors = my.db.get_table(FROM='tenants_flavors', SELECT=('flavor_id',), WHERE={'tenant_id': tenant_id})
+    tenants_images  = my.db.get_table(FROM='tenants_images',  SELECT=('image_id',),  WHERE={'tenant_id': tenant_id})
     result, content = my.db.delete_row('tenants', tenant_id)
     if result == 0:
         bottle.abort(HTTP_Not_Found, content)
     elif result >0:
+        for flavor in tenants_flavors:
+            my.db.delete_row_by_key("flavors", "uuid",  flavor['flavor_id'])
+        for image in tenants_images:
+            my.db.delete_row_by_key("images", "uuid",   image['image_id'])
         data={'result' : content}
         return format_out(data)
     else:
@@ -753,22 +769,25 @@ def http_delete_tenant_id(tenant_id):
 def http_get_flavors(tenant_id):
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check valid tenant_id
-    result, _ = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found' % tenant_id)
-        return
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
     #obtain data
     select_,where_,limit_ = filter_query_string(bottle.request.query, http2db_flavor,
-            ('id','name','description') )
-    from_  ='tenants_flavors inner join flavors on tenants_flavors.flavor_id=flavors.uuid'
-    where_['tenant_id'] = tenant_id
+            ('id','name','description','public') )
+    if tenant_id=='any':
+        from_  ='flavors'
+    else:
+        from_  ='tenants_flavors inner join flavors on tenants_flavors.flavor_id=flavors.uuid'
+        where_['tenant_id'] = tenant_id
     result, content = my.db.get_table(FROM=from_, SELECT=select_, WHERE=where_, LIMIT=limit_)
     if result < 0:
         print "http_get_flavors Error", content
         bottle.abort(-result, content)
     else:
         change_keys_http2db(content, http2db_flavor, reverse=True)
-        for row in content: row['links']=[ {'href': "/".join( (my.url_preffix, tenant_id, 'flavors', str(row['id']) ) ), 'rel':'bookmark' } ]
+        for row in content:
+            row['links']=[ {'href': "/".join( (my.url_preffix, tenant_id, 'flavors', str(row['id']) ) ), 'rel':'bookmark' } ]
         data={'flavors' : content}
         return format_out(data)
 
@@ -776,16 +795,19 @@ def http_get_flavors(tenant_id):
 def http_get_flavor_id(tenant_id, flavor_id):
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check valid tenant_id
-    result, _ = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found' % tenant_id)
-        return
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
     #obtain data
-    from_  ='tenants_flavors inner join flavors on tenants_flavors.flavor_id=flavors.uuid'
-    where_ = bottle.request.query
-    where_['tenant_id'] = tenant_id
-    where_['flavor_id'] = flavor_id
-    result, content = my.db.get_table(FROM=from_, SELECT=('uuid','name','description', 'ram', 'vcpus', 'extended', 'disk'), WHERE=where_)
+    select_,where_,limit_ = filter_query_string(bottle.request.query, http2db_flavor,
+            ('id','name','description','ram', 'vcpus', 'extended', 'disk', 'public') )
+    if tenant_id=='any':
+        from_  ='flavors'
+    else:
+        from_  ='tenants_flavors as tf inner join flavors as f on tf.flavor_id=f.uuid'
+        where_['tenant_id'] = tenant_id
+    where_['uuid'] = flavor_id
+    result, content = my.db.get_table(SELECT=select_, FROM=from_, WHERE=where_, LIMIT=limit_)
 
     if result < 0:
         print "http_get_flavor_id error %d %s" % (result, content)
@@ -812,10 +834,9 @@ def http_post_flavors(tenant_id):
     '''insert a flavor into the database, and attach to tenant.'''
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check valid tenant_id
-    result, content = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found' % tenant_id)
-        return
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
     http_content = format_in( flavor_new_schema )
     r = remove_extra_items(http_content, flavor_new_schema)
     if r is not None: print "http_post_flavors: Warning: remove extra items ", r
@@ -845,11 +866,11 @@ def http_delete_flavor_id(tenant_id, flavor_id):
     '''Deletes the flavor_id of a tenant. IT removes from tenants_flavors table.'''
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check valid tenant_id
-    result, _ = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found' % tenant_id)
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
         return
-    result, content = my.db.delete_flavor(flavor_id, tenant_id)
+    result, content = my.db.delete_image_flavor('flavor', flavor_id, tenant_id)
     if result == 0:
         bottle.abort(HTTP_Not_Found, content)
     elif result >0:
@@ -860,6 +881,116 @@ def http_delete_flavor_id(tenant_id, flavor_id):
         bottle.abort(-result, content)
         return
 
+@bottle.route(url_base + '/<tenant_id>/flavors/<flavor_id>/<action>', method='POST')
+def http_attach_detach_flavors(tenant_id, flavor_id, action):
+    '''attach/detach an existing flavor in this tenant. That is insert/remove at tenants_flavors table.'''
+    #TODO alf:  not tested at all!!!
+    my = config_dic['http_threads'][ threading.current_thread().name ]
+    #check valid tenant_id
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
+    if tenant_id=='any':
+        bottle.abort(HTTP_Bad_Request, "Invalid tenant 'any' with this command")
+    #check valid action
+    if action!='attach' and action != 'detach':
+        bottle.abort(HTTP_Method_Not_Allowed, "actions can be attach or detach")
+        return
+
+    #Ensure that flavor exist 
+    from_  ='tenants_flavors as tf right join flavors as f on tf.flavor_id=f.uuid'
+    where_={'uuid': flavor_id}
+    result, content = my.db.get_table(SELECT=('public','tenant_id'), FROM=from_, WHERE=where_)
+    if result==0:
+        if action=='attach':
+            text_error="Flavor '%s' not found" % flavor_id
+        else:
+            text_error="Flavor '%s' not found for tenant '%s'" % (flavor_id, tenant_id)
+        bottle.abort(HTTP_Not_Found, text_error)
+        return
+    elif result>0:
+        flavor=content[0]
+        if action=='attach':
+            if flavor['tenant_id']!=None:
+                bottle.abort(HTTP_Conflict, "Flavor '%s' already attached to tenant '%s'" % (flavor_id, tenant_id))
+            if flavor['public']=='no' and not my.admin:
+                #allow only attaching public flavors
+                bottle.abort(HTTP_Unauthorized, "Needed admin rights to attach a private flavor")
+                return
+            #insert in data base
+            result, content = my.db.new_row('tenants_flavors', {'flavor_id':flavor_id, 'tenant_id': tenant_id})
+            if result >= 0:
+                return http_get_flavor_id(tenant_id, flavor_id)
+        else: #detach
+            if flavor['tenant_id']==None:
+                bottle.abort(HTTP_Not_Found, "Flavor '%s' not attached to tenant '%s'" % (flavor_id, tenant_id))
+            result, content = my.db.delete_row_by_dict(FROM='tenants_flavors', WHERE={'flavor_id':flavor_id, 'tenant_id':tenant_id})
+            if result>=0:
+                if flavor['public']=='no':
+                    #try to delete the flavor completely to avoid orphan flavors, IGNORE error
+                    my.db.delete_row_by_dict(FROM='flavors', WHERE={'uuid':flavor_id})
+                data={'result' : "flavor detached"}
+                return format_out(data)
+    
+    #if get here is because an error
+    print "http_attach_detach_flavors error %d %s" % (result, content)
+    bottle.abort(-result, content)
+    return
+
+@bottle.route(url_base + '/<tenant_id>/flavors/<flavor_id>', method='PUT')
+def http_put_flavor_id(tenant_id, flavor_id):
+    '''update a flavor_id into the database.'''
+    my = config_dic['http_threads'][ threading.current_thread().name ]
+    #check valid tenant_id
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
+    #parse input data
+    http_content = format_in( flavor_update_schema )
+    r = remove_extra_items(http_content, flavor_update_schema)
+    if r is not None: print "http_put_flavor_id: Warning: remove extra items ", r
+    change_keys_http2db(http_content['flavor'], http2db_flavor)
+    extended_dict = http_content['flavor'].pop('extended', None)
+    if extended_dict is not None: 
+        result, content = check_extended(extended_dict)
+        if result<0:
+            print "http_put_flavor_id wrong input extended error %d %s" % (result, content)
+            bottle.abort(-result, content)
+            return
+        convert_bandwidth(extended_dict)
+        if 'devices' in extended_dict: change_keys_http2db(extended_dict['devices'], http2db_flavor)
+        http_content['flavor']['extended'] = json.dumps(extended_dict)
+    #Ensure that flavor exist 
+    where_={'uuid': flavor_id}
+    if tenant_id=='any':
+        from_  ='flavors'
+    else:
+        from_  ='tenants_flavors as ti inner join flavors as i on ti.flavor_id=i.uuid'
+        where_['tenant_id'] = tenant_id
+    result, content = my.db.get_table(SELECT=('public',), FROM=from_, WHERE=where_)
+    if result==0:
+        text_error="Flavor '%s' not found" % flavor_id
+        if tenant_id!='any':
+            text_error +=" for tenant '%s'" % flavor_id
+        bottle.abort(HTTP_Not_Found, text_error)
+        return
+    elif result>0:
+        if content[0]['public']=='yes' and not my.admin:
+            #allow only modifications over private flavors
+            bottle.abort(HTTP_Unauthorized, "Needed admin rights to edit a public flavor")
+            return
+        #insert in data base
+        result, content = my.db.update_rows('flavors', http_content['flavor'], {'uuid': flavor_id})
+
+    if result < 0:
+        print "http_put_flavor_id error %d %s" % (result, content)
+        bottle.abort(-result, content)
+        return
+    else:
+        return http_get_flavor_id(tenant_id, flavor_id)
+
+
+
 #
 # IMAGES
 #
@@ -868,15 +999,17 @@ def http_delete_flavor_id(tenant_id, flavor_id):
 def http_get_images(tenant_id):
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check valid tenant_id
-    result, _ = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found' % tenant_id)
-        return
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
     #obtain data
     select_,where_,limit_ = filter_query_string(bottle.request.query, http2db_image,
-            ('id','name','description','path') )
-    from_  ='tenants_images inner join images on tenants_images.image_id=images.uuid'
-    where_['tenant_id'] = tenant_id
+            ('id','name','description','path','public') )
+    if tenant_id=='any':
+        from_  ='images'
+    else:
+        from_  ='tenants_images inner join images on tenants_images.image_id=images.uuid'
+        where_['tenant_id'] = tenant_id
     result, content = my.db.get_table(SELECT=select_, FROM=from_, WHERE=where_, LIMIT=limit_)
     if result < 0:
         print "http_get_images Error", content
@@ -891,18 +1024,19 @@ def http_get_images(tenant_id):
 def http_get_image_id(tenant_id, image_id):
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check valid tenant_id
-    result, _ = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found' % tenant_id)
-        return
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
     #obtain data
-    from_  ='tenants_images inner join images on tenants_images.image_id=images.uuid'
-    where_ = bottle.request.query
-    where_['tenant_id'] = tenant_id
-    where_['image_id'] = image_id
-    result, content = my.db.get_table(FROM=from_, WHERE=where_,
-             SELECT=('uuid','name','description','progress', 'status', 'path', 'created_at', 'modified_at')
-    )
+    select_,where_,limit_ = filter_query_string(bottle.request.query, http2db_image,
+            ('id','name','description','progress', 'status','path', 'created', 'updated','public') )
+    if tenant_id=='any':
+        from_  ='images'
+    else:
+        from_  ='tenants_images as ti inner join images as i on ti.image_id=i.uuid'
+        where_['tenant_id'] = tenant_id
+    where_['uuid'] = image_id
+    result, content = my.db.get_table(SELECT=select_, FROM=from_, WHERE=where_, LIMIT=limit_)
 
     if result < 0:
         print "http_get_images error %d %s" % (result, content)
@@ -921,16 +1055,14 @@ def http_get_image_id(tenant_id, image_id):
         #data['tenants_links'] = dict([('tenant', row['id']) for row in content])
         return format_out(data)
 
-
 @bottle.route(url_base + '/<tenant_id>/images', method='POST')
 def http_post_images(tenant_id):
     '''insert a image into the database, and attach to tenant.'''
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check valid tenant_id
-    result, _ = my.db.get_table(FROM='tenants', SELECT=('uuid AS id',), WHERE={'uuid': tenant_id})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found' % tenant_id)
-        return
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
     http_content = format_in(image_new_schema)
     r = remove_extra_items(http_content, image_new_schema)
     if r is not None: print "http_post_images: Warning: remove extra items ", r
@@ -952,11 +1084,10 @@ def http_delete_image_id(tenant_id, image_id):
     '''Deletes the image_id of a tenant. IT removes from tenants_images table.'''
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check valid tenant_id
-    result, _ = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found' % tenant_id)
-        return
-    result, content = my.db.delete_image(image_id, tenant_id)
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
+    result, content = my.db.delete_image_flavor('image', image_id, tenant_id)
     if result == 0:
         bottle.abort(HTTP_Not_Found, content)
     elif result >0:
@@ -967,6 +1098,107 @@ def http_delete_image_id(tenant_id, image_id):
         bottle.abort(-result, content)
         return
 
+@bottle.route(url_base + '/<tenant_id>/images/<image_id>/<action>', method='POST')
+def http_attach_detach_images(tenant_id, image_id, action):
+    '''attach/detach an existing image in this tenant. That is insert/remove at tenants_images table.'''
+    #TODO alf:  not tested at all!!!
+    my = config_dic['http_threads'][ threading.current_thread().name ]
+    #check valid tenant_id
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
+    if tenant_id=='any':
+        bottle.abort(HTTP_Bad_Request, "Invalid tenant 'any' with this command")
+    #check valid action
+    if action!='attach' and action != 'detach':
+        bottle.abort(HTTP_Method_Not_Allowed, "actions can be attach or detach")
+        return
+
+    #Ensure that image exist 
+    from_  ='tenants_images as ti right join images as i on ti.image_id=i.uuid'
+    where_={'uuid': image_id}
+    result, content = my.db.get_table(SELECT=('public','tenant_id'), FROM=from_, WHERE=where_)
+    if result==0:
+        if action=='attach':
+            text_error="Image '%s' not found" % image_id
+        else:
+            text_error="Image '%s' not found for tenant '%s'" % (image_id, tenant_id)
+        bottle.abort(HTTP_Not_Found, text_error)
+        return
+    elif result>0:
+        image=content[0]
+        if action=='attach':
+            if image['tenant_id']!=None:
+                bottle.abort(HTTP_Conflict, "Image '%s' already attached to tenant '%s'" % (image_id, tenant_id))
+            if image['public']=='no' and not my.admin:
+                #allow only attaching public images
+                bottle.abort(HTTP_Unauthorized, "Needed admin rights to attach a private image")
+                return
+            #insert in data base
+            result, content = my.db.new_row('tenants_images', {'image_id':image_id, 'tenant_id': tenant_id})
+            if result >= 0:
+                return http_get_image_id(tenant_id, image_id)
+        else: #detach
+            if image['tenant_id']==None:
+                bottle.abort(HTTP_Not_Found, "Image '%s' not attached to tenant '%s'" % (image_id, tenant_id))
+            result, content = my.db.delete_row_by_dict(FROM='tenants_images', WHERE={'image_id':image_id, 'tenant_id':tenant_id})
+            if result>=0:
+                if image['public']=='no':
+                    #try to delete the image completely to avoid orphan images, IGNORE error
+                    my.db.delete_row_by_dict(FROM='images', WHERE={'uuid':image_id})
+                data={'result' : "image detached"}
+                return format_out(data)
+    
+    #if get here is because an error
+    print "http_attach_detach_images error %d %s" % (result, content)
+    bottle.abort(-result, content)
+    return
+
+@bottle.route(url_base + '/<tenant_id>/images/<image_id>', method='PUT')
+def http_put_image_id(tenant_id, image_id):
+    '''update a image_id into the database.'''
+    my = config_dic['http_threads'][ threading.current_thread().name ]
+    #check valid tenant_id
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
+    #parse input data
+    http_content = format_in( image_update_schema )
+    r = remove_extra_items(http_content, image_update_schema)
+    if r is not None: print "http_put_image_id: Warning: remove extra items ", r
+    change_keys_http2db(http_content['image'], http2db_image)
+    metadata_dict = http_content['image'].pop('metadata', None)
+    if metadata_dict is not None: 
+        http_content['image']['metadata'] = json.dumps(metadata_dict)
+    #Ensure that image exist 
+    where_={'uuid': image_id}
+    if tenant_id=='any':
+        from_  ='images'
+    else:
+        from_  ='tenants_images as ti inner join images as i on ti.image_id=i.uuid'
+        where_['tenant_id'] = tenant_id
+    result, content = my.db.get_table(SELECT=('public',), FROM=from_, WHERE=where_)
+    if result==0:
+        text_error="Image '%s' not found" % image_id
+        if tenant_id!='any':
+            text_error +=" for tenant '%s'" % image_id
+        bottle.abort(HTTP_Not_Found, text_error)
+        return
+    elif result>0:
+        if content[0]['public']=='yes' and not my.admin:
+            #allow only modifications over private images
+            bottle.abort(HTTP_Unauthorized, "Needed admin rights to edit a public image")
+            return
+        #insert in data base
+        result, content = my.db.update_rows('images', http_content['image'], {'uuid': image_id})
+
+    if result < 0:
+        print "http_put_image_id error %d %s" % (result, content)
+        bottle.abort(-result, content)
+        return
+    else:
+        return http_get_image_id(tenant_id, image_id)
+
 
 #
 # SERVERS
@@ -975,22 +1207,24 @@ def http_delete_image_id(tenant_id, image_id):
 @bottle.route(url_base + '/<tenant_id>/servers', method='GET')
 def http_get_servers(tenant_id):
     my = config_dic['http_threads'][ threading.current_thread().name ]
-    #check valid tenant_id
-    result, _ = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found' % tenant_id)
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
         return
     #obtain data
     select_,where_,limit_ = filter_query_string(bottle.request.query, http2db_server,
-            ('id','name','description','hostId','imageRef','flavorRef','status') )
-    where_['tenant_id'] = tenant_id
+            ('id','name','description','hostId','imageRef','flavorRef','status', 'tenant_id') )
+    if tenant_id!='any':
+        where_['tenant_id'] = tenant_id
     result, content = my.db.get_table(SELECT=select_, FROM='instances', WHERE=where_, LIMIT=limit_)
     if result < 0:
         print "http_get_servers Error", content
         bottle.abort(-result, content)
     else:
         change_keys_http2db(content, http2db_server, reverse=True)
-        for row in content: row['links']=[ {'href': "/".join( (my.url_preffix, tenant_id, 'servers', str(row['id']) ) ), 'rel':'bookmark' } ]
+        for row in content:
+            tenant_id = row.pop('tenant_id')
+            row['links']=[ {'href': "/".join( (my.url_preffix, tenant_id, 'servers', str(row['id']) ) ), 'rel':'bookmark' } ]
         data={'servers' : content}
         return format_out(data)
 
@@ -998,9 +1232,9 @@ def http_get_servers(tenant_id):
 def http_get_server_id(tenant_id, server_id):
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check valid tenant_id
-    result, _ = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found' % tenant_id)
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
         return
     #obtain data
     result, content = my.db.get_instance(server_id)
@@ -1014,11 +1248,15 @@ def http_get_server_id(tenant_id, server_id):
         if content["vcpus"]==0 : del content["vcpus"]
         if 'flavor_id' in content:
             if content['flavor_id'] is not None:
-                content['flavor'] = {'id':content['flavor_id'], 'links':[{'href':  "/".join( (my.url_preffix, tenant_id, 'flavors', str(content['flavor_id']) ) ), 'rel':'bookmark'}] }
+                content['flavor'] = {'id':content['flavor_id'], 
+                                     'links':[{'href':  "/".join( (my.url_preffix, content['tenant_id'], 'flavors', str(content['flavor_id']) ) ), 'rel':'bookmark'}] 
+                                }
             del content['flavor_id']
         if 'image_id' in content:
             if content['image_id'] is not None:
-                content['image'] = {'id':content['image_id'], 'links':[{'href':  "/".join( (my.url_preffix, tenant_id, 'images', str(content['image_id']) ) ), 'rel':'bookmark'}] }
+                content['image'] = {'id':content['image_id'], 
+                                    'links':[{'href':  "/".join( (my.url_preffix, content['tenant_id'], 'images', str(content['image_id']) ) ), 'rel':'bookmark'}]
+                                }
             del content['image_id']
         change_keys_http2db(content, http2db_server, reverse=True)
         if 'extended' in content:
@@ -1029,17 +1267,17 @@ def http_get_server_id(tenant_id, server_id):
         bottle.abort(-result, content)
         return
 
-
-
 @bottle.route(url_base + '/<tenant_id>/servers', method='POST')
 def http_post_server_id(tenant_id):
     '''deploys a new server'''
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check valid tenant_id
-    result, content = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id,"enabled":True})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found or not enabled' % tenant_id)
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
         return
+    if tenant_id=='any':
+        bottle.abort(HTTP_Bad_Request, "Invalid tenant 'any' with this command")
     #chek input
     http_content = format_in( server_new_schema )
     r = remove_extra_items(http_content, server_new_schema)
@@ -1119,14 +1357,14 @@ def http_post_server_id(tenant_id):
         bottle.abort(HTTP_Bad_Request, content)
         return
 
-
-
 def http_server_action(server_id, tenant_id, action):
     '''Perform actions over a server as resume, reboot, terminate, ...'''
     my = config_dic['http_threads'][ threading.current_thread().name ]
-    server={"uuid": server_id, "tenant_id":tenant_id, "action":action}
-    result, content = my.db.get_table(FROM='instances', 
-                                            WHERE={'instances.uuid':server_id})
+    server={"uuid": server_id, "action":action}
+    where={'uuid': server_id}
+    if tenant_id!='any':
+        where['tenant_id']= tenant_id
+    result, content = my.db.get_table(FROM='instances', WHERE=where)
     if result == 0:
         bottle.abort(HTTP_Not_Found, "server %s not found" % server_id)
         return
@@ -1134,7 +1372,8 @@ def http_server_action(server_id, tenant_id, action):
         print "http_post_server_action error getting data %d %s" % (result, content)
         bottle.abort(HTTP_Internal_Server_Error, content)
         return
-    server.update(content[0]) 
+    server.update(content[0])
+    tenant_id = server["tenant_id"]
 
     #TODO check a right content
     new_status = None
@@ -1254,9 +1493,9 @@ def http_delete_server_id(tenant_id, server_id):
     '''delete a server'''
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check valid tenant_id
-    result, _ = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found' % tenant_id)
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
         return
 
     return http_server_action(server_id, tenant_id, {"terminate":None} )
@@ -1267,17 +1506,15 @@ def http_post_server_action(tenant_id, server_id):
     '''take an action over a server'''
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #check valid tenant_id
-    result, _ = my.db.get_table(FROM='tenants', SELECT=('uuid',), WHERE={'uuid': tenant_id})
-    if result<=0:
-        bottle.abort(HTTP_Not_Found, 'tenant %s not found' % tenant_id)
+    result,content = check_valid_tenant(my, tenant_id)
+    if result != 0:
+        bottle.abort(result, content)
         return
     http_content = format_in( server_action_schema )
     #r = remove_extra_items(http_content, server_action_schema)
     #if r is not None: print "http_post_server_action: Warning: remove extra items ", r
     
     return http_server_action(server_id, tenant_id, http_content)
-    
-
 
 #
 # NETWORKS
