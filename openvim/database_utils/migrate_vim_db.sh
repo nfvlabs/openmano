@@ -226,6 +226,15 @@ function upgrade_to_2(){
     echo "INSERT INTO \`schema_version\` (\`version_int\`, \`version\`, \`openvim_ver\`, \`comments\`, \`date\`)
 	 VALUES (2, '0.2', '0.2.03', 'update Procedure UpdateSwitchPort', '2015-05-06');" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
 }
+function upgrade_to_3(){
+    echo "    upgrade database from version 0.1 to version 0.2"
+    echo "      ALTER TABLE \`of_ports_pci_correspondence\` \`resources_port\` \`ports\` ADD COLUMN \`switch_dpid\`"
+    echo "ALTER TABLE instances DROP FOREIGN KEY FK_instances_flavors, DROP FOREIGN KEY FK_instances_images;"| $DBCMD || !  echo "ERROR. Aborted!" || exit -1 
+    echo "ALTER TABLE instances
+	ADD CONSTRAINT FK_instances_flavors FOREIGN KEY (flavor_id, tenant_id) REFERENCES tenants_flavors (flavor_id, tenant_id),
+	ADD CONSTRAINT FK_instances_images FOREIGN KEY (image_id, tenant_id) REFERENCES tenants_images (image_id, tenant_id);" | $DBCMD || !  echo "ERROR. Aborted!" || exit -1
+
+}
 function downgrade_from_2(){
     echo "    downgrade database from version 0.2 to version 0.1"
     echo "      UPDATE procedure UpdateSwitchPort"
