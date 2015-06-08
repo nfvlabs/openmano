@@ -910,7 +910,7 @@ if __name__=="__main__":
     vim_config["TENANT"] =     os.getenv('OPENVIM_TENANT', None)
     
    
-    main_parser = ThrowingArgumentParser(description='User program to interact with OPENMANO-SERVER (openvimd)')
+    main_parser = ThrowingArgumentParser(description='User program to interact with OPENVIM-SERVER (openvimd)')
     #main_parser = argparse.ArgumentParser(description='User program to interact with OPENVIM-SERVER (openvimd)')
     main_parser.add_argument('--version', action='version', version='%(prog)s ' + __version__ + ' '+version_date)
     
