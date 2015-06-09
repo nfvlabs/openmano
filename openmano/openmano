@@ -718,7 +718,7 @@ if __name__=="__main__":
     mano_port = os.getenv('OPENMANO_PORT',"9090")
     mano_datacenter = os.getenv('OPENMANO_DATACENTER',None)
     
-    main_parser = ThrowingArgumentParser(description='User program to interact with OPENVIM-SERVER (openvimd)')
+    main_parser = ThrowingArgumentParser(description='User program to interact with OPENMANO-SERVER (openmanod)')
     main_parser.add_argument('--version', action='version', version='%(prog)s ' + __version__ )
     
     subparsers = main_parser.add_subparsers(help='commands')
