@@ -135,15 +135,28 @@ do
         #[ "${om_component}" != "flow" ] && screen -S ${om_component} -p 0 -X stuff "cd ${DIR_OM}/open${om_component}\n" && sleep 1
         [ "${om_component}" == "flow" ] && screen -S flow -p 0 -X stuff "java  -Dlogback.configurationFile=${DIRNAME}/flow-logback.xml -jar ./target/floodlight.jar -cf ${DIRNAME}/flow.properties\n"
         [ "${om_component}" != "flow" ] && screen -S ${om_component} -p 0 -X stuff "./${om_cmd}\n"
-        sleep 10
-
         #check if is running
-        if !  ps -f -U $USER -u $USER | grep -v grep | grep -q ${om_cmd}
-        then
-            echo -n "ERROR, it has exited."
-            #exit 0
+        [[ -n $logfile ]] && timeout=120 #2 minute
+        [[ -z $logfile ]] && timeout=20
+        while [[ $timeout -gt 0 ]]
+        do
+           #check if is running
+           echo timeout $timeout
+           if !  ps -f -U $USER -u $USER | grep -v grep | grep -q ${om_cmd}
+           then
+               echo -n "ERROR, it has exited."
+               break
+           fi
+           [[ -n $logfile ]] && [[ ${om_component} == flow ]] && grep -q "Listening for switch connections" $logfile && sleep 1 && break
+           [[ -n $logfile ]] && [[ ${om_component} != flow ]] && grep -q "open${om_component}d ready" $logfile && break
+           sleep 1
+           timeout=$((timeout -1))
+        done
+        if [[ -n $logfile ]] && [[ $timeout == 0 ]] 
+        then 
+           echo -n "timeout!"
         else
-            echo -n "running on 'screen -x ${om_component}'."
+           echo -n "running on 'screen -x ${om_component}'."
         fi
         [[ -n $logfile ]] && echo "  Logging at '${logfile}'" || echo
     fi

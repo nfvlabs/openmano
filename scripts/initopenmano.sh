@@ -47,7 +47,7 @@ function is_valid_uuid(){
 
 #check correct arguments
 [[ -n $1 ]] && [[ $1 != -h ]] && [[ $1 != --help ]] && [[ $1 != -f ]] && [[ $1 != --force ]] && \
-   echo "invalid argument '$1'?" &&  usage >&2 && $_exit -1
+   echo "invalid argument '$1'?" &&  usage >&2 && $_exit 1
 [[ $1 == -h ]] || [[ $1 == --help ]]  && usage && $_exit 0
 
 #ask for confirmation if argument is not -f --force
@@ -74,20 +74,20 @@ echo "Starting openmano"
 $DIRNAME/service-openmano.sh start
 
 echo "Adding example hosts"
-openvim host-add $DIRvim/test/hosts/host-example0.json || ! echo "fail" >&2 || $_exit -1
-openvim host-add $DIRvim/test/hosts/host-example1.json || ! echo "fail" >&2 || $_exit -1
-openvim host-add $DIRvim/test/hosts/host-example2.json || ! echo "fail" >&2 || $_exit -1
-openvim host-add $DIRvim/test/hosts/host-example3.json || ! echo "fail" >&2 || $_exit -1
+openvim host-add $DIRvim/test/hosts/host-example0.json || ! echo "fail" >&2 || $_exit 1
+openvim host-add $DIRvim/test/hosts/host-example1.json || ! echo "fail" >&2 || $_exit 1
+openvim host-add $DIRvim/test/hosts/host-example2.json || ! echo "fail" >&2 || $_exit 1
+openvim host-add $DIRvim/test/hosts/host-example3.json || ! echo "fail" >&2 || $_exit 1
 echo "Adding example nets"
-openvim net-create $DIRvim/test/networks/net-example0.yaml || ! echo "fail" >&2 || $_exit -1
-openvim net-create $DIRvim/test/networks/net-example1.yaml || ! echo "fail" >&2 || $_exit -1
-openvim net-create $DIRvim/test/networks/net-example2.yaml || ! echo "fail" >&2 || $_exit -1
-openvim net-create $DIRvim/test/networks/net-example3.yaml || ! echo "fail" >&2 || $_exit -1
+openvim net-create $DIRvim/test/networks/net-example0.yaml || ! echo "fail" >&2 || $_exit 1
+openvim net-create $DIRvim/test/networks/net-example1.yaml || ! echo "fail" >&2 || $_exit 1
+openvim net-create $DIRvim/test/networks/net-example2.yaml || ! echo "fail" >&2 || $_exit 1
+openvim net-create $DIRvim/test/networks/net-example3.yaml || ! echo "fail" >&2 || $_exit 1
 
 echo "Creating openvim tenant 'admin'"
 vimtenant=`openvim tenant-create '{"tenant": {"name":"admin", "description":"admin"}}' |gawk '{print $1}'`
 #check a valid uuid is obtained
-is_valid_uuid $vimtenant || ! echo "fail" >&2 || $_exit -1
+is_valid_uuid $vimtenant || ! echo "fail" >&2 || $_exit 1
 echo "  $vimtenant"
 export OPENVIM_TENANT=$vimtenant
 
@@ -97,14 +97,14 @@ echo -e "\nexport OPENVIM_TENANT=$vimtenant" >> ~/.bashrc
 echo "Creating openmano tenant 'mytenant'"
 nfvotenant=`openmano tenant-create mytenant --description=mytenant |gawk '{print $1}'`
 #check a valid uuid is obtained
-is_valid_uuid $nfvotenant || ! echo "fail" >&2 || $_exit -1 
+is_valid_uuid $nfvotenant || ! echo "fail" >&2 || $_exit 1 
 export OPENMANO_TENANT=$nfvotenant
 echo "  $nfvotenant"
 
 echo "Creating datacenter 'mydc' in openmano"
 datacenter=`openmano datacenter-create mydc http://localhost:9080/openvim |gawk '{print $1}'`
 #check a valid uuid is obtained
-is_valid_uuid $datacenter || ! echo "fail" >&2 || $_exit -1 
+is_valid_uuid $datacenter || ! echo "fail" >&2 || $_exit 1 
 echo "  $datacenter"
 export OPENMANO_DATACENTER=$datacenter
 
@@ -113,23 +113,23 @@ echo "export OPENMANO_TENANT=$nfvotenant" >> ~/.bashrc
 echo "export OPENMANO_DATACENTER=$datacenter" >> ~/.bashrc
 
 echo "Attaching openmano tenant to the datacenter and the openvim tenant"
-openmano datacenter-attach mydc --vim-tenant-id $vimtenant || ! echo "fail" >&2 || $_exit -1 
+openmano datacenter-attach mydc --vim-tenant-id $vimtenant || ! echo "fail" >&2 || $_exit 1 
 
 echo "Updating external nets in openmano"
-openmano datacenter-net-update -f mydc || ! echo "fail" >&2 || $_exit -1
+openmano datacenter-net-update -f mydc || ! echo "fail" >&2 || $_exit 1
 
 echo "Adding particular configuration - VNFs"
-openmano vnf-create $DIRmano/vnfs/examples/linux.yaml         || ! echo "fail" >&2 || $_exit -1
-openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF1.yaml || ! echo "fail" >&2 || $_exit -1
-openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF2.yaml || ! echo "fail" >&2 || $_exit -1
+openmano vnf-create $DIRmano/vnfs/examples/linux.yaml         || ! echo "fail" >&2 || $_exit 1
+openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF1.yaml || ! echo "fail" >&2 || $_exit 1
+openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF2.yaml || ! echo "fail" >&2 || $_exit 1
 
 echo "Adding particular configuration - Scenarios"
-openmano scenario-create $DIRmano/scenarios/examples/simple.yaml  || ! echo "fail" >&2 || $_exit -1
-openmano scenario-create $DIRmano/scenarios/examples/complex.yaml || ! echo "fail" >&2 || $_exit -1
+openmano scenario-create $DIRmano/scenarios/examples/simple.yaml  || ! echo "fail" >&2 || $_exit 1
+openmano scenario-create $DIRmano/scenarios/examples/complex.yaml || ! echo "fail" >&2 || $_exit 1
 
 echo "Adding particular configuration - Scenario instances"
-openmano scenario-deploy simple simple-instance   || ! echo "fail" >&2 || $_exit -1
-openmano scenario-deploy complex complex-instance || ! echo "fail" >&2 || $_exit -1
+openmano scenario-deploy simple simple-instance   || ! echo "fail" >&2 || $_exit 1
+openmano scenario-deploy complex complex-instance || ! echo "fail" >&2 || $_exit 1
 
 echo
 echo DONE
