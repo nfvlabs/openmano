@@ -48,7 +48,7 @@ integer1_schema={"type":"integer","minimum":1}
 vlan_schema={"type":"integer","minimum":1,"maximun":4095}
 vlan1000_schema={"type":"integer","minimum":1000,"maximun":4095}
 mac_schema={"type":"string", "pattern":"^[0-9a-fA-F][02468aceACE](:[0-9a-fA-F]{2}){5}$"}  #must be unicast LSB bit of MSB byte ==0 
-net_bind_schema={"oneOf":[{"type":"null"},{"type":"string", "pattern":"^(default|((bridge|macvtap):[0-9a-zA-Z]{1,10}))$"}]}
+net_bind_schema={"oneOf":[{"type":"null"},{"type":"string", "pattern":"^(default|((bridge|macvtap):[0-9a-zA-Z]{1,29}))$"}]}
 yes_no_schema={"type":"string", "enum":["yes", "no"]}
 
 config_schema = {
