@@ -141,7 +141,7 @@ do
         while [[ $timeout -gt 0 ]]
         do
            #check if is running
-           echo timeout $timeout
+           #echo timeout $timeout
            if !  ps -f -U $USER -u $USER | grep -v grep | grep -q ${om_cmd}
            then
                echo -n "ERROR, it has exited."
