@@ -431,20 +431,20 @@ BRIDGE=virbrMan$i" > ifcfg-${interface}.20$i2digits
 
   if [ -n "$ip_iface" ]
   then
-    echo "configuring iface $iface interface with ip $ip_iface"
+    echo "configuring iface $interface interface with ip $ip_iface"
     # Network interfaces
     # 1Gbps interfaces are configured with ONBOOT=yes and static IP address
-    cat ifcfg-$iface | grep -e HWADDR -e UUID > $iface.tmp
+    cat ifcfg-$interface | grep -e HWADDR -e UUID > $interface.tmp
     echo "TYPE=Ethernet
-NAME=$iface
-DEVICE=$iface
+NAME=$interface
+DEVICE=$interface
 TYPE=Ethernet
 ONBOOT=yes
 NM_CONTROLLED=no
-IPV6INIT=no" >> $iface.tmp
-    [ $ip_iface = "dhcp" ] && echo -e "BOOTPROTO=dhcp\nDHCP_HOSTNAME=$HOSTNAME" >> $iface.tmp
-    [ $ip_iface != "dhcp" ] && echo -e "BOOTPROTO=static\nIPADDR=${ip_iface}\nNETMASK=255.255.255.0" >> $iface.tmp
-    mv $iface.tmp  ifcfg-$iface
+IPV6INIT=no" >> $interface.tmp
+    [ $ip_iface = "dhcp" ] && echo -e "BOOTPROTO=dhcp\nDHCP_HOSTNAME=$HOSTNAME" >> $interface.tmp
+    [ $ip_iface != "dhcp" ] && echo -e "BOOTPROTO=static\nIPADDR=${ip_iface}\nNETMASK=255.255.255.0" >> $interface.tmp
+    mv $interface.tmp  ifcfg-$interface
   fi
 
   for iface in `ifconfig -a | grep ": " | cut -f 1 -d":" | grep -v -e "_" -e "\." -e "lo" -e "virbr" -e "tap"`
