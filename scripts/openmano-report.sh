@@ -112,12 +112,30 @@ do
   echo "$OMCLIENT vnf-list $verbose"
   $OMCLIENT vnf-list $verbose
   echo "-------------------------------"
+  vnflist=`$OMCLIENT vnf-list |awk '$1!="No" {print $1}'`
+  for vnf in $vnflist; do
+    echo "$OMCLIENT vnf-list $vnf $verbose"
+    $OMCLIENT vnf-list $vnf $verbose
+    echo "-------------------------------"
+  done
   echo "$OMCLIENT scenario-list $verbose"
   $OMCLIENT scenario-list $verbose
   echo "-------------------------------"
+  scenariolist=`$OMCLIENT scenario-list |awk '$1!="No" {print $1}'`
+  for sce in $scenariolist; do
+    echo "$OMCLIENT scenario-list $sce $verbose"
+    $OMCLIENT scenario-list $sce $verbose
+    echo "-------------------------------"
+  done
   echo "$OMCLIENT instance-scenario-list $verbose"
   $OMCLIENT instance-scenario-list $verbose
   echo "-------------------------------"
+  instancelist=`$OMCLIENT instance-scenario-list |awk '$1!="No" {print $1}'`
+  for i in $instancelist; do
+    echo "$OMCLIENT instance-scenario-list $i $verbose"
+    $OMCLIENT instance-scenario-list $i $verbose
+    echo "-------------------------------"
+  done
   echo
   echo "-------------------------------"
   echo "OPENVIM$verbose"

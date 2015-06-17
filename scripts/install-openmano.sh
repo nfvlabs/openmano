@@ -21,7 +21,7 @@
 # contact with: nfvlabs@tid.es
 ##
 
-#ONLY TESTED for Ubuntu 14.10 14.04  and  CentOS7
+#ONLY TESTED for Ubuntu 14.10 14.04, CentOS7 and RHEL7
 #Get needed packets, source code and configure to run openvim, openmano and floodlight
 #Ask for database user and password if not provided
 #        $1: database user
@@ -76,7 +76,15 @@ then
         read -e -p "WARNING! Not tested CentOS version. Continue assuming a '_RELEASE' type? (y/N)" KK
         [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Cancelled" && exit 0
     fi
-else  #[ "$_DISTRO" != "Ubuntu" -a "$_DISTRO" != "CentOS" ] 
+elif [ "$_DISTRO" == "Red" ]
+then
+    _RELEASE="7" 
+    if ! cat /etc/redhat-release | grep -q "7."
+    then
+        read -e -p "WARNING! Not tested Red Hat OS version. Continue assuming a '_RELEASE' type? (y/N)" KK
+        [ "$KK" != "y" -a  "$KK" != "yes" ] && echo "Cancelled" && exit 0
+    fi
+else  #[ "$_DISTRO" != "Ubuntu" -a "$_DISTRO" != "CentOS" -a "$_DISTRO" != "Red" ] 
     _DISTRO_DISCOVER=$_DISTRO
     [ -x /usr/bin/apt-get ] && _DISTRO="Ubuntu" && _RELEASE="14"
     [ -x /usr/bin/yum ]     && _DISTRO="CentOS" && _RELEASE="7"
@@ -92,9 +100,11 @@ echo '
 #################################################################'
 [ "$_DISTRO" == "Ubuntu" ] && apt-get update -y
 
-[ "$_DISTRO" == "CentOS" ] && yum check-update -y
+[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && yum check-update -y
 [ "$_DISTRO" == "CentOS" ] && sudo yum install -y epel-release
-[ "$_DISTRO" == "CentOS" ] && sudo yum repolist
+[ "$_DISTRO" == "Red" ] && wget http://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm \
+  && sudo rpm -ivh epel-release-7-5.noarch.rpm && sudo yum install -y epel-release && rm -f epel-release-7-5.noarch.rpm
+[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && sudo yum repolist
 
 
 echo '
@@ -102,9 +112,9 @@ echo '
 #####        INSTALL LAMP   PACKETS                         #####
 #################################################################'
 [ "$_DISTRO" == "Ubuntu" ] && install_packets "apache2 mysql-server           php5 php-pear php5-mysql" #TODO revise if php-pear is needed
-[ "$_DISTRO" == "CentOS" ] && install_packets "httpd   mariadb mariadb-server php           php-mysql"
+[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && install_packets "httpd   mariadb mariadb-server php           php-mysql"
 
-if [ "$_DISTRO" == "CentOS" ]
+if [ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ]
 then
     #start sercices. By default CentOS does not start services
     service mariadb start
@@ -144,10 +154,10 @@ echo '
 #####        INSTALL PYTHON PACKETS                         #####
 #################################################################'
 [ "$_DISTRO" == "Ubuntu" ] && install_packets "python-yaml python-libvirt python-bottle python-mysqldb python-jsonschema python-paramiko python-argcomplete python-requests git screen wget"
-[ "$_DISTRO" == "CentOS" ] && install_packets "PyYAML      libvirt-python               MySQL-python   python-jsonschema python-paramiko python-argcomplete python-requests git screen wget"
+[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && install_packets "PyYAML      libvirt-python               MySQL-python   python-jsonschema python-paramiko python-argcomplete python-requests git screen wget"
 
 #The only way to install python-bottle on Centos7 is with easy_install or pip
-[ "$_DISTRO" == "CentOS" ] && easy_install -U bottle
+[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && easy_install -U bottle
 
 
 echo '
@@ -190,7 +200,7 @@ then
     
     #Install Java JDK and Ant packages at the VM 
     [ "$_DISTRO" == "Ubuntu" ] && install_packets "build-essential default-jdk ant python-dev" #TODO revise if packets are needed apart from ant
-    [ "$_DISTRO" == "CentOS" ] && install_packets "                            ant "
+    [ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && install_packets "                            ant "
 
     #Configure Java environment variables. It is seem that is not needed!!!
     #export JAVA_HOME=/usr/lib/jvm/default-java" >> /home/${SUDO_USER}/.bashr
@@ -230,9 +240,9 @@ do
 done
 
 #Allow SELinux security over openmano-gui
-[ "$_DISTRO" == "CentOS" ] && chcon -R --reference=/var/www ${PWD}/openmano/openmano-gui || true
+[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && chcon -R --reference=/var/www ${PWD}/openmano/openmano-gui || true
 
-if [ "$_DISTRO" == "CentOS" ]
+if [ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ]
 then
     echo '
 #################################################################
