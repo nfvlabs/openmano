@@ -181,7 +181,10 @@ if __name__=="__main__":
             httpthreadadmin.start()
         time.sleep(1)      
         print 'Waiting for http clients'
+        print 'openmanod ready'
         print '===================='
+        time.sleep(20)
+        sys.stdout.flush()
 
         #TODO: Interactive console must be implemented here instead of join or sleep
 

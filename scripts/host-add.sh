@@ -259,7 +259,7 @@ do
   done
  
   #NIC INTERFACES
-  echo "    interfaces:"
+  interfaces_nb=0
   for ((i=0; i<${#PF_list[@]};i++))
   do
     underscored_pci=${PF_list[$i]}
@@ -270,11 +270,13 @@ do
     ppci=$(get_hash_value $underscored_pci "pci")
     pspeed=$(get_hash_value $underscored_pci "speed")
     pSRIOV=$(get_hash_value $underscored_pci "SRIOV")
+    [[ $interfaces_nb -eq 0 ]] && echo "    interfaces:"
+    interfaces_nb=$((interfaces_nb+1))
+    sriov_nb=0
     echo "    - source_name: $pname"
     echo "      Mbps: $pspeed"
     echo "      pci: \"$ppci\""
     echo "      mac: \"$pmac\""
-    echo "      sriovs:"
     for ((j=1;j<=$pSRIOV;j++))
     do
       childSRIOV="vfpci_"$(get_hash_value $underscored_pci "SRIOV"$j)
@@ -283,6 +285,8 @@ do
       pmac=$(get_hash_value $childSRIOV "mac")
       ppci=$(get_hash_value $childSRIOV "pci")
       vlan=$((j+99))
+      [[ $sriov_nb -eq 0 ]] && echo "      sriovs:"
+      sriov_nb=$((sriov_nb+1))
       echo "      - mac: \"$pmac\""
       echo "        pci: \"$ppci\""
       echo "        source_name: $index"
