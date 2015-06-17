@@ -38,7 +38,7 @@ function usage(){
 
 function is_valid_uuid(){
     echo "$1" | grep -q -E '^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$' && return 0
-    return  -1
+    return 1
 }
 
 
