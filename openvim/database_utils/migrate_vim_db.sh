@@ -172,19 +172,19 @@ function upgrade_to_1(){
 	)
 	COMMENT='database schema control version'
 	COLLATE='utf8_general_ci'
-	ENGINE=InnoDB;" | $DBCMD  || ( echo "ERROR. Aborted!" && exit -1 )
+	ENGINE=InnoDB;" | $DBCMD  || ! echo "ERROR. Aborted!" || exit -1
     echo "INSERT INTO \`schema_version\` (\`version_int\`, \`version\`, \`openvim_ver\`, \`comments\`, \`date\`)
 	 VALUES (1, '0.1', '0.2.00', 'insert schema_version; alter nets with last_error column', '2015-05-05');" | $DBCMD
     echo "      ALTER TABLE \`nets\`, ADD COLUMN \`last_error\`"
     echo "ALTER TABLE \`nets\` 
-         ADD COLUMN \`last_error\` VARCHAR(200) NULL AFTER \`status\`;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+         ADD COLUMN \`last_error\` VARCHAR(200) NULL AFTER \`status\`;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 function downgrade_from_1(){
     echo "    downgrade database from version 0.1 to version 0.0"
     echo "      ALTER TABLE \`nets\` DROP COLUMN \`last_error\`"
-    echo "ALTER TABLE \`nets\` DROP COLUMN \`last_error\`;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+    echo "ALTER TABLE \`nets\` DROP COLUMN \`last_error\`;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "      DROP TABLE \`schema_version\`"
-    echo "DROP TABLE \`schema_version\`;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+    echo "DROP TABLE \`schema_version\`;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 function upgrade_to_2(){
     echo "    upgrade database from version 0.1 to version 0.2"
@@ -192,12 +192,12 @@ function upgrade_to_2(){
     for table in of_ports_pci_correspondence resources_port ports
     do
         echo "ALTER TABLE \`${table}\`
-            ADD COLUMN \`switch_dpid\` CHAR(23) NULL DEFAULT NULL AFTER \`switch_port\`; " | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+            ADD COLUMN \`switch_dpid\` CHAR(23) NULL DEFAULT NULL AFTER \`switch_port\`; " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
         echo "ALTER TABLE ${table} CHANGE COLUMN switch_port switch_port VARCHAR(24) NULL DEFAULT NULL;" | $DBCMD || 
-            ( echo "ERROR. Aborted!" && exit -1 )
+            ! echo "ERROR. Aborted!" || exit -1
         [ $table == of_ports_pci_correspondence ] ||
             echo "ALTER TABLE ${table} DROP INDEX vlan_switch_port, ADD UNIQUE INDEX vlan_switch_port (vlan, switch_port, switch_dpid);" | $DBCMD ||
-            ( echo "ERROR. Aborted!" && exit -1 )
+            ! echo "ERROR. Aborted!" || exit -1
     done
     echo "      UPDATE procedure UpdateSwitchPort"
     echo "DROP PROCEDURE IF EXISTS UpdateSwitchPort;
@@ -222,17 +222,17 @@ function upgrade_to_2(){
         INNER JOIN of_ports_pci_correspondence as PC on hosts.ip_name=PC.ip_name and RP2.pci=PC.pci
         SET ports.switch_port=PC.switch_port, ports.switch_dpid=PC.switch_dpid, RP.switch_port=PC.switch_port, RP.switch_dpid=PC.switch_dpid;
     END//
-    delimiter ;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+    delimiter ;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "INSERT INTO \`schema_version\` (\`version_int\`, \`version\`, \`openvim_ver\`, \`comments\`, \`date\`)
-	 VALUES (2, '0.2', '0.2.03', 'update Procedure UpdateSwitchPort', '2015-05-06');" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+	 VALUES (2, '0.2', '0.2.03', 'update Procedure UpdateSwitchPort', '2015-05-06');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 function upgrade_to_3(){
     echo "    upgrade database from version 0.1 to version 0.2"
     echo "      ALTER TABLE \`of_ports_pci_correspondence\` \`resources_port\` \`ports\` ADD COLUMN \`switch_dpid\`"
-    echo "ALTER TABLE instances DROP FOREIGN KEY FK_instances_flavors, DROP FOREIGN KEY FK_instances_images;"| $DBCMD || !  echo "ERROR. Aborted!" || exit -1 
+    echo "ALTER TABLE instances DROP FOREIGN KEY FK_instances_flavors, DROP FOREIGN KEY FK_instances_images;"| $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1 
     echo "ALTER TABLE instances
 	ADD CONSTRAINT FK_instances_flavors FOREIGN KEY (flavor_id, tenant_id) REFERENCES tenants_flavors (flavor_id, tenant_id),
-	ADD CONSTRAINT FK_instances_images FOREIGN KEY (image_id, tenant_id) REFERENCES tenants_images (image_id, tenant_id);" | $DBCMD || !  echo "ERROR. Aborted!" || exit -1
+	ADD CONSTRAINT FK_instances_images FOREIGN KEY (image_id, tenant_id) REFERENCES tenants_images (image_id, tenant_id);" | $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1
 
 }
 function downgrade_from_2(){
@@ -253,20 +253,20 @@ function downgrade_from_2(){
     SET resources_port.switch_port=TABLA.switch_port
     WHERE resources_port.root_id=TABLA.id;
     END//
-    delimiter ;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+    delimiter ;" | $DBCMD || ! ! echo "ERROR. Aborted!" || exit -1
     echo "      ALTER TABLE \`of_ports_pci_correspondence\` \`resources_port\` \`ports\` DROP COLUMN \`switch_dpid\`"
     for table in of_ports_pci_correspondence resources_port ports
     do
         [ $table == of_ports_pci_correspondence ] ||
             echo "ALTER TABLE ${table} DROP INDEX vlan_switch_port, ADD UNIQUE INDEX vlan_switch_port (vlan, switch_port);" | $DBCMD ||
-            ( echo "ERROR. Aborted!" && exit -1 )
-        echo "ALTER TABLE \`${table}\` DROP COLUMN \`switch_dpid\`;" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+            ! echo "ERROR. Aborted!" || exit -1
+        echo "ALTER TABLE \`${table}\` DROP COLUMN \`switch_dpid\`;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
         switch_port_size=12
         [ $table == of_ports_pci_correspondence ] && switch_port_size=50
         echo "ALTER TABLE ${table} CHANGE COLUMN switch_port switch_port VARCHAR(${switch_port_size}) NULL DEFAULT NULL;" | $DBCMD || 
-            ( echo "ERROR. Aborted!" && exit -1 )
+            ! echo "ERROR. Aborted!" || exit -1
     done
-    echo "DELETE FROM \`schema_version\` WHERE \`version_int\` = '2'" | $DBCMD || ( echo "ERROR. Aborted!" && exit -1 )
+    echo "DELETE FROM \`schema_version\` WHERE \`version_int\` = '2'" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 #TODO ... put funtions here
 
