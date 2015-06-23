@@ -112,7 +112,7 @@ do
         [ -n "$component_id" ] && echo "    $om_name is already running. Skipping" && continue
         #create screen if not created
         echo -n "    starting $om_name ... "
-        if ! screen -wipe | grep -q .${om_component}
+        if ! screen -wipe | grep -Fq .${om_component}
         then
             pushd ${om_dir} > /dev/null
             screen -dmS ${om_component}  bash
