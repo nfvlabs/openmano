@@ -95,7 +95,7 @@ do
         [ -n "$component_id" ] && echo -n "    stopping $om_name ... " && kill_pid $component_id 
         component_id=""
         #terminates screen
-        if screen -wipe | grep -q .$om_component
+        if screen -wipe | grep -Fq .$om_component
         then
             screen -S $om_component -p 0 -X stuff "exit\n"
             sleep 1
