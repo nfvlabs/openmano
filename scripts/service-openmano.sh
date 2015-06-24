@@ -142,7 +142,9 @@ do
         do
            #check if is running
            #echo timeout $timeout
-           if !  ps -f -U $USER -u $USER | grep -v grep | grep -q ${om_cmd}
+           #if !  ps -f -U $USER -u $USER | grep -v grep | grep -q ${om_cmd}
+           component_id=`ps -o pid,cmd -U $USER -u $USER | grep -v grep | grep ${om_cmd} | awk '{print $1}'`
+           if [[ -z $component_id ]]
            then
                echo -n "ERROR, it has exited."
                break
