@@ -293,6 +293,8 @@ ln -s ${PWD}/openmano/scripts/service-openmano.sh  /home/${SUDO_USER}/bin/servic
 #fi
 
 #configure arg-autocomplete for this user
+#in case of minmal instalation this packet is not installed by default
+[[ "$_DISTRO" == "CentOS" || "$_DISTRO" == "Red" ]] && yum install -y bash-completion
 su $SUDO_USER -c 'mkdir -p ~/.bash_completion.d'
 su $SUDO_USER -c 'activate-global-python-argcomplete --dest=/home/${USER}/.bash_completion.d'
 if ! grep -q bash_completion.d/python-argcomplete.sh /home/${SUDO_USER}/.bashrc
