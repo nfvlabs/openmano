@@ -143,6 +143,29 @@ parent=`xmlpath_args "device/parent" < device_xml`
 parent="${parent// /}"
 #the following line created variables 'speed' and 'state'
 eval `xmlpath_args "device/capability/link" < device_xml`
+if [[ $state == 'down' ]]
+then
+    echo "Interfaces must be connected and up in order to properly detect the speed. You can provide this information manually or skip the interface"
+    keep_asking=true
+    skip_interface=true
+    unset speed
+    while $keep_asking; do
+        read -p "Do you want to skip interface $name ($address) [y/N] " -i "n" skip
+        case $skip in
+            [Yy]* ) skip_interface=false && break;;
+            * ) skip_interface=false;
+                default_speed="10000"
+                while $keep_asking; do
+                   read -p "What is the speed of the interface expressed in Mbps? ($default_speed) " speed;
+                   [[ -z $speed ]] && speed=$default_speed
+                   [[ $speed =~ ''|*[!0-9] ]] && echo "The input must be an integer" && continue;
+                   keep_asking=false ;
+                done;;
+        esac
+    done
+
+   [[ skip_interface ]] && continue
+fi
 virsh nodedev-dumpxml $parent > parent_xml
 driver=`xmlpath_args "device/driver/name" < parent_xml`
 [ $? -eq 1 ] && driver="N/A"
