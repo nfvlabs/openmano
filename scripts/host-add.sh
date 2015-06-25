@@ -103,9 +103,8 @@ if echo $FEATURES | grep -q dca     ; then FEATURES_LIST="${FEATURES_LIST},dioc"
 if echo $FEATURES | egrep -q "(vmx|svm)" ; then FEATURES_LIST="${FEATURES_LIST},hwsv"; fi
 if echo $FEATURES | egrep -q "(ept|npt)" ; then FEATURES_LIST="${FEATURES_LIST},tlbps"; fi
 if echo $FEATURES | grep -q ht      ; then FEATURES_LIST="${FEATURES_LIST},ht";   fi
-if echo $FEATURES | grep -q pdpe1gb ; then FEATURES_LIST="${FEATURES_LIST},lps";  fi
 if uname -m | grep -q x86_64        ; then FEATURES_LIST="${FEATURES_LIST},64b";  fi
-if dmesg | grep -q -e Intel-IOMMU   ; then FEATURES_LIST="${FEATURES_LIST},iommu";  fi
+cat /var/log/dmesg | grep -q -e Intel-IOMMU   ; then FEATURES_LIST="${FEATURES_LIST},iommu";  fi
 FEATURES_LIST=${FEATURES_LIST#,}
 
 NUMAS=`gawk 'BEGIN{numas=0;}
