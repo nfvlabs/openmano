@@ -195,6 +195,17 @@ virsh nodedev-dumpxml $parent > parent_xml
 driver=`xmlpath_args "device/driver/name" < parent_xml`
 [ $? -eq 1 ] && driver="N/A"
 driver="${driver// /}"
+
+#If the device is not up try to bring it up and reload state
+if [[ $state == 'down' ]] && ( [[ $driver == "ixgbe" ]] || [[ $driver == "i40e" ]] )
+then
+  >2& echo "$name is down. Trying to bring it up"
+  ifconfig $name up
+  sleep 2
+  virsh nodedev-dumpxml $device > device_xml
+  eval `xmlpath_args "device/capability/link" < device_xml`
+fi
+
 if [[ $state == 'down' ]]  && ( [[ $driver == "ixgbe" ]] || [[ $driver == "i40e" ]] )
 then
     >&2 echo "Interfaces must be connected and up in order to properly detect the speed. You can provide this information manually or skip the interface"
@@ -387,3 +398,10 @@ do
 done
 remove_vf_driver ixgbe
 remove_vf_driver i40e
+#Bring up all interfaces
+for ((i=0; i<${#PF_list[@]};i++))
+do
+  underscored_pci=${PF_list[$i]}
+  pname=$(get_hash_value $underscored_pci "name")
+  ifconfig $pname up
+done
