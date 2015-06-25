@@ -28,6 +28,43 @@ function usage(){
     exit 1
 }
 
+function load_vf_driver(){
+  local pf_driver=$1
+  if [[ `lsmod | cut -d" " -f1 | grep $pf_driver | grep -v vf` ]] && [[ ! `lsmod | cut -d" " -f1 | grep ${pf_driver}vf` ]]
+  then
+    >2& echo "$pf_driver is loaded but not ${pf_driver}vf. This is required in order to properly add SR-IOV."
+    read -p "Do you want to load ${pf_driver}vf [Y/n] " load_driver
+    case $load_driver in
+      [nN]* ) exit 1;;
+      * ) >2& echo "Loading ${pf_driver}vf..."
+          modprobe ${pf_driver}vf;
+          >2& echo "Reloading ${pf_driver}..."
+          modprobe -r $pf_driver;
+          modprobe $pf_driver;;
+    esac
+  fi
+}
+
+function remove_vf_driver(){
+  local pf_driver=$1
+  if [[ `lsmod | cut -d" " -f1 | grep $pf_driver | grep -v vf` ]] && [[ `lsmod | cut -d" " -f1 | grep ${pf_driver}vf` ]]
+  then
+    >2& echo "${pf_driver}vf is loaded. In order to ensure proper SR-IOV behavior the driver must be removed."
+    read -p "Do you want to remove ${pf_driver}vf now? [Y/n] " remove_driver
+    case $remove_driver in
+      [nN]* ) >2& echo "OK. Remember to remove the driver prior start using the compute node executing:";
+              >2& echo "modprobe -r ${pf_driver}vf";
+              >2& echo "modprobe -r ${pf_driver}";
+              >2& echo "modprobe ${pf_driver}";;
+      * ) >2& echo "Removing ${pf_driver}vf..."
+          modprobe -r ${pf_driver}vf;
+          >2& echo "Reloading ${pf_driver}..."
+          modprobe -r $pf_driver;
+          modprobe $pf_driver;;
+    esac
+  fi
+}
+
 function get_hash_value() {   echo `eval  echo $\{\`echo $1[$2]\`\}`; }
 
 function xmlpath_args()
@@ -95,6 +132,9 @@ function xmlpath_args()
 #check root privileges and non a root user behind
 
 [ "$#" -lt "2" ] && echo "Missing parameters" && usage
+load_vf_driver ixgbe
+load_vf_driver i40e
+
 HOST_NAME=`cat /etc/hostname`
 FEATURES=`grep "^flags"  /proc/cpuinfo`
 FEATURES_LIST=""
@@ -104,7 +144,7 @@ if echo $FEATURES | egrep -q "(vmx|svm)" ; then FEATURES_LIST="${FEATURES_LIST},
 if echo $FEATURES | egrep -q "(ept|npt)" ; then FEATURES_LIST="${FEATURES_LIST},tlbps"; fi
 if echo $FEATURES | grep -q ht      ; then FEATURES_LIST="${FEATURES_LIST},ht";   fi
 if uname -m | grep -q x86_64        ; then FEATURES_LIST="${FEATURES_LIST},64b";  fi
-cat /var/log/dmesg | grep -q -e Intel-IOMMU   ; then FEATURES_LIST="${FEATURES_LIST},iommu";  fi
+if cat /var/log/dmesg | grep -q -e Intel-IOMMU   ; then FEATURES_LIST="${FEATURES_LIST},iommu";  fi
 FEATURES_LIST=${FEATURES_LIST#,}
 
 NUMAS=`gawk 'BEGIN{numas=0;}
@@ -345,4 +385,5 @@ do
 
   numa=$((numa+1))
 done
-
+remove_vf_driver ixgbe
+remove_vf_driver i40e
