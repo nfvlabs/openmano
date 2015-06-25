@@ -128,6 +128,15 @@ fi
 
 
 #obtain interfaces information
+unset dpid
+read -p "Do you want to provide the interfaces connectivity information (datapathid/dpid of the switch and switch port id)? [y/N] " conn_info
+case $conn_info in
+    [Yy]* ) prov_conn=true;
+            read -p "What is the switch dapapathid/dpdi? (01:02:03:04:05:06:07:08) " dpid;
+            [[ -z $dpid ]] && dpid="01:02:03:04:05:06:07:08";
+            iface_counter=0;;
+    * ) prov_conn=false;
+esac       
 OLDIFS=$IFS
 IFS=$'\n'
 unset PF_list
@@ -143,17 +152,20 @@ parent=`xmlpath_args "device/parent" < device_xml`
 parent="${parent// /}"
 #the following line created variables 'speed' and 'state'
 eval `xmlpath_args "device/capability/link" < device_xml`
-if false
-#if [[ $state == 'down' ]]
+virsh nodedev-dumpxml $parent > parent_xml
+driver=`xmlpath_args "device/driver/name" < parent_xml`
+[ $? -eq 1 ] && driver="N/A"
+driver="${driver// /}"
+if [[ $state == 'down' ]]  && ( [[ $driver == "ixgbe" ]] || [[ $driver == "i40e" ]] )
 then
-    echo "Interfaces must be connected and up in order to properly detect the speed. You can provide this information manually or skip the interface"
+    >&2 echo "Interfaces must be connected and up in order to properly detect the speed. You can provide this information manually or skip the interface"
     keep_asking=true
     skip_interface=true
     unset speed
     while $keep_asking; do
         read -p "Do you want to skip interface $name ($address) [y/N] " -i "n" skip
         case $skip in
-            [Yy]* ) skip_interface=false && break;;
+            [Yy]* ) keep_asking=false;;
             * ) skip_interface=false;
                 default_speed="10000"
                 while $keep_asking; do
@@ -165,12 +177,8 @@ then
         esac
     done
 
-   [[ $skip_interface ]] && continue
+   $skip_interface && continue
 fi
-virsh nodedev-dumpxml $parent > parent_xml
-driver=`xmlpath_args "device/driver/name" < parent_xml`
-[ $? -eq 1 ] && driver="N/A"
-driver="${driver// /}"
 #the following line creates a 'node' variable
 eval `xmlpath_args "device/capability/numa" < parent_xml`
 #the following line creates the variable 'type'
@@ -195,6 +203,17 @@ then
   eval $underscored_pci["mac"]=$address
   eval $underscored_pci["speed"]=$speed
   eval $underscored_pci["pci"]=$pci
+  #request switch port to the user if this information is being provided and include it
+  if  $prov_conn 
+  then
+    unset switch_port
+    read -p "What is the port name in the switch $dpid where port $name ($pci) is connected? (${dpid}-0/$iface_counter) " switch_port
+    [[ -z $switch_port ]] && switch_port="${dpid}-0/$iface_counter"
+    iface_counter=$((iface_counter+1))
+    eval $underscored_pci["dpid"]=$dpid
+    eval $underscored_pci["switch_port"]=$switch_port
+  fi
+
   #Añado el pci de cada uno de los hijos
   SRIOV_counter=0
   for child in `xmlpath_args "device/capability/capability/address" < parent_xml`
@@ -301,6 +320,13 @@ do
     echo "      Mbps: $pspeed"
     echo "      pci: \"$ppci\""
     echo "      mac: \"$pmac\""
+    if $prov_conn 
+      then
+        pdpid=$(get_hash_value $underscored_pci "dpid")
+        pswitch_port=$(get_hash_value $underscored_pci "switch_port")
+        echo "      switch_dpid: $pdpid"
+        echo "      switch_port: $pswitch_port"
+    fi
     for ((j=1;j<=$pSRIOV;j++))
     do
       childSRIOV="vfpci_"$(get_hash_value $underscored_pci "SRIOV"$j)
