@@ -143,7 +143,8 @@ parent=`xmlpath_args "device/parent" < device_xml`
 parent="${parent// /}"
 #the following line created variables 'speed' and 'state'
 eval `xmlpath_args "device/capability/link" < device_xml`
-if [[ $state == 'down' ]]
+if false
+#if [[ $state == 'down' ]]
 then
     echo "Interfaces must be connected and up in order to properly detect the speed. You can provide this information manually or skip the interface"
     keep_asking=true
@@ -164,7 +165,7 @@ then
         esac
     done
 
-   [[ skip_interface ]] && continue
+   [[ $skip_interface ]] && continue
 fi
 virsh nodedev-dumpxml $parent > parent_xml
 driver=`xmlpath_args "device/driver/name" < parent_xml`
