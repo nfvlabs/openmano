@@ -32,13 +32,13 @@ function load_vf_driver(){
   local pf_driver=$1
   if [[ `lsmod | cut -d" " -f1 | grep $pf_driver | grep -v vf` ]] && [[ ! `lsmod | cut -d" " -f1 | grep ${pf_driver}vf` ]]
   then
-    >2& echo "$pf_driver is loaded but not ${pf_driver}vf. This is required in order to properly add SR-IOV."
+    >&2 echo "$pf_driver is loaded but not ${pf_driver}vf. This is required in order to properly add SR-IOV."
     read -p "Do you want to load ${pf_driver}vf [Y/n] " load_driver
     case $load_driver in
       [nN]* ) exit 1;;
-      * ) >2& echo "Loading ${pf_driver}vf..."
+      * ) >&2 echo "Loading ${pf_driver}vf..."
           modprobe ${pf_driver}vf;
-          >2& echo "Reloading ${pf_driver}..."
+          >&2 echo "Reloading ${pf_driver}..."
           modprobe -r $pf_driver;
           modprobe $pf_driver;;
     esac
@@ -49,16 +49,16 @@ function remove_vf_driver(){
   local pf_driver=$1
   if [[ `lsmod | cut -d" " -f1 | grep $pf_driver | grep -v vf` ]] && [[ `lsmod | cut -d" " -f1 | grep ${pf_driver}vf` ]]
   then
-    >2& echo "${pf_driver}vf is loaded. In order to ensure proper SR-IOV behavior the driver must be removed."
+    >&2 echo "${pf_driver}vf is loaded. In order to ensure proper SR-IOV behavior the driver must be removed."
     read -p "Do you want to remove ${pf_driver}vf now? [Y/n] " remove_driver
     case $remove_driver in
-      [nN]* ) >2& echo "OK. Remember to remove the driver prior start using the compute node executing:";
-              >2& echo "modprobe -r ${pf_driver}vf";
-              >2& echo "modprobe -r ${pf_driver}";
-              >2& echo "modprobe ${pf_driver}";;
-      * ) >2& echo "Removing ${pf_driver}vf..."
+      [nN]* ) >&2 echo "OK. Remember to remove the driver prior start using the compute node executing:";
+              >&2 echo "modprobe -r ${pf_driver}vf";
+              >&2 echo "modprobe -r ${pf_driver}";
+              >&2 echo "modprobe ${pf_driver}";;
+      * ) >&2 echo "Removing ${pf_driver}vf..."
           modprobe -r ${pf_driver}vf;
-          >2& echo "Reloading ${pf_driver}..."
+          >&2 echo "Reloading ${pf_driver}..."
           modprobe -r $pf_driver;
           modprobe $pf_driver;;
     esac
@@ -81,7 +81,7 @@ function xmlpath_args()
     IFS='>' read -r tag_arg data <<< "$chunk"
     IFS=' ' read -r tag arguments <<< "$tag_arg"
     #If last tag was single level remove it from path
-    if [ $closing_tag -eq 1 ] 
+    if [[ $closing_tag -eq 1 ]] 
     then 
       unset path[${#path[@]}-1]
       closing_tag=0
@@ -123,7 +123,7 @@ function xmlpath_args()
         exit_code=3
       fi
     fi
-    [ $print_line == "1" ] && echo "<"$chunk
+    [[ $print_line == "1" ]] && echo "<"$chunk
   done
   return $exit_code
 }
@@ -131,7 +131,7 @@ function xmlpath_args()
 
 #check root privileges and non a root user behind
 
-[ "$#" -lt "2" ] && echo "Missing parameters" && usage
+[[ "$#" -lt "2" ]] && echo "Missing parameters" && usage
 load_vf_driver ixgbe
 load_vf_driver i40e
 
@@ -199,7 +199,7 @@ driver="${driver// /}"
 #If the device is not up try to bring it up and reload state
 if [[ $state == 'down' ]] && ( [[ $driver == "ixgbe" ]] || [[ $driver == "i40e" ]] )
 then
-  >2& echo "$name is down. Trying to bring it up"
+  >&2 echo "$name is down. Trying to bring it up"
   ifconfig $name up
   sleep 2
   virsh nodedev-dumpxml $device > device_xml
@@ -243,7 +243,7 @@ pci="${domain#*x}:${bus#*x}:${slot#*x}.${function#*x}"
 underscored_pci="${pci//\:/_}"
 underscored_pci="pci_${underscored_pci//\./_}"
 
-if ( [ $driver == "ixgbe" ] || [ $driver == "i40e" ] ) 
+if ( [[ $driver == "ixgbe" ]] || [[ $driver == "i40e" ]] ) 
 then
   underscored_pci="pf"$underscored_pci
   PF_list[${#PF_list[@]}]=$underscored_pci
@@ -276,7 +276,7 @@ then
   eval $underscored_pci["SRIOV"]=$SRIOV_counter
   
 #Si se trata de un SRIOV (tiene una capability con type 'phys_function')
-elif [ $type == 'phys_function' ]
+elif [[ $type == 'phys_function' ]]
 then
   underscored_pci="vf"$underscored_pci
   VF_list[${#VF_list[@]}]=$underscored_pci
@@ -308,7 +308,7 @@ echo "  features:    $FEATURES_LIST"
 echo "  numas:"
 
 numa=0
-while [ $numa -lt $NUMAS ]
+while [[ $numa -lt $NUMAS ]]
 do
   echo "  - numa_socket:  $numa"
 #MEMORY
@@ -332,7 +332,7 @@ do
     PHYSICAL=`echo $cpu | cut -f 1 -d"-"`
     CORE=`echo $cpu | cut -f 2 -d"-"`
     THREAD=`echo $cpu | cut -f 3 -d"-"`
-    [ $PHYSICAL != $numa ] && continue   #skip non physical
+    [[ $PHYSICAL != $numa ]] && continue   #skip non physical
     echo "    - core_id:   $CORE"
     echo "      thread_id: $THREAD"
     #check if eligible
@@ -341,13 +341,13 @@ do
     do
       isolcpu_start=`echo $isolcpu | cut -f 1 -d"-"`
       isolcpu_end=`echo $isolcpu | cut -f 2 -d"-"`
-      if [ $THREAD -ge $isolcpu_start -a $THREAD -le $isolcpu_end ]
+      if [ "$THREAD" -ge "$isolcpu_start" -a "$THREAD" -le "$isolcpu_end" ]
       then
         cpu_isolated="yes"
         break
       fi
     done
-    [ $cpu_isolated == "no" ] &&   echo "      status:    noteligible"
+    [[ $cpu_isolated == "no" ]] &&   echo "      status:    noteligible"
     FIRST=" "
   done
  
@@ -358,7 +358,7 @@ do
     underscored_pci=${PF_list[$i]}
     pname=$(get_hash_value $underscored_pci "name")
     pnuma=$(get_hash_value $underscored_pci "numa")
-    [ $pnuma != $numa ] && continue 
+    [[ $pnuma != $numa ]] && continue 
     pmac=$(get_hash_value $underscored_pci "mac")
     ppci=$(get_hash_value $underscored_pci "pci")
     pspeed=$(get_hash_value $underscored_pci "speed")
