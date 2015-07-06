@@ -168,13 +168,14 @@ fi
 
 #obtain interfaces information
 unset dpid
-read -p "Do you want to provide the interfaces connectivity information (datapathid/dpid of the switch and switch port id)? [y/N] " conn_info
+read -p "Do you want to provide the interfaces connectivity information (datapathid/dpid of the switch and switch port id)? [Y/n] " conn_info
 case $conn_info in
-    [Yy]* ) prov_conn=true;
-            read -p "What is the switch dapapathid/dpdi? (01:02:03:04:05:06:07:08) " dpid;
-            [[ -z $dpid ]] && dpid="01:02:03:04:05:06:07:08";
-            iface_counter=0;;
-    * ) prov_conn=false;
+    [Nn]* ) prov_conn=false;
+    * ) prov_conn=true;
+        read -p "What is the switch dapapathid/dpdi? (01:02:03:04:05:06:07:08) " dpid;
+        [[ -z $dpid ]] && dpid="01:02:03:04:05:06:07:08";
+        PORT_RANDOM=$RANDOM
+        iface_counter=0;;
 esac       
 OLDIFS=$IFS
 IFS=$'\n'
@@ -257,8 +258,8 @@ then
   if  $prov_conn 
   then
     unset switch_port
-    read -p "What is the port name in the switch $dpid where port $name ($pci) is connected? (${dpid}-0/$iface_counter) " switch_port
-    [[ -z $switch_port ]] && switch_port="${dpid}-0/$iface_counter"
+    read -p "What is the port name in the switch $dpid where port $name ($pci) is connected? (${name}-${PORT_RANDOM}/$iface_counter) " switch_port
+    [[ -z $switch_port ]] && switch_port="${name}-${PORT_RANDOM}/$iface_counter"
     iface_counter=$((iface_counter+1))
     eval $underscored_pci["dpid"]=$dpid
     eval $underscored_pci["switch_port"]=$switch_port
