@@ -457,7 +457,7 @@ class host_thread(threading.Thread):
             self.tab()+'<apic/>' +\
             self.tab()+'<pae/>'+ \
             self.dec_tab() +'</features>'
-        text += self.tab() + "<cpu mode='host-model'></cpu>" 
+        text += self.tab() + "<cpu mode='host-model'> <topology sockets='1' cores='%d' threads='1' /> </cpu>"% vcpus
         text += self.tab() + "<clock offset='utc'/>" +\
             self.tab() + "<on_poweroff>preserve</on_poweroff>" + \
             self.tab() + "<on_reboot>restart</on_reboot>" + \
@@ -1168,7 +1168,7 @@ class host_thread(threading.Thread):
         #todo falta untry catch, y comprobar que esl servidor esta PARADO. Por ejemplo si dom!=None
 
   
-def create_server(server, db, db_lock):
+def create_server(server, db, db_lock, only_of_ports):
     #print "server"
     #print "server"
     #print server
@@ -1279,7 +1279,7 @@ def create_server(server, db, db_lock):
 
 
     db_lock.acquire()
-    result, content = db.get_numas(requirements, server.get('host_id', None))
+    result, content = db.get_numas(requirements, server.get('host_id', None), only_of_ports)
     db_lock.release()
     
     if result == -1:

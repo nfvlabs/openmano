@@ -170,7 +170,7 @@ fi
 unset dpid
 read -p "Do you want to provide the interfaces connectivity information (datapathid/dpid of the switch and switch port id)? [Y/n] " conn_info
 case $conn_info in
-    [Nn]* ) prov_conn=false;
+    [Nn]* ) prov_conn=false;;
     * ) prov_conn=true;
         read -p "What is the switch dapapathid/dpdi? (01:02:03:04:05:06:07:08) " dpid;
         [[ -z $dpid ]] && dpid="01:02:03:04:05:06:07:08";

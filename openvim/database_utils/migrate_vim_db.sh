@@ -155,7 +155,8 @@ fi
 #GET DATABASE TARGET VERSION
 DATABASE_TARGET_VER_NUM=0
 [ $OPENVIM_VER_NUM -gt 1091 ] && DATABASE_TARGET_VER_NUM=1   #>0.1.91 =>  1
-[ $OPENVIM_VER_NUM -ge 2003 ] && DATABASE_TARGET_VER_NUM=2   #0.2.03 =>  2
+[ $OPENVIM_VER_NUM -ge 2003 ] && DATABASE_TARGET_VER_NUM=2   #0.2.03  =>  2
+[ $OPENVIM_VER_NUM -ge 2005 ] && DATABASE_TARGET_VER_NUM=3   #0.2.5   =>  3
 #TODO ... put next versions here
 
 
@@ -227,14 +228,52 @@ function upgrade_to_2(){
 	 VALUES (2, '0.2', '0.2.03', 'update Procedure UpdateSwitchPort', '2015-05-06');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 function upgrade_to_3(){
-    echo "    upgrade database from version 0.1 to version 0.2"
-    echo "      ALTER TABLE \`of_ports_pci_correspondence\` \`resources_port\` \`ports\` ADD COLUMN \`switch_dpid\`"
-    echo "ALTER TABLE instances DROP FOREIGN KEY FK_instances_flavors, DROP FOREIGN KEY FK_instances_images;"| $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1 
+    echo "    upgrade database from version 0.2 to version 0.3"
+    echo "     change size of source_name at table resources_port"
+    echo "ALTER TABLE resources_port CHANGE COLUMN source_name source_name VARCHAR(24) NULL DEFAULT NULL AFTER port_id;"| $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1
+    echo "     CREATE PROCEDURE GetAllAvailablePorts"
+    echo "delimiter //
+    CREATE PROCEDURE GetAllAvailablePorts(IN Numa INT) CONTAINS SQL SQL SECURITY INVOKER
+    COMMENT 'Obtain all -including those not connected to switch port- ports available for a numa'
+    BEGIN
+	SELECT port_id, pci, Mbps, Mbps - Mbps_consumed as Mbps_free, totalSRIOV - coalesce(usedSRIOV,0) as availableSRIOV, switch_port, mac
+	FROM
+	(
+	   SELECT id as port_id, Mbps, pci, switch_port, mac
+	   FROM resources_port  
+		WHERE numa_id = Numa AND id=root_id AND status = 'ok' AND instance_id IS NULL
+	) as A
+	INNER JOIN
+	(
+	   SELECT root_id, sum(Mbps_used) as Mbps_consumed, COUNT(id)-1 as totalSRIOV
+		FROM resources_port  
+		WHERE numa_id = Numa AND status = 'ok'
+		GROUP BY root_id
+	) as B
+	ON A.port_id = B.root_id
+	LEFT JOIN
+	(
+	   SELECT root_id,  COUNT(id) as usedSRIOV
+		FROM resources_port  
+		WHERE numa_id = Numa AND status = 'ok' AND instance_id IS NOT NULL
+		GROUP BY root_id
+	) as C
+	ON A.port_id = C.root_id
+	ORDER BY Mbps_free, availableSRIOV, pci;
+    END//
+    delimiter ;"| $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openvim_ver, comments, date) VALUES (3, '0.3', '0.2.5', 'New Procedure GetAllAvailablePorts', '2015-07-09');"| $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1
+}
+function upgrade_to_4(){
+    #TODO, this change of foreign key does not work
+    echo "    upgrade database from version 0.3 to version 0.4"
+    echo "ALTER TABLE instances DROP FOREIGN KEY FK_instances_flavors, DROP INDEX FK_instances_flavors,
+          DROP FOREIGN KEY FK_instances_images, DROP INDEX FK_instances_flavors,;"| $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1 
     echo "ALTER TABLE instances
 	ADD CONSTRAINT FK_instances_flavors FOREIGN KEY (flavor_id, tenant_id) REFERENCES tenants_flavors (flavor_id, tenant_id),
 	ADD CONSTRAINT FK_instances_images FOREIGN KEY (image_id, tenant_id) REFERENCES tenants_images (image_id, tenant_id);" | $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1
-
 }
+
 function downgrade_from_2(){
     echo "    downgrade database from version 0.2 to version 0.1"
     echo "      UPDATE procedure UpdateSwitchPort"
@@ -267,6 +306,14 @@ function downgrade_from_2(){
             ! echo "ERROR. Aborted!" || exit -1
     done
     echo "DELETE FROM \`schema_version\` WHERE \`version_int\` = '2'" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+function downgrade_from_3(){
+    echo "    downgrade database from version 0.3 to version 0.2"
+    echo "     change back size of source_name at table resources_port"
+    echo "ALTER TABLE resources_port CHANGE COLUMN source_name source_name VARCHAR(20) NULL DEFAULT NULL AFTER port_id;"| $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1
+    echo "      DROP PROCEDURE GetAllAvailablePorts"
+    echo "DROP PROCEDURE GetAllAvailablePorts;" | $DBCMD || ! ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int = '3'" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 #TODO ... put funtions here
 

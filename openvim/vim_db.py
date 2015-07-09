@@ -443,18 +443,22 @@ class vim_db():
                         used_= int(used['hugepages_consumed']) if used != None else 0
                         numa['hugepages_consumed'] = used_
                         #get ports
-                        cmd = "CALL GetPortsFromNuma(%s)'" % str(numa['id'])
+                        #cmd = "CALL GetPortsFromNuma(%s)'" % str(numa['id'])
+                        #self.cur.callproc('GetPortsFromNuma', (numa['id'],) )
+                        #every time a Procedure is launched you need to close and open the cursor 
+                        #under Error 2014: Commands out of sync; you can't run this command now
+                        #self.cur.close()   
+                        #self.cur = self.con.cursor(mdb.cursors.DictCursor)
+                        cmd="SELECT Mbps, pci, status, Mbps_consumed, switch_port, switch_dpid, mac, source_name, sriovs-1 as sriovs\
+                            FROM(SELECT * FROM resources_port WHERE numa_id=%d AND id=root_id) as A\
+                            INNER JOIN(SELECT root_id, count(pci) as sriovs, sum(Mbps_used) as Mbps_consumed\
+                            FROM resources_port WHERE numa_id=%d GROUP BY root_id) as B ON A.id = B.root_id;" % (numa['id'], numa['id'])
                         if self.debug: print cmd
-                        self.cur.callproc('GetPortsFromNuma', (numa['id'],) )
+                        self.cur.execute(cmd)
                         numa['interfaces'] = self.cur.fetchall()
                         for iface in numa['interfaces']: 
                             iface['Mbps_consumed'] = int(iface['Mbps_consumed']) #change to a Normal format
                             if iface['status'] == 'ok': del iface['status']
-                        #ALF PPPPHHHUUUUUUUUUUUUUUUUUUUUUUUUUUFFFFF how many time to discover this: 
-                        #every time a Procedure is launched you need to close and open the cursor 
-                        #under Error 2014: Commands out of sync; you can't run this command now
-                        self.cur.close()   
-                        self.cur = self.con.cursor(mdb.cursors.DictCursor)
 
                         #delete internal field
                         del numa['id']
@@ -1062,7 +1066,7 @@ class vim_db():
                 r,c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
         
-    def get_numas(self, requirements, prefered_host_id=None):
+    def get_numas(self, requirements, prefered_host_id=None, only_of_ports=True):
         '''Obtain a valid NUMA/HOST for deployment a VM
         requirements: contain requirement regarding:
             requirements['ram']: Non huge page memory in MB; 0 to skip 
@@ -1072,7 +1076,10 @@ class vim_db():
                 requirements['numa']['proc_req_type']: Type of processor, cores or threads 
                 requirements['numa']['proc_req_nb']: Number of isolated cpus  
                 requirements['numa']['port_list']: Physical NIC ports list ; [] for any 
-                requirements['numa']['sriov_list']: Virtual function NIC ports list ; [] for any 
+                requirements['numa']['sriov_list']: Virtual function NIC ports list ; [] for any
+        prefered_host_id: if not None return this host if it match 
+        only_of_ports: if True only those ports conected to the openflow (of) are valid,
+            that is, with switch_port information filled; if False, all NIC ports are valid. 
         Return a valid numa and host
         '''
          
@@ -1098,8 +1105,9 @@ class vim_db():
                     self.cur = self.con.cursor()
                     match_found = False
                     if len(valid_hosts)<=0:
-                        print 'No room at data center for allocating the server'
-                        return -1, 'No room at data center for allocating the server'
+                        error_text = 'No room at data center. Can not find a host with %s MB memory and %s cpus available' % (str(requirements['ram']), str(requirements['vcpus'])) 
+                        print  error_text
+                        return -1, error_text
                     
                     #elif req_numa != None:
                     #Find valid numa nodes for memory requirements
@@ -1110,20 +1118,30 @@ class vim_db():
                     valid_for_memory = self.cur.fetchall()
                     self.cur.close()   
                     self.cur = self.con.cursor()
+                    if len(valid_for_memory)<=0:
+                        error_text = 'No room at data center. Can not find a host with %s GB Hugepages memory available' % str(requirements['numa']['memory']) 
+                        print  error_text
+                        return -1, error_text
 
                     #Find valid numa nodes for processor requirements
                     self.cur = self.con.cursor(mdb.cursors.DictCursor)
                     if requirements['numa']['proc_req_type'] == 'threads':
+                        cpu_requirement_text='cpu-threads'
                         cmd = "CALL GetNumaByThread(%s)" % str(requirements['numa']['proc_req_nb'])
                         if self.debug: print cmd 
                         self.cur.callproc('GetNumaByThread', (requirements['numa']['proc_req_nb'],) )
                     else:
+                        cpu_requirement_text='cpu-cores'
                         cmd = "CALL GetNumaByCore(%s)" % str(requirements['numa']['proc_req_nb'])
                         if self.debug: print cmd 
                         self.cur.callproc('GetNumaByCore', (requirements['numa']['proc_req_nb'],) )
                     valid_for_processor = self.cur.fetchall()
                     self.cur.close()   
                     self.cur = self.con.cursor()
+                    if len(valid_for_processor)<=0:
+                        error_text = 'No room at data center. Can not find a host with %s %s available' % (str(requirements['numa']['proc_req_nb']),cpu_requirement_text)  
+                        print  error_text
+                        return -1, error_text
 
                     #Find the numa nodes that comply for memory and processor requirements
                     #sorting from less to more memory capacity
@@ -1147,6 +1165,11 @@ class vim_db():
                                 valid_numas.insert(0, m_numa['numa_id'])
                             else:
                                 valid_numas.append(m_numa['numa_id'])
+                    if len(valid_numas)<=0:
+                        error_text = 'No room at data center. Can not find a host with %s MB hugepages memory and %s %s available in the same numa' %\
+                            (requirements['numa']['memory'], str(requirements['numa']['proc_req_nb']),cpu_requirement_text)  
+                        print  error_text
+                        return -1, error_text
                     
     #                 print 'Valid numas list: '+str(valid_numas)
 
@@ -1157,8 +1180,14 @@ class vim_db():
     #                     print 'Checking '+str(numa_id)
                         match_found = False
                         self.cur = self.con.cursor(mdb.cursors.DictCursor)
-                        print  "CALL GetAvailablePorts(%s)" % str(numa_id) 
-                        self.cur.callproc('GetAvailablePorts', (numa_id,) )
+                        if only_of_ports:
+                            cmd="CALL GetAvailablePorts(%s)" % str(numa_id) 
+                            if self.debug: print cmd
+                            self.cur.callproc('GetAvailablePorts', (numa_id,) )
+                        else:
+                            cmd="CALL GetAllAvailablePorts(%s)" % str(numa_id) 
+                            if self.debug: print cmd
+                            self.cur.callproc('GetAllAvailablePorts', (numa_id,) )
                         available_ports = self.cur.fetchall()
                         self.cur.close()   
                         self.cur = self.con.cursor()
@@ -1250,8 +1279,9 @@ class vim_db():
                             break
 
                     if not match_found:
-                        print 'No room at data center for allocating the server'
-                        return -1, 'No room at data center for allocating the server'
+                        error_text = 'No room at data center. Can not find a host with the required hugepages, vcpus and interfaces'  
+                        print  error_text
+                        return -1, error_text
 
                     print 'Full match found in numa '+str(numa_id)
 

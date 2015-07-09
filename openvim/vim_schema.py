@@ -268,9 +268,9 @@ host_data_schema={
                                     "items":{
                                         "type": "object",
                                         "properties":{
-                                            "source_name":integer0_schema,
+                                            "source_name":{"oneOf":[integer0_schema, nameshort_schema]},
                                             "mac":mac_schema,
-                                            "vlan":integer0_schema,
+                                            "vlan":integer0_schema, 
                                             "pci":pci_schema,
                                         },
                                         "additionalProperties": False,

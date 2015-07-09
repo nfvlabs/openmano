@@ -1321,7 +1321,8 @@ def http_post_server_id(tenant_id):
             bottle.abort(HTTP_Not_Found, 'hostId %s not found' % server['host_id'])
             return
     #print json.dumps(server, indent=4)
-    result, content = ht.create_server(server, config_dic['db'], config_dic['db_lock'])
+     
+    result, content = ht.create_server(server, config_dic['db'], config_dic['db_lock'], config_dic['mode']=='normal')
 
     if result >= 0:
     #Insert instance to database
