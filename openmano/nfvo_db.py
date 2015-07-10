@@ -1048,12 +1048,22 @@ class nfvo_db():
                         self.cur.execute("SELECT uuid,sce_net_id,interface_id FROM sce_interfaces WHERE sce_vnf_id='"+ vnf['uuid'] + "'")
                         vnf['interfaces'] = self.cur.fetchall()
                         #vms
-                        self.cur.execute("SELECT vms.uuid as uuid, vim_flavor_id, vim_image_id, vms.name as name, vms.description as description "+
+                        self.cur.execute("SELECT vms.uuid as uuid, flavor_id, image_id, vms.name as name, vms.description as description "+
                                     "FROM vnfs join vms on vnfs.uuid=vms.vnf_id "+
                                     "WHERE vnfs.uuid='" + vnf['vnf_id'] +"'"  
                                     )
                         vnf['vms'] = self.cur.fetchall()
                         for vm in vnf['vms']:
+                            if datacenter_id!=None:
+                                self.cur.execute("SELECT vim_id FROM datacenters_images WHERE image_id='%s' AND datacenter_id='%s'" %(vm['image_id'],datacenter_id)) 
+                                if self.cur.rowcount==1:
+                                    vim_image_dict = self.cur.fetchone()
+                                    vm['vim_image_id']=vim_image_dict['vim_id']
+                                self.cur.execute("SELECT vim_id FROM datacenters_flavors WHERE flavor_id='%s' AND datacenter_id='%s'" %(vm['flavor_id'],datacenter_id)) 
+                                if self.cur.rowcount==1:
+                                    vim_flavor_dict = self.cur.fetchone()
+                                    vm['vim_flavor_id']=vim_flavor_dict['vim_id']
+                                
                             #interfaces
                             self.cur.execute("SELECT uuid,internal_name,external_name,net_id,type,vpci,bw,model " +
                                     "FROM interfaces " +

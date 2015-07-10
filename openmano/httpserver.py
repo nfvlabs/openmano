@@ -566,7 +566,7 @@ def http_get_vnf_id(tenant_id,vnf_id):
     data={'vnf' : filtered_content}
     #GET VM
     result,content = mydb.get_table(FROM='vnfs join vms on vnfs.uuid=vms.vnf_id',
-            SELECT=('vms.uuid as uuid','vim_flavor_id','vim_image_id','vms.name as name', 'vms.description as description'), 
+            SELECT=('vms.uuid as uuid','vms.name as name', 'vms.description as description'), 
             WHERE={'vnfs.uuid': vnf_id} )
     if result < 0:
         print "http_get_vnf_id error %d %s" % (result, content)

@@ -155,7 +155,7 @@ fi
 #GET DATABASE TARGET VERSION
 DATABASE_TARGET_VER_NUM=0
 [ $OPENMANO_VER_NUM -ge 2002 ] && DATABASE_TARGET_VER_NUM=1   #0.2.2 =>  1
-[ $OPENMANO_VER_NUM -ge 2005 ] && DATABASE_TARGET_VER_NUM=2   #0.2.2 =>  1
+[ $OPENMANO_VER_NUM -ge 2005 ] && DATABASE_TARGET_VER_NUM=2   #0.2.5 =>  2
 #TODO ... put next versions here
 
 
@@ -194,7 +194,6 @@ function upgrade_to_2(){
 	description VARCHAR(100) NULL,
 	metadata VARCHAR(400) NULL,
 	PRIMARY KEY (uuid),
-	UNIQUE INDEX name (name),
 	UNIQUE INDEX location (location)  )
         COLLATE='utf8_general_ci'
         ENGINE=InnoDB;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
@@ -205,26 +204,58 @@ function upgrade_to_2(){
 	vim_id VARCHAR(36) NOT NULL,
 	PRIMARY KEY (id),
 	CONSTRAINT FK__images FOREIGN KEY (image_id) REFERENCES images (uuid) ON UPDATE CASCADE ON DELETE CASCADE,
-	CONSTRAINT FK__datacenters FOREIGN KEY (datacenter_id) REFERENCES datacenters (uuid) ON UPDATE CASCADE ON DELETE CASCADE  )
+	CONSTRAINT FK__datacenters_i FOREIGN KEY (datacenter_id) REFERENCES datacenters (uuid) ON UPDATE CASCADE ON DELETE CASCADE  )
         COLLATE='utf8_general_ci'
         ENGINE=InnoDB;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "      migrate data from table 'vms' into 'images'"
     echo "INSERT INTO images (uuid, name, location) SELECT vim_image_id, vim_image_id, image_path FROM vms;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "INSERT INTO datacenters_images (image_id, datacenter_id, vim_id)
           SELECT vim_image_id, datacenters.uuid, vim_image_id FROM vms JOIN datacenters;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
-    echo "ALTER TABLE vms ALTER vim_image_id DROP DEFAULT;
-          ALTER TABLE vms CHANGE COLUMN vim_image_id image_id VARCHAR(36) NOT NULL COMMENT 'Link to image table' AFTER vim_flavor_id, 
-          ADD CONSTRAINT FK_vms_images FOREIGN KEY (image_id) REFERENCES images (uuid);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
-    echo "INSERT INTO mano_db.schema_version (version_int, version, openmano_ver, comments, date) VALUES (2, '0.2', '0.2.5', 'new table images', '2015-06-19');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Add table 'flavors' and 'datacenter_flavors'"
+    echo "CREATE TABLE flavors (
+	uuid VARCHAR(36) NOT NULL,
+	name VARCHAR(50) NOT NULL,
+	description VARCHAR(100) NULL,
+	disk SMALLINT(5) UNSIGNED NULL DEFAULT NULL,
+	ram SMALLINT(5) UNSIGNED NULL DEFAULT NULL,
+	vcpus SMALLINT(5) UNSIGNED NULL DEFAULT NULL,
+	extended VARCHAR(2000) NULL DEFAULT NULL COMMENT 'Extra description json format of needed resources and pining, orginized in sets per numa',
+	PRIMARY KEY (uuid)  )
+        COLLATE='utf8_general_ci'
+        ENGINE=InnoDB;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "CREATE TABLE datacenters_flavors (
+	id INT NOT NULL AUTO_INCREMENT,
+	flavor_id VARCHAR(36) NOT NULL,
+	datacenter_id VARCHAR(36) NOT NULL,
+	vim_id VARCHAR(36) NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT FK__flavors FOREIGN KEY (flavor_id) REFERENCES flavors (uuid) ON UPDATE CASCADE ON DELETE CASCADE,
+	CONSTRAINT FK__datacenters_f FOREIGN KEY (datacenter_id) REFERENCES datacenters (uuid) ON UPDATE CASCADE ON DELETE CASCADE  )
+        COLLATE='utf8_general_ci'
+        ENGINE=InnoDB;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      migrate data from table 'vms' into 'flavors'"
+    echo "INSERT INTO flavors (uuid, name) SELECT vim_flavor_id, vim_flavor_id FROM vms;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO datacenters_flavors (flavor_id, datacenter_id, vim_id)
+          SELECT vim_flavor_id, datacenters.uuid, vim_flavor_id FROM vms JOIN datacenters;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE vms ALTER vim_flavor_id DROP DEFAULT, ALTER vim_image_id DROP DEFAULT;
+          ALTER TABLE vms CHANGE COLUMN vim_flavor_id flavor_id VARCHAR(36) NOT NULL COMMENT 'Link to flavor table' AFTER vnf_id,
+          CHANGE COLUMN vim_image_id image_id VARCHAR(36) NOT NULL COMMENT 'Link to image table' AFTER flavor_id, 
+          ADD CONSTRAINT FK_vms_images  FOREIGN KEY (image_id) REFERENCES  images (uuid),
+          ADD CONSTRAINT FK_vms_flavors FOREIGN KEY (flavor_id) REFERENCES flavors (uuid);
+         " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO mano_db.schema_version (version_int, version, openmano_ver, comments, date) VALUES (2, '0.2', '0.2.5', 'new tables images,flavors', '2015-07-13');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 
 }   
      
 function downgrade_from_2(){
     echo "    downgrade database from version 0.2 to version 0.1"
-    echo "       migrate back data from 'datacenters_images' into 'vms'"
-    echo "ALTER TABLE vms ALTER image_id DROP DEFAULT;
-          ALTER TABLE vms CHANGE COLUMN image_id vim_image_id VARCHAR(36) NOT NULL COMMENT 'Image ID in the VIM DB' AFTER vim_flavor_id,
-	 DROP FOREIGN KEY FK_vms_images, DROP INDEX FK_vms_images;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "       migrate back data from 'datacenters_images' 'datacenters_flavors' into 'vms'"
+    echo "ALTER TABLE vms ALTER image_id DROP DEFAULT, ALTER flavor_id DROP DEFAULT;
+          ALTER TABLE vms CHANGE COLUMN flavor_id vim_flavor_id VARCHAR(36) NOT NULL COMMENT 'Flavor ID in the VIM DB' AFTER vnf_id,
+          CHANGE COLUMN image_id vim_image_id VARCHAR(36) NOT NULL COMMENT 'Image ID in the VIM DB' AFTER vim_flavor_id,
+          DROP FOREIGN KEY FK_vms_flavors, DROP INDEX FK_vms_flavors,
+          DROP FOREIGN KEY FK_vms_images, DROP INDEX FK_vms_images;
+         " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 #    echo "UPDATE v SET v.vim_image_id=di.vim_id
 #          FROM  vms as v INNER JOIN images as i ON v.vim_image_id=i.uuid 
 #          INNER JOIN datacenters_images as di ON i.uuid=di.image_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
@@ -233,6 +264,9 @@ function downgrade_from_2(){
     echo "        delete tables 'datacenter_images', 'images'"
     echo "DROP TABLE \`datacenters_images\`;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "DROP TABLE \`images\`;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "        delete tables 'datacenter_flavors', 'flavors'"
+    echo "DROP TABLE \`datacenters_flavors\`;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DROP TABLE \`flavors\`;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "DELETE FROM mano_db.schema_version WHERE version_int='2';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 #TODO ... put funtions here

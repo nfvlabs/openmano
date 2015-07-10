@@ -48,7 +48,8 @@ def get_flavorlist(mydb, vnf_id, nfvo_tenant=None):
         WHERE_dict['nfvo_tenant_id'] = nfvo_tenant
     
     #result, content = mydb.get_table(FROM='vms join vnfs on vms.vnf_id = vnfs.uuid',SELECT=('uuid'),WHERE=WHERE_dict )
-    result, content = mydb.get_table(FROM='vms',SELECT=('vim_flavor_id',),WHERE=WHERE_dict )
+    #result, content = mydb.get_table(FROM='vms',SELECT=('vim_flavor_id',),WHERE=WHERE_dict )
+    result, content = mydb.get_table(FROM='vms join flavors on vms.flavor_id=flavors.uuid',SELECT=('flavor_id',),WHERE=WHERE_dict )
     if result < 0:
         print "nfvo.get_flavorlist error %d %s" % (result, content)
         return -result, content
@@ -56,7 +57,7 @@ def get_flavorlist(mydb, vnf_id, nfvo_tenant=None):
     print "get_flavor_list content:", content
     flavorList=[]
     for flavor in content:
-        flavorList.append(flavor['vim_flavor_id'])
+        flavorList.append(flavor['flavor_id'])
     return result, flavorList
 
 def get_imagelist(mydb, vnf_id, nfvo_tenant=None):
@@ -71,73 +72,104 @@ def get_imagelist(mydb, vnf_id, nfvo_tenant=None):
         WHERE_dict['nfvo_tenant_id'] = nfvo_tenant
     
     #result, content = mydb.get_table(FROM='vms join vnfs on vms-vnf_id = vnfs.uuid',SELECT=('uuid'),WHERE=WHERE_dict )
-    result, content = mydb.get_table(FROM='vms',SELECT=('vim_image_id',),WHERE=WHERE_dict )
+    result, content = mydb.get_table(FROM='vms join images on vms.image_id=images.uuid',SELECT=('image_id',),WHERE=WHERE_dict )
     if result < 0:
         print "nfvo.get_imagelist error %d %s" % (result, content)
         return -result, content
     print "get_image_list result:", result
     print "get_image_list content:", content
     imageList=[]
-    for flavor in content:
-        imageList.append(flavor['vim_image_id'])
+    for image in content:
+        imageList.append(image['image_id'])
     return result, imageList
 
 def get_vim(mydb, nfvo_tenant=None, datacenter_id=None, datacenter_name=None, vim_tenant=None):
-    '''Obtain VIM or datacenter details with some of the input paremeters
+    '''Obtain a dictionary of VIM (datacenter) classes with some of the input parameters
     return result, content:
         <0, error_text upon error
-        1, dictionary on success, with keys: nfvo_tenant_id','datacenter_id','vim_tenant_id','vim_url','vim_url_admin','datacenter_name'
+        NUMBER, dictionary with datacenter_id: vim_class with these keys: 
+            'nfvo_tenant_id','datacenter_id','vim_tenant_id','vim_url','vim_url_admin','datacenter_name','type','user','passwd'
     '''
     WHERE_dict={}
     if nfvo_tenant     is not None:  WHERE_dict['nfvo_tenant_id'] = nfvo_tenant
     if datacenter_id   is not None:  WHERE_dict['datacenter_id']  = datacenter_id
     if datacenter_name is not None:  WHERE_dict['datacenter.name']  = datacenter_name
     if vim_tenant      is not None:  WHERE_dict['vim.vim_tenant_id']  = vim_tenant
-    
-    result, content = mydb.get_table(FROM='tenants_datacenters as td join datacenters as datacenter on td.datacenter_id = datacenter.uuid '\
-                                    'join vim_tenants as vim on td.vim_tenant_id = vim.uuid',\
-                                    SELECT=('vim.uuid as vim_tenants_uuid','nfvo_tenant_id','datacenter_id','vim.vim_tenant_id', \
-                                            'vim_url', 'vim_url_admin','datacenter.name as datacenter_name'),\
-                                    WHERE=WHERE_dict )
+    from_= 'tenants_datacenters as td join datacenters as datacenter on td.datacenter_id=datacenter.uuid join vim_tenants as vim on td.vim_tenant_id=vim.uuid'
+    #alf delete 'nfvo_tenant_id'
+    select_ = ('vim.uuid as vim_tenants_uuid','type','datacenter_id','vim.vim_tenant_id','vim_url', 'vim_url_admin','user','passwd', 'datacenter.name as datacenter_name')
+    result, content = mydb.get_table(FROM=from_, SELECT=select_, WHERE=WHERE_dict )
     if result < 0:
         print "nfvo.get_vim error %d %s" % (result, content)
         return -result, content
     elif result==0:
         print "nfvo.get_vim not found a valid VIM with the input params " + str(WHERE_dict)
         return -HTTP_Unauthorized, "datacenter not found for " +  json.dumps(WHERE_dict)
-    elif result>1:
-        print "nfvo.get_vim more than one datacenter matches with the input params " + str(WHERE_dict)
-        return -HTTP_Unauthorized, "more than one datacenter matches for" +  json.dumps(WHERE_dict)
-        #Take the datacenter_id and the vim_tenant_id
-    print content
-    return 1, content[0]
+    #print content
+    vim_dict={}
+    for vim in content:
+        vim_dict[ vim['datacenter_id'] ] = vimconnector.vimconnector(
+                            uuid=vim['datacenter_id'], name=vim['datacenter_name'],
+                            tenant=vim['vim_tenant_id'], 
+                            url=vim['vim_url'], url_admin=vim['vim_url_admin'], 
+                            user=vim['user'],passwd=vim['passwd'],
+                            extra={'vim_tenants_uuid':vim['vim_tenants_uuid']}
+                    )
+    return len(vim_dict), vim_dict
 
-def rollbackNewVNF(vim, myvimURL, myvim_tenant, flavorList, imageList=[], vnf_id=None, nfvodb=None, vmDict=None, netList=None, interfaceList=None):
-    '''Do a rollback when adding a new VNF in the catalogue'''
-    undeletedFlavors = []
-    undeletedImages = []
-    for flavor in flavorList:
-        result, message = vim.delete_tenant_flavor(myvimURL, myvim_tenant, flavor)
-        if result < 0:
-            print 'Error in rollback. Not possible to delete VIM flavor "%s". Message: %s' % (flavor,message)
-            undeletedFlavors.append(flavor)
-        
-    for image in imageList:
-        result, message = vim.delete_tenant_image(myvimURL, myvim_tenant, image)
-        if result < 0:
-            print 'Error in rollback. Not possible to delete VIM image "%s". Message: %s' % (image,message)
-            undeletedFlavors.append(flavor)
-    
-#     for net in netList
-#         result, message = delete_row(self, table, uuid):
-#     print "Lista de flavors no borrados:",undeletedFlavors
-#     print "Lista de images no borrados:",undeletedImages
-#     #If lists are empty, return true
-    if not undeletedFlavors or not undeletedImages: 
-        return True,None
+def rollback(mydb,  vims, rollback_list):
+    undeleted_items=[]
+    #delete things by reverse order 
+    for i in range(len(rollback_list)-1, -1, -1):
+        item = rollback_list[i]
+        if item["where"]=="vim":
+            if item["vim_id"] not in vims:
+                continue
+            vim=vims[ item["vim_id"] ]
+            if item["what"]=="image":
+                result, message = vim.delete_tenant_image(item["uuid"])
+                if result < 0:
+                    print "Error in rollback. Not possible to delete VIM image '%s'. Message: %s" % (item["uuid"],message)
+                    undeleted_items.append("image %s from VIM %s" % (item["uuid"],vim["name"]))
+                else:
+                    result, message = mydb.delete_row_by_dict(FROM="datacenters_images", WEHRE={"datacenter_id": vim["datacenter_id"], "vim_id":item["uuid"]})
+                    if result < 0:
+                        print "Error in rollback. Not possible to delete image '%s' from DB.dacenters_images. Message: %s" % (item["uuid"],message)
+            elif item["what"]=="flavor":
+                result, message = vim.delete_tenant_flavor(item["uuid"])
+                if result < 0:
+                    print "Error in rollback. Not possible to delete VIM flavor '%s'. Message: %s" % (item["uuid"],message)
+                    undeleted_items.append("flavor %s from VIM %s" % (item["uuid"],vim["name"]))
+                else:
+                    result, message = mydb.delete_row_by_dict(FROM="datacenters_flavos", WEHRE={"datacenter_id": vim["datacenter_id"], "vim_id":item["uuid"]})
+                    if result < 0:
+                        print "Error in rollback. Not possible to delete flavor '%s' from DB.dacenters_flavors. Message: %s" % (item["uuid"],message)
+            elif item["what"]=="network":
+                result, message = vim.delete_tenant_network(item["uuid"])
+                if result < 0:
+                    print "Error in rollback. Not possible to delete VIM network  '%s'. Message: %s" % (item["uuid"],message)
+                    undeleted_items.append("network %s from VIM %s" % (item["uuid"],vim["name"]))
+            elif item["what"]=="vm":
+                result, message = vim.delete_tenant_vminstance(item["uuid"])
+                if result < 0:
+                    print "Error in rollback. Not possible to delete VIM VM  '%s'. Message: %s" % (item["uuid"],message)
+                    undeleted_items.append("VM %s from VIM %s" % (item["uuid"],vim["name"]))
+        else: # where==mano
+            if item["what"]=="image":
+                result, message = mydb.delete_row_by_dict(FROM="images", WEHRE={"uuid": item["uuid"]})
+                if result < 0:
+                    print "Error in rollback. Not possible to delete image '%s' from DB.images. Message: %s" % (item["uuid"],message)
+                    undeleted_items.append("image %s" % (item["uuid"]))
+            elif item["what"]=="flavor":
+                result, message = mydb.delete_row_by_dict(FROM="flavors", WEHRE={"uuid": item["uuid"]})
+                if result < 0:
+                    print "Error in rollback. Not possible to delete flavor '%s' from DB.flavors. Message: %s" % (item["uuid"],message)
+                    undeleted_items.append("flavor %s" % (item["uuid"]))
+    if len(undeleted_items)==0: 
+        return True," Rollback successful."
     else:
-        return False,"Undeleted flavors: %s. Undeleted images: %s" %(undeletedFlavors,undeletedImages)
-    
+        return False," Rollback fails to delete: " + str(undeleted_items)
+  
 def check_vnf_descriptor(vnf_descriptor):
     global global_config
     #TODO:
@@ -151,34 +183,170 @@ def check_vnf_descriptor(vnf_descriptor):
         print "WARNING: The VNF descriptor already exists in the VNF repository"
     return 200, None
 
-def new_image_at_vim(myvimURL, myvim, myvim_tenant, path, metadata, name, description):
-    '''
-    Create a new image in the VIM (if it didn't exist previously), otherwise, use the existing one
-    Returns the number of new images created (0 or 1) and the image-id:
-        0,image-id        if the image existed
-        1,image-id        if the image didn't exist previously and has been created
-        <0,message        if there was an error
-    '''
-    myImageDict = {}
-    myImageDict["image"] = {}
-    myImageDict["image"]["name"] = name
-    myImageDict["image"]["description"] = description
-    myImageDict["image"]["path"] = path
-    if metadata != None:
-        myImageDict["image"]["metadata"] = metadata
-    #print myImageDict
+def create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vim=False):
+    #look if image exist
+    if only_create_at_vim:
+        image_mano_id = image_dict['uuid']
+    else:
+        res,content = mydb.get_table(FROM="images", WHERE={'location':image_dict['location'], 'metadata':image_dict['metadata']})
+        if res>=1:
+            image_mano_id = content[0]['uuid']
+        elif res<0:
+            return res, content
+        else:
+            #create image
+            temp_image_dict={'name':image_dict['name'],         'description':image_dict.get('description',None),
+                            'location':image_dict['location'],  'metadata':image_dict.get('metadata',None)
+                            }
+            res,content = mydb.new_row('images', temp_image_dict, tenant_id=None, add_uuid=True)
+            if res>0:
+                image_mano_id= content
+                rollback_list.append({"where":"mano", "what":"image","uuid":image_mano_id})
+            else:
+                return res if res<0 else -1, content
+    #create image at every vim
+    for vim_id,vim in vims.items():
+        #look at database
+        res_db,image_db = mydb.get_table(FROM="datacenters_images", WHERE={'datacenter_id':vim_id, 'image_id':image_mano_id})
+        if res_db<0:
+            return res_db, image_db
+        #look at VIM if this image exist
+        res_vim, image_vim_id = vim.get_image_id_from_path(image_dict['location'])
+        if res_vim < 0:
+            print "Error contacting VIM to know if the image %s existed previously." %image_vim_id
+            continue
+        elif res_vim==0:
+            #Create the image in VIM
+            result, image_vim_id = vim.new_tenant_image(image_dict)
+            if result < 0:
+                print "Error creating image at VIM: %s." %image_vim_id
+                continue
+            else:
+                rollback_list.append({"where":"vim", "vim_id": vim_id, "what":"image","uuid":image_vim_id})
+            
+        #if reach here the image has been create or exist
+        if res_db==0:
+            #add new vim_id at datacenters_images
+            mydb.new_row('datacenters_images', {'datacenter_id':vim_id, 'image_id':image_mano_id, 'vim_id': image_vim_id})
+        elif image_db[0]["vim_id"]!=image_vim_id:
+            #modify existing vim_id at datacenters_images
+            mydb.update_rows('datacenters_images', UPDATE={'vim_id':image_vim_id}, WHERE={'datacenter_id':vim_id, 'image_id':image_mano_id})
+            
+    return 1, image_vim_id if only_create_at_vim else image_mano_id
 
-    res, image_id = myvim.get_image_id_from_path(myvimURL, myvim_tenant, path)
-    if res < 0 or res > 1:
-        return res, "Error contacting VIM to know if the image %s existed previously." %image_id
-    elif res==0: # No images existed with that path
-        #Create the image in VIM
-        result, image_id = myvim.new_tenant_image(myvimURL, myvim_tenant, json.dumps(myImageDict))
+def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_vim=False):
+    temp_flavor_dict= {'disk':flavor_dict.get('disk'),
+            'ram':flavor_dict.get('ram'),
+            'vcpus':flavor_dict.get('vcpus'),
+        }
+    if 'extended' in flavor_dict and flavor_dict['extended']!=None:
+        temp_flavor_dict['extended']=json.dumps(flavor_dict['extended'])
+
+    #look if flavor exist
+    if only_create_at_vim:
+        flavor_mano_id = flavor_dict['uuid']
+    else:
+        res,content = mydb.get_table(FROM="flavors", WHERE=temp_flavor_dict)
+        if res>=1:
+            flavor_mano_id = content[0]['uuid']
+        elif res<0:
+            return res, content
+        else:
+            #create flavor
+            #create one by one the images of aditional disks
+            dev_image_list=[] #list of images
+            if 'extended' in flavor_dict and flavor_dict['extended']!=None:
+                dev_nb=0
+                for device in flavor_dict['extended'].get('devices',[]):
+                    if "image" not in device:
+                        continue
+                    image_dict={'location':device['image'], 'name':flavor_dict['name']+str(dev_nb)+"-img", 'description':flavor_dict.get('description')}
+                    image_metadata_dict = device('image metadata', None)
+                    image_metadata_str = None
+                    if image_metadata_dict != None: 
+                        image_metadata_str = json.dumps(image_metadata_dict)
+                    image_dict['metadata']=image_metadata_str
+                    res, image_id = create_or_use_image(mydb, vims, image_dict, rollback_list)
+                    if res < 0:
+                        return res, image_id + rollback(mydb, vims, rollback_list)[1]
+                    print "Additional disk image id for VNFC %s: %s" % (flavor_dict['name']+str(dev_nb)+"-img", image_id)
+                    dev_image_list.append(image_id)
+                    dev_nb += 1                
+            temp_flavor_dict['name'] = flavor_dict['name']
+            temp_flavor_dict['description'] = flavor_dict.get('description',None)
+            res,content = mydb.new_row('flavors', temp_flavor_dict, tenant_id=None, add_uuid=True)
+            if res>0:
+                flavor_mano_id= content
+                rollback_list.append({"where":"mano", "what":"flavor","uuid":flavor_mano_id})
+            else:
+                return res if res<0 else -1, content
+    #create flavor at every vim
+    if 'uuid' in flavor_dict:
+        del flavor_dict['uuid']
+    for vim_id,vim in vims.items():
+        #look at database
+        res_db,flavor_db = mydb.get_table(FROM="datacenters_flavors", WHERE={'datacenter_id':vim_id, 'flavor_id':flavor_mano_id})
+        if res_db<0:
+            return res_db, flavor_db
+        #look at VIM if this flavor exist  SKIPPED
+        #res_vim, flavor_vim_id = vim.get_flavor_id_from_path(flavor_dict['location'])
+        #if res_vim < 0:
+        #    print "Error contacting VIM to know if the flavor %s existed previously." %flavor_vim_id
+        #    continue
+        #elif res_vim==0:
+    
+        #Create the flavor in VIM
+        #Translate images at devices from MANO id to VIM id
+        error=False
+        if 'extended' in flavor_dict and flavor_dict['extended']!=None and "devices" in flavor_dict['extended']:
+            #make a copy of original devices
+            devices_original=[]
+            for device in flavor_dict["extended"].get("devices",[]):
+                dev={}
+                dev.update(device)
+                devices_original.append(dev)
+                if 'image' in dev:
+                    del dev['image']
+                if 'image metadata' in dev:
+                    del dev['image metadata']
+            for index in range(0,len(devices_original)) :
+                device=devices_original[index]
+                if "image" not in device:
+                    continue
+                image_dict={'location':device['image'], 'name':flavor_dict['name']+str(dev_nb)+"-img", 'description':flavor_dict.get('description')}
+                image_metadata_dict = device.get('image metadata', None)
+                image_metadata_str = None
+                if image_metadata_dict != None: 
+                    image_metadata_str = json.dumps(image_metadata_dict)
+                image_dict['metadata']=image_metadata_str
+                r,image_vim_id=create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vim=True)
+                if r<0:
+                    print "Error creating device image for flavor at VIM: %s." %image_vim_id
+                    error=True
+                    break
+                flavor_dict["extended"]["devices"][index]['imageRef']=image_vim_id
+        if error:
+            continue
+        if 'extended' in flavor_dict and flavor_dict['extended']!=None:
+            temp_flavor_dict['extended']=json.dumps(flavor_dict['extended'])       
+            
+        result, flavor_vim_id = vim.new_tenant_flavor(flavor_dict)
+        
         if result < 0:
-            return result, "Error creating image: %s." %image_id
-        return 1, image_id
-    else: #res==1. Nothing to be created. Return the image_id
-        return 0, image_id
+            print "Error creating flavor at VIM: %s." %flavor_vim_id
+            continue
+        else:
+            rollback_list.append({"where":"vim", "vim_id": vim_id, "what":"flavor","uuid":flavor_vim_id})
+        
+        #if reach here the flavor has been create or exist
+        if res_db==0:
+            #add new vim_id at datacenters_flavors
+            mydb.new_row('datacenters_flavors', {'datacenter_id':vim_id, 'flavor_id':flavor_mano_id, 'vim_id': flavor_vim_id})
+        elif flavor_db[0]["vim_id"]!=flavor_vim_id:
+            #modify existing vim_id at datacenters_flavors
+            mydb.update_rows('datacenters_flavors', UPDATE={'vim_id':flavor_vim_id}, WHERE={'datacenter_id':vim_id, 'flavor_id':flavor_mano_id})
+            
+    return 1, flavor_vim_id if only_create_at_vim else flavor_mano_id
 
 def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacenter=None,vim_tenant=None):
     global global_config
@@ -199,16 +367,11 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
     print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
 
     # Step 2. Get the URL of the VIM from the nfvo_tenant and the datacenter
-    result, content = get_vim(mydb, nfvo_tenant, datacenter, None, vim_tenant)
+    result, vims = get_vim(mydb, nfvo_tenant, datacenter, None, vim_tenant)
     if result < 0:
         print "nfvo.new_vnf() error. Datacenter not found"
-        return result, content
-    myvimURL =  content['vim_url']
-    myvim_tenant = content['vim_tenant_id']
+        return result, vims
 
-    # Step 3. Creates a connector to talk to the VIM
-    myvim = vimconnector.vimconnector()
-    
     # Step 4. Review the descriptor and add missing  fields
     # TODO: to be moved to step 1????
     #print vnf_descriptor
@@ -236,8 +399,7 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
     
     #For each VNFC, we add it to the VNFCDict and we  create a flavor.
     VNFCDict = {}     # Dictionary, key: VNFC name, value: dict with the relevant information to create the VNF and VMs in the MANO database
-    flavorList = []   # It will contain the new flavors created in VIM. It is used for rollback  
-    imageList = []    # It will contain the new images created in VIM. It is used for rollback
+    rollback_list = []    # It will contain the new images created in mano. It is used for rollback
 
     try:
         print "Creating additional disk images and new flavors in the VIM for each VNFC"
@@ -249,43 +411,15 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
             print "Flavor name: %s. Description: %s" % (VNFCitem["name"]+"-flv", VNFCitem["description"])
             
             myflavorDict = {}
-            myflavorDict["flavor"] = {}
-            myflavorDict["flavor"]["name"] = vnfc['name']+"-flv"
-            myflavorDict["flavor"]["description"] = VNFCitem["description"]
-            myflavorDict["flavor"]["ram"] = vnfc.get("ram", 0)
-            myflavorDict["flavor"]["vcpus"] = vnfc.get("vcpus", 0)
-            myflavorDict["flavor"]["extended"] = {}
+            myflavorDict["name"] = vnfc['name']+"-flv"
+            myflavorDict["description"] = VNFCitem["description"]
+            myflavorDict["ram"] = vnfc.get("ram", 0)
+            myflavorDict["vcpus"] = vnfc.get("vcpus", 0)
+            myflavorDict["extended"] = {}
             
-            devices = vnfc.get("devices", [])
-            if len(devices)>0:
-                myflavorDict["flavor"]["extended"]["devices"] = []
-                dev_nb=0 
-            for device in devices:
-                dev = {}
-                dev.update(device)
-                
-                if "image" in dev:
-                    # Step 6.1 Additional disk images are created in the VIM 
-                    res, image_id =  new_image_at_vim(myvimURL, myvim, myvim_tenant, dev['image'], 
-                                                      dev.get('image metadata', None), vnfc['name']+str(dev_nb)+"-img", 
-                                                      VNFCitem['description'])
-                    if res < 0 or res > 1:
-                        result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
-                        if result2:
-                            return res, image_id + " Rollback successful."
-                        else:
-                            return res, image_id + " Rollback fail: you need to access VIM and delete manually: %s" % message
-                    elif res==1:
-                        imageList.append(image_id)
-                    print "Additional disk image id for VNFC %s: %s" % (vnfc['name'],image_id)
-                    
-                    dev["imageRef"]=image_id
-                    del dev['image']
-                    
-                if "image metadata" in dev:
-                    del dev["image metadata"]
-                myflavorDict["flavor"]["extended"]["devices"].append(dev)
-                dev_nb += 1
+            devices = vnfc.get("devices")
+            if devices != None:
+                myflavorDict["extended"]["devices"] = devices
             
             # TODO:
             # Mapping from processor models to rankings should be available somehow in the NFVO. They could be taken from VIM or directly from a new database table
@@ -297,32 +431,26 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
             #elif vnfc['processor']['model'] == "Intel(R) Xeon(R) CPU E5-2697 v2 @ 2.70GHz" :
             #    myflavorDict["flavor"]['extended']['processor_ranking'] = 300
             #else:
-            #    result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
+            #    result2, message = rollback(myvim, myvimURL, myvim_tenant, flavorList, imageList)
             #    if result2:
             #        print "Error creating flavor: unknown processor model. Rollback successful."
             #        return -HTTP_Bad_Request, "Error creating flavor: unknown processor model. Rollback successful."
             #    else:
             #        return -HTTP_Bad_Request, "Error creating flavor: unknown processor model. Rollback fail: you need to access VIM and delete the following %s" % message
-            myflavorDict["flavor"]['extended']['processor_ranking'] = 100  #Hardcoded value, while we decide when the mapping is done
+            myflavorDict['extended']['processor_ranking'] = 100  #Hardcoded value, while we decide when the mapping is done
      
-            if 'numas' in vnfc:
-                myflavorDict["flavor"]['extended']['numas'] = vnfc['numas']
+            if 'numas' in vnfc and len(vnfc['numas'])>0:
+                myflavorDict['extended']['numas'] = vnfc['numas']
 
             #print myflavorDict
     
             # Step 6.2 New flavors are created in the VIM
-            result, flavor_id = myvim.new_tenant_flavor(myvimURL, myvim_tenant, json.dumps(myflavorDict))
-            if result < 0:
-                result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList)
-                if result2:
-                    print "Error creating flavor: %s. Rollback successful." %flavor_id
-                    return result, "Error creating flavor: %s. Rollback successful" %flavor_id
-                else:
-                    return result, "Error creating flavor: %s. Rollback fail: you need to access VIM and delete manually: %s" % (flavor_id, message)
-            
+            res, flavor_id = create_or_use_flavor(mydb, vims, myflavorDict, rollback_list)
+            if res < 0:
+                return res, flavor_id + rollback(mydb, vims, rollback_list)[1]
+
             print "Flavor id for VNFC %s: %s" % (vnfc['name'],flavor_id)
-            flavorList.append(flavor_id)
-            VNFCitem["vim_flavor_id"] = flavor_id
+            VNFCitem["flavor_id"] = flavor_id
             VNFCDict[vnfc['name']] = VNFCitem
             
         print "Creating new images in the VIM for each VNFC"
@@ -332,29 +460,24 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
         #In case this integration is made, the VNFCDict might become a VNFClist.
         for vnfc in vnf_descriptor['vnf']['VNFC']:
             print "Image name: %s. Description: %s" % (vnfc['name']+"-img", VNFCDict[vnfc['name']]['description'])
-            
-            res, image_id =  new_image_at_vim(myvimURL, myvim, myvim_tenant, vnfc['VNFC image'], 
-                                              vnfc.get('image metadata', None), vnfc['name']+"-img", 
-                                              VNFCDict[vnfc['name']]['description'])
-            if res < 0 or res > 1:
-                result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
-                if result2:
-                    return res, image_id + " Rollback successful."
-                else:
-                    return res, image_id + " Rollback fail: you need to access VIM and delete manually: %s" % message
-            elif res==1:
-                imageList.append(image_id)
+            image_dict={'location':vnfc['VNFC image'], 'name':vnfc['name']+"-img", 'description':VNFCDict[vnfc['name']]['description']}
+            image_metadata_dict = vnfc.get('image metadata', None)
+            image_metadata_str = None
+            if image_metadata_dict is not None: 
+                image_metadata_str = json.dumps(image_metadata_dict)
+            image_dict['metadata']=image_metadata_str
+            #print "create_or_use_image", mydb, vims, image_dict, rollback_list
+            res, image_id = create_or_use_image(mydb, vims, image_dict, rollback_list)
+            if res < 0:
+                return res, image_id + rollback(mydb, vims, rollback_list)[1]
             print "Image id for VNFC %s: %s" % (vnfc['name'],image_id)
-            VNFCDict[vnfc['name']]["vim_image_id"] = image_id
+            VNFCDict[vnfc['name']]["image_id"] = image_id
             VNFCDict[vnfc['name']]["image_path"] = vnfc['VNFC image']
 
     except KeyError as e:
         print "Error while creating a VNF. KeyError: " + str(e)
-        result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
-        if result2:
-            return -HTTP_Internal_Server_Error, "Error while creating a VNF. KeyError: " + str(e) + " Rollback successful."
-        else:
-            return -HTTP_Internal_Server_Error, "Error while creating a VNF. KeyError: " + str(e) + " Rollback fail: you need to access VIM and delete manually: %s" % message
+        _, message = rollback(mydb, vims, rollback_list)
+        return -HTTP_Internal_Server_Error, "Error while creating a VNF. KeyError " + str(e) + "." + message
         
     # Step 7. Storing the VNF in the repository
     print "Storing YAML file of the VNF"
@@ -369,28 +492,20 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
         result, vnf_id = mydb.new_vnf_as_a_whole(nfvo_tenant,vnf_name,vnf_descriptor_filename,vnf_descriptor,VNFCDict)
     except KeyError as e:
         print "Error while creating a VNF. KeyError: " + str(e)
-        result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
-        if result2:
-            return -HTTP_Internal_Server_Error, "Error while creating a VNF. KeyError: " + str(e) + " Rollback successful."
-        else:
-            return -HTTP_Internal_Server_Error, "Error while creating a VNF. KeyError: " + str(e) + " Rollback fail: you need to access VIM and delete manually: %s" % message
+        _, message = rollback(mydb, vims, rollback_list)
+        return -HTTP_Internal_Server_Error, "Error while creating a VNF. KeyError " + str(e) + "." + message
     
     if result < 0:
-        result2, message = rollbackNewVNF(myvim, myvimURL, myvim_tenant, flavorList, imageList)
-        if result2:
-            return result, "%s. Rollback successful." %vnf_id
-        else:
-            return result, "%s. Rollback fail: you need to delete manually: %s" % (vnf_id, message)
+        _, message = rollback(mydb, vims, rollback_list)
+        return result, vnf_id + "." + message
 
     return 200,vnf_id
 
 def delete_vnf(mydb,nfvo_tenant,vnf_id,datacenter=None,vim_tenant=None):
     print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
-    result, content = get_vim(mydb, nfvo_tenant, datacenter, None, vim_tenant)
+    result, vims = get_vim(mydb, nfvo_tenant, datacenter, None, vim_tenant)
     if result < 0:
         return -HTTP_Unauthorized, "delete_vnf error. No VIM found for tenant '%s'" % nfvo_tenant
-    myvimURL =  content['vim_url']
-    myvim_tenant = content['vim_tenant_id']
 
     print "Checking if it is a valid uuid and, if not, getting the uuid assuming that the name was provided"
     if not af.check_valid_uuid(vnf_id):
@@ -410,6 +525,7 @@ def delete_vnf(mydb,nfvo_tenant,vnf_id,datacenter=None,vim_tenant=None):
         print "delete_vnf error. No flavors found for the VNF id '%s'" % vnf_id
     
     result,imageList = get_imagelist(mydb, vnf_id)
+    print "imageList", imageList
     if result < 0:
         print imageList
     elif result==0:
@@ -424,56 +540,89 @@ def delete_vnf(mydb,nfvo_tenant,vnf_id,datacenter=None,vim_tenant=None):
         print "delete_vnf error",result, content
         return result, content
     
-    myvim = vimconnector.vimconnector()
-    undeletedFlavors = []
-    undeletedImages = []
+    undeletedItems = []
     for flavor in flavorList:
-        result, message = myvim.delete_tenant_flavor(myvimURL, myvim_tenant, flavor)
-        if result < 0:
-            print 'delete_vnf_error. Not possible to delete VIM flavor "%s". Message: %s' % (flavor,message)
-            undeletedFlavors.append(flavor)
+        #check if flavor is used by other vnf
+        r,c = mydb.get_table(FROM='vms', WHERE={'flavor_id':flavor} )
+        if r < 0:
+            print 'delete_vnf_error. Not possible to delete VIM flavor "%s". %s' % (flavor,c)
+            undeletedItems.append("flavor "+ flavor["flavor_id"])
+        elif r > 0:
+            print 'Flavor %s not deleted because it is being used by another VNF %s' %(flavor,str(c))
+            continue
+        #flavor not used, must be deleted
+        #delelte at VIM
+        r,c = mydb.get_table(FROM='datacenters_flavors', WHERE={'flavor_id':flavor})
+        if r>0:
+            for flavor_vim in c:
+                if flavor_vim["datacenter_id"] not in vims:
+                    continue
+                myvim=vims[ flavor_vim["datacenter_id"] ]
+                result, message = myvim.delete_tenant_flavor(flavor_vim["vim_id"])
+                if result < 0:
+                    print 'delete_vnf_error. Not possible to delete VIM flavor "%s". Message: %s' % (flavor,message)
+                    if result != -HTTP_Not_Found:
+                        undeletedItems.append("flavor %s from VIM %s" % (flavor_vim["vim_id"], flavor_vim["datacenter_id"] ))
+        #delete flavor from Database, using table flavors and with cascade foreign key also at datacenters_flavors
+        result, content = mydb.delete_row('flavors', flavor)
+        if result <0:
+            undeletedItems.append("flavor %s" % flavor)
         
     for image in imageList:
-        r,c = mydb.get_table(SELECT=('*',), FROM='vms', WHERE={'vim_image_id':image}, WHERENOT={'vnf_id':vnf_id} )
+        #check if image is used by other vnf
+        r,c = mydb.get_table(FROM='vms', WHERE={'image_id':image} )
         if r < 0:
-            print 'delete_vnf_error. Not possible to delete VIM image "%s". Message: %s' % (image,message)
-            undeletedImages.append(image)
+            print 'delete_vnf_error. Not possible to delete VIM image "%s". %s' % (image,c)
+            undeletedItems.append("image "+ image["image_id"])
         elif r > 0:
             print 'Image %s not deleted because it is being used by another VNF %s' %(image,str(c))
             continue
-        result, message = myvim.delete_tenant_image(myvimURL, myvim_tenant, image)
-        if result < 0:
-            print 'delete_vnf_error. Not possible to delete VIM image "%s". Message: %s' % (image,message)
-            undeletedImages.append(image)
-    
-    if undeletedFlavors or undeletedImages: 
-        return 200, "delete_vnf error. Undeleted flavors: %s. Undeleted images: %s" %(undeletedFlavors,undeletedImages)
+        #image not used, must be deleted
+        #delelte at VIM
+        r,c = mydb.get_table(FROM='datacenters_images', WHERE={'image_id':image})
+        if r>0:
+            for image_vim in c:
+                if image_vim["datacenter_id"] not in vims:
+                    continue
+                myvim=vims[ image_vim["datacenter_id"] ]
+                result, message = myvim.delete_tenant_image(image_vim["vim_id"])
+                if result < 0:
+                    print 'delete_vnf_error. Not possible to delete VIM image "%s". Message: %s' % (image,message)
+                    if result != -HTTP_Not_Found:
+                        undeletedItems.append("image %s from VIM %s" % (image_vim["vim_id"], image_vim["datacenter_id"] ))
+        #delete image from Database, using table images and with cascade foreign key also at datacenters_images
+        result, content = mydb.delete_row('images', image)
+        if result <0:
+            undeletedItems.append("image %s" % image)
+
+    if undeletedItems: 
+        return 200, "delete_vnf error. Undeleted: %s" %(undeletedItems)
     
     return 200,vnf_id
 
 def get_hosts_info(mydb, nfvo_tenant_id, datacenter_name=None):
-    myvim = vimconnector.vimconnector();
-    result, vim_dict = get_vim(mydb, nfvo_tenant_id, None, datacenter_name)
+    result, vims = get_vim(mydb, nfvo_tenant_id, None, datacenter_name)
     if result < 0:
-        return result, vim_dict
-    result,servers =  myvim.get_hosts_info(vim_dict['vim_url'])
+        return result, vims
+    myvim = vims.values()[0]
+    result,servers =  myvim.get_hosts_info()
     if result < 0:
         return result, servers
-    topology = {'name':vim_dict['datacenter_name'] , 'servers': servers}
+    topology = {'name':myvim['name'] , 'servers': servers}
     return result, topology
 
 def get_hosts(mydb, nfvo_tenant_id):
-    myvim = vimconnector.vimconnector();
-    result, vim_dict = get_vim(mydb, nfvo_tenant_id)
+    result, vims = get_vim(mydb, nfvo_tenant_id)
     if result < 0:
-        return result, vim_dict
-    result,hosts =  myvim.get_hosts(vim_dict['vim_url'], vim_dict['vim_tenant_id'])
+        return result, vims
+    myvim = vims.values()[0]
+    result,hosts =  myvim.get_hosts()
     if result < 0:
         return result, hosts
     print '==================='
     print 'hosts '+ json.dumps(hosts, indent=4)
 
-    datacenter = {'Datacenters': [ {'name':vim_dict['datacenter_name'],'servers':[]} ] }
+    datacenter = {'Datacenters': [ {'name':myvim['name'],'servers':[]} ] }
     for host in hosts:
         server={'name':host['name'], 'vms':[]}
         for vm in host['instances']:
@@ -497,9 +646,9 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
     # TODO: With future versions of the NSD, different code might be applied for each version.
     # Depending on the new structure of the NSD (identified by version in topo), we should have separate code for each version, or integrated code with small changes.  
 
-    result, vim_dict = get_vim(mydb, nfvo_tenant_id)
-    if result < 0:
-        return result, vim_dict
+#    result, vims = get_vim(mydb, nfvo_tenant_id)
+#    if result < 0:
+#        return result, vims
 #1: parse input
 #1.1: get VNFs and external_networks (other_nets). 
     vnfs={}
@@ -733,27 +882,6 @@ def edit_scenario(mydb, nfvo_tenant_id, scenario_id, data):
     r,c = mydb.edit_scenario( data )
     return r,c
 
-def rollbackNewScenario(vim, myvimURL, myvim_tenant, netList, vmList=()):
-    '''Do a rollback when launching a scenario'''
-    undeletedNets = []
-    undeletedVMs = []
-    for vm in vmList:
-        result, message = vim.delete_tenant_vminstance(myvimURL, myvim_tenant, vm)
-        if result < 0:
-            print 'Error in rollback. Not possible to delete VIM vm instance "%s". Message: %s' % (vm,message)
-            undeletedVMs.append(vm)
-    
-    for network in netList:
-        result, message = vim.delete_tenant_network(myvimURL, myvim_tenant, network)
-        if result < 0:
-            print 'Error in rollback. Not possible to delete VIM network "%s". Message: %s' % (network,message)
-            undeletedNets.append(network)
-        
-    if not undeletedNets or not undeletedVMs: 
-        return True,None
-    else:
-        return False,"Undeleted nets: %s. Undeleted VMs: %s" %(undeletedNets,undeletedVMs)
-
 def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, instance_scenario_description, datacenter=None,vim_tenant=None, startvms=True):
     print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
     datacenter_id = None
@@ -763,18 +891,20 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             datacenter_id = datacenter
         else:
             datacenter_name = datacenter
-    result, content = get_vim(mydb, nfvo_tenant, datacenter_id, datacenter_name, vim_tenant)
+    result, vims = get_vim(mydb, nfvo_tenant, datacenter_id, datacenter_name, vim_tenant)
     if result < 0:
         print "start_scenario error. Datacenter not found"
-        return result, content
-    myvimURL =  content['vim_url']
-    myvim_tenant = content['vim_tenant_id']
-    datacenter_id = content['datacenter_id']
-    datacenter_name = content['datacenter_name']
-    vim_tenants_uuid = content['vim_tenants_uuid']
+        return result, vims
+    elif result > 1:
+        print "start_scenario error. Several datacenters available, must be concretice"
+        return -HTTP_Bad_Request, "Several datacenters available, must be concretice"
+    myvim = vims.values()[0]
+    myvim_tenant = myvim['tenant']
+    datacenter_id = myvim['id']
+    datacenter_name = myvim['name']
+    vim_tenants_uuid = myvim['vim_tenants_uuid']
+    rollbackList=[]
 
-    myvim = vimconnector.vimconnector()
-    
     print "Checking that the scenario_id exists and getting the scenario dictionary"
     result, scenarioDict = mydb.get_scenario(scenario_id, nfvo_tenant, datacenter_id)
     if result < 0:
@@ -796,8 +926,6 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
     auxNetDict['scenario'] = {}
     
     print "1. Creating new nets (sce_nets) in the VIM"
-    #For each sce_net, we create it and we add it to instanceNetlist.
-    instanceNetList = []
     for sce_net in scenarioDict['nets']:
         print "Net name: %s. Description: %s" % (sce_net["name"], sce_net["description"])
         
@@ -813,27 +941,20 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
         #We should use the dictionary as input parameter for new_tenant_network
         print myNetDict
         if not sce_net["external"]:
-            result, network_id = myvim.new_tenant_network(myvimURL, myvim_tenant, myNetName, myNetType)
+            result, network_id = myvim.new_tenant_network(myNetName, myNetType)
             if result < 0:
-                result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList)
-                if result2:
-                    print "Error creating network: %s. Rollback successful." %network_id
-                    return result, "Error creating network: %s. Rollback successful" %network_id
-                else:
-                    return result, "Error creating network: %s. Rollback fail: you need to access VIM and delete manually: %s" % (network_id, message)
+                print "Error creating network: %s." %network_id
+                _, message = rollback(mydb, vims, rollbackList)
+                return result, "Error creating network: "+ network_id + "."+message
 
             print "New VIM network created for scenario %s. Network id:  %s" % (scenarioDict['name'],network_id)
             sce_net['vim_id'] = network_id
             auxNetDict['scenario'][sce_net['uuid']] = network_id
-            instanceNetList.append(network_id)
+            rollbackList.append({'what':'network','where':'vim','vim_id':datacenter_id,'uuid':network_id})
         else:
             if sce_net['vim_id'] == None:
                 error_text = "Error, datacenter '%s' does not have external network '%s'." % (datacenter_name, sce_net['name'])
-                result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList)
-                if result2:
-                    error_text += " Rollback successful."
-                else:
-                    error_text += " Rollback fail: you need to access VIM and delete manually: " + message
+                _, message = rollback(mydb, vims, rollbackList)
                 print "nfvo.start_scenario: " + error_text
                 return -HTTP_Bad_Request, error_text
             print "Using existent VIM network for scenario %s. Network id %s" % (scenarioDict['name'],sce_net['vim_id'])
@@ -856,14 +977,11 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             print myNetDict
             #TODO:
             #We should use the dictionary as input parameter for new_tenant_network
-            result, network_id = myvim.new_tenant_network(myvimURL, myvim_tenant, myNetName, myNetType)
+            result, network_id = myvim.new_tenant_network(myNetName, myNetType)
             if result < 0:
                 error_text="Error creating network: %s." % network_id
-                result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList)
-                if result2:
-                    error_text += " Rollback successful."
-                else:
-                    error_text += " Rollback fail: you need to access VIM and delete manually: " + message
+                _, message = rollback(mydb, vims, rollbackList)
+                error_text += message
                 print "start_scenario: " + error_text
                 return result, error_text
             print "VIM network id for scenario %s: %s" % (scenarioDict['name'],network_id)
@@ -871,14 +989,12 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             if sce_vnf['uuid'] not in auxNetDict:
                 auxNetDict[sce_vnf['uuid']] = {}
             auxNetDict[sce_vnf['uuid']][net['uuid']] = network_id
-            instanceNetList.append(network_id)
+            rollbackList.append({'what':'network','where':'vim','vim_id':datacenter_id,'uuid':network_id})
 
     print "auxNetDict: %s" %(str(auxNetDict))
     
     print "3. Creating new vm instances in the VIM"
-    #For each vm inside an sce_vnf, we create it and we add it to instanceVMlist.
     #myvim.new_tenant_vminstance(self,vimURI,tenant_id,name,description,image_id,flavor_id,net_dict)
-    instanceVMList = []
     i = 0
     for sce_vnf in scenarioDict['vnfs']:
         for vm in sce_vnf['vms']:
@@ -892,6 +1008,32 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                 myVMDict['start'] = "no"
             myVMDict['name'] = myVMDict['name'][0:36] #limit name length
             print "VM name: %s. Description: %s" % (myVMDict['name'], myVMDict['name'])
+            
+            #create image at vim in case it not exist
+            res, image_dict = mydb.get_table_by_uuid_name("images", vm['image_id'])
+            if res<0:
+                print "start_scenario error getting image", image_dict
+                return res, image_dict
+            res, image_id = create_or_use_image(mydb, vims, image_dict, [], True)                
+            if res < 0:
+                print "start_scenario error adding image to VIM", image_dict
+                return res, image_id
+            vm['vim_image_id'] = image_id
+                
+            #create flavor at vim in case it not exist
+            res, flavor_dict = mydb.get_table_by_uuid_name("flavors", vm['flavor_id'])
+            if res<0:
+                print "start_scenario error getting flavor", flavor_dict
+                return res, flavor_dict
+            if flavor_dict['extended']!=None:
+                flavor_dict['extended']= json.loads(flavor_dict['extended'])
+            res, flavor_id = create_or_use_flavor(mydb, vims, flavor_dict, [], True)                
+            if res < 0:
+                print "start_scenario error adding flavor to VIM", flavor_dict
+                return res, flavor_id
+            vm['vim_flavor_id'] = flavor_id
+
+            
             myVMDict['imageRef'] = vm['vim_image_id']
             myVMDict['flavorRef'] = vm['vim_flavor_id']
             myVMDict['networks'] = []
@@ -921,22 +1063,18 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             print ">>>>>>>>>>>>>>>>>>>>>>>>>>>"
             print json.dumps(vm['interfaces'], indent=4)
             print ">>>>>>>>>>>>>>>>>>>>>>>>>>>"
-            result, vm_id = myvim.new_tenant_vminstance(myvimURL,myvim_tenant,myVMDict['name'],myVMDict['description'],myVMDict.get('start', None),
+            result, vm_id = myvim.new_tenant_vminstance(myVMDict['name'],myVMDict['description'],myVMDict.get('start', None),
                     myVMDict['imageRef'],myVMDict['flavorRef'],myVMDict['networks'],vm['interfaces'])
             
             if result < 0:
                 error_text = "Error creating vm instance: %s." % vm_id
-                result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList, instanceVMList)
-                result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList)
-                if result2:
-                    error_text += " Rollback successful."
-                else:
-                    error_text += " Rollback fail: you need to access VIM and delete manually: " + message
+                _, message = rollback(mydb, vims, rollbackList)
+                error_text += message
                 print "start_scenario: " + error_text
                 return result, error_text
             print "VIM vm instance id (server id) for scenario %s: %s" % (scenarioDict['name'],vm_id)
             vm['vim_id'] = vm_id
-            instanceVMList.append(vm_id)
+            rollbackList.append({'what':'vm','where':'vim','vim_id':datacenter_id,'uuid':vm_id})
     
     #attach interfaces to nets
     print "4. attach interfaces to nets"
@@ -964,14 +1102,11 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                             break
                 if net_id is None:
                     continue
-                result, port_id = myvim.connect_port_network(myvimURL, interface['vim_id'], net_nfvo2vim[net_id])
+                result, port_id = myvim.connect_port_network(interface['vim_id'], net_nfvo2vim[net_id])
                 if result < 0:
                     error_text = "Error attaching port to network: %s." % port_id
-                    result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList, instanceVMList)
-                    if result2:
-                        error_text += " Rollback successful."
-                    else:
-                        error_text += " Rollback fail: you need to access VIM and delete manually: " + message
+                    _, message = rollback(mydb, vims, rollbackList)
+                    error_text += message
                     print "start_scenario: " + error_text
                     return result, error_text
 
@@ -983,11 +1118,8 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
     result,c = mydb.new_instance_scenario_as_a_whole(nfvo_tenant,instance_scenario_name, instance_scenario_description, scenarioDict)
     if result <0:
         error_text = c + "." 
-        result2, message = rollbackNewScenario(myvim, myvimURL, myvim_tenant, instanceNetList, instanceVMList)
-        if result2:
-            error_text += " Rollback successful."
-        else:
-            error_text += " Rollback fail: you need to access VIM and delete manually: " + message
+        _, message = rollback(mydb, vims, rollbackList)
+        error_text += message
         print "start_scenario: " + error_text
         return result, error_text
         
@@ -1005,13 +1137,11 @@ def delete_instance(mydb,nfvo_tenant,instance_id):
     print json.dumps(instanceDict, indent=4)
     
     print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
-    result, content = get_vim(mydb, nfvo_tenant, instanceDict['datacenter_id'])
+    result, vims = get_vim(mydb, nfvo_tenant, instanceDict['datacenter_id'])
     if result < 0:
         print "nfvo.delete_instance() error. Datacenter not found"
-        return result, content
-    myvimURL =  content['vim_url']
-    myvim_tenant = content['vim_tenant_id']
-    myvim = vimconnector.vimconnector()
+        return result, vims
+    myvim = vims.values()[0]
     
     
     #1. Delete from Database
@@ -1028,7 +1158,7 @@ def delete_instance(mydb,nfvo_tenant,instance_id):
     #vm_fail_list=[]
     for sce_vnf in instanceDict['vnfs']:
         for vm in sce_vnf['vms']:
-            result, vm_id = myvim.delete_tenant_vminstance(myvimURL, myvim_tenant, vm['vim_vm_id'])
+            result, vm_id = myvim.delete_tenant_vminstance(vm['vim_vm_id'])
             if result < 0:
                 error_msg+="\n    Error: " + str(-result) + " VM id=" + vm['vim_vm_id']
                 #if result != -HTTP_Not_Found: vm_fail_list.append(vm)
@@ -1039,7 +1169,7 @@ def delete_instance(mydb,nfvo_tenant,instance_id):
     for net in instanceDict['nets']:
         if net['external']:
             continue #skip not created nets
-        result, net_id = myvim.delete_tenant_network(myvimURL, myvim_tenant, net['vim_net_id'])
+        result, net_id = myvim.delete_tenant_network(net['vim_net_id'])
         if result < 0:
             error_msg += "\n    Error: " + str(-result) + " NET id=" + net['vim_net_id']
             #if result == -HTTP_Not_Found: net_fail_list.append(net)
@@ -1061,13 +1191,11 @@ def refresh_instance(mydb, nfvo_tenant, instanceDict, datacenter=None, vim_tenan
     #print json.dumps(instanceDict, indent=4)
     
     print "Getting the VIM URL and the VIM tenant_id"
-    result, content = get_vim(mydb, nfvo_tenant, instanceDict['datacenter_id'])
+    result, vims = get_vim(mydb, nfvo_tenant, instanceDict['datacenter_id'])
     if result < 0:
         print "nfvo.refresh_instance() error. Datacenter not found"
-        return result, content
-    myvimURL =  content['vim_url']
-    myvim_tenant = content['vim_tenant_id']
-    myvim = vimconnector.vimconnector()
+        return result, vims
+    myvim = vims.values()[0]
      
     # 1. Getting the status of all VMs
     vmDict = {}
@@ -1084,7 +1212,7 @@ def refresh_instance(mydb, nfvo_tenant, instanceDict, datacenter=None, vim_tenan
         netDict[net['vim_net_id']]=net['status']
  
     # 3. Refresh the status of VMs and nets from VIM. IT updates vmDict and netDict
-    result, refresh_message = myvim.refresh_tenant_vms_and_nets(myvimURL, myvim_tenant, vmDict, netDict)
+    result, refresh_message = myvim.refresh_tenant_vms_and_nets(vmDict, netDict)
     if result < 0:
         return result, refresh_message
     
@@ -1111,7 +1239,7 @@ def refresh_instance(mydb, nfvo_tenant, instanceDict, datacenter=None, vim_tenan
     # 6. Update in openmano DB the VMs whose status changed
     vms_notupdated=[]
     for vm in vms_updated:
-        result2, content = mydb.update_rows('instance_vms', UPDATE={'status':vms_updated[vm]}, 
+        result2, _ = mydb.update_rows('instance_vms', UPDATE={'status':vms_updated[vm]}, 
                                 WHERE={'uuid':vm})
         if result2<0:
             vms_updated.pop(vm)
@@ -1122,7 +1250,7 @@ def refresh_instance(mydb, nfvo_tenant, instanceDict, datacenter=None, vim_tenan
     # 7. Update in openmano DB the nets whose status changed
     nets_notupdated=[]
     for net in nets_updated:
-        result2, content = mydb.update_rows('instance_nets', UPDATE={'status':nets_updated[net]}, 
+        result2, _ = mydb.update_rows('instance_nets', UPDATE={'status':nets_updated[net]}, 
                                 WHERE={'uuid':net})
         if result2<0:
             nets_updated.pop(net)
@@ -1156,13 +1284,11 @@ def instance_action(mydb,nfvo_tenant,instance_id, action_dict):
     #print json.dumps(instanceDict, indent=4)
 
     print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
-    result, content = get_vim(mydb, nfvo_tenant, instanceDict['datacenter_id'])
+    result, vims = get_vim(mydb, nfvo_tenant, instanceDict['datacenter_id'])
     if result < 0:
         print "nfvo.instance_action() error. Datacenter not found"
-        return result, content
-    myvimURL =  content['vim_url']
-    myvim_tenant = content['vim_tenant_id']
-    myvim = vimconnector.vimconnector()
+        return result, vims
+    myvim = vims.values()[0]
     
 
     input_vnfs = action_dict.pop("vnfs", [])
@@ -1176,7 +1302,7 @@ def instance_action(mydb,nfvo_tenant,instance_id, action_dict):
             if not action_over_all:
                 if sce_vnf['uuid'] not in input_vnfs and vm['uuid'] not in input_vms:
                     continue
-            result, vm_id = myvim.action_tenant_vminstance(myvimURL, myvim_tenant, vm['vim_vm_id'],action_dict)
+            result, vm_id = myvim.action_tenant_vminstance(vm['vim_vm_id'],action_dict)
             if vm_result < 0:
                 vm_result[ vm['uuid'] ] = {"vim_result": -result, "description": vm_id}
                 vm_error+=1
@@ -1188,7 +1314,6 @@ def instance_action(mydb,nfvo_tenant,instance_id, action_dict):
         return 1, vm_result
     else:
         return 1, vm_result
-
 
 def check_tenant(mydb, tenant_id):
     '''check that tenant exists at database'''
@@ -1212,7 +1337,6 @@ def delete_tenant(mydb, tenant):
     if result < 0:
         return result, tenant_id
     return 200, tenant_dict['uuid']
-
 
 def new_datacenter(mydb, datacenter_descriptor):
     result, datacenter_id = mydb.new_row("datacenters", datacenter_descriptor, None, add_uuid=True, log=True)
@@ -1266,9 +1390,11 @@ def associate_datacenter_to_tenant(mydb, nfvo_tenant, datacenter, vim_tenant_id=
             #insert at table vim_tenants
     else: #if vim_tenant_id==None:
         #create tenant at VIM if not provided
-        myvim = vimconnector.vimconnector();
-        myVIMURL=datacenter_dict['vim_url']
-        res, vim_tenant_id = myvim.new_tenant(myVIMURL, vim_tenant_name, "created by openmano for datacenter "+datacenter_dict["name"])
+        myvim = vimconnector.vimconnector(
+                            uuid=datacenter_dict['uuid'], name=datacenter_dict['name'], tenant=None,
+                            url=datacenter_dict['vim_url'], url_admin=datacenter_dict['vim_url_admin']
+                        ) 
+        res, vim_tenant_id = myvim.new_tenant(vim_tenant_name, "created by openmano for datacenter "+datacenter_dict["name"])
         if res < 0:
             return res, "Not possible to create vim_tenant in VIM " + vim_tenant_id
         vim_tenants_dict = {}
@@ -1324,9 +1450,11 @@ def deassociate_datacenter_to_tenant(mydb, nfvo_tenant, datacenter, vim_tenant_i
             pass #the error will be caused because dependencies, vim_tenant can not be deleted
         elif vim_tenant_dict['created']=='true':
             #delete tenant at VIM if created by NFVO
-            myvim = vimconnector.vimconnector();
-            myVIMURL=datacenter_dict['vim_url']
-            res, vim_tenant_id = myvim.delete_tenant(myVIMURL, vim_tenant_dict['vim_tenant_id'])
+            myvim = vimconnector.vimconnector(
+                            uuid=datacenter_dict['uuid'], name=datacenter_dict['name'], tenant=None,
+                            url=datacenter_dict['vim_url'], url_admin=datacenter_dict['vim_url_admin']
+                        ) 
+            res, vim_tenant_id = myvim.delete_tenant(vim_tenant_dict['vim_tenant_id'])
             if res < 0:
                 warning = " Not possible to delete vim_tenant %s from VIM: %s " % (vim_tenant_dict['vim_tenant_id'], vim_tenant_id)
                 print res, warning
@@ -1341,9 +1469,11 @@ def datacenter_action(mydb, datacenter, action_dict):
     datacenter_id = datacenter_dict['uuid']
 
     if 'net-update' in action_dict:
-        myvim = vimconnector.vimconnector();
-        myVIMURL=datacenter_dict['vim_url']
-        result, content = myvim.get_tenant_network(myVIMURL, None, {'shared': True, 'admin_state_up': True, 'status': 'ACTIVE'})
+        myvim = vimconnector.vimconnector(
+                            uuid=datacenter_dict['uuid'], name=datacenter_dict['name'], tenant=None,
+                            url=datacenter_dict['vim_url'], url_admin=datacenter_dict['vim_url_admin']
+                        ) 
+        result, content = myvim.get_tenant_network(None, {'shared': True, 'admin_state_up': True, 'status': 'ACTIVE'})
         print content
         if result < 0:
             print " Not possible to get_tenant_network from VIM: %s " % (content)

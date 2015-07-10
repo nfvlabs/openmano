@@ -34,18 +34,66 @@ import requests
 import json
 from utils import auxiliary_functions as af
 import openmano_schemas
-from nfvo_db import HTTP_Bad_Request, HTTP_Internal_Server_Error, HTTP_Not_Found
+from nfvo_db import HTTP_Bad_Request, HTTP_Internal_Server_Error, HTTP_Not_Found, HTTP_Unauthorized
 
 #TODO: Decide if it makes sense to have the methods outside the class as static generic methods
 class vimconnector():
-    def new_host(self,vimURIadmin, host_data):
+    def __init__(self, uuid, name, tenant, url, url_admin=None, user=None, passwd=None,extra={}):
+        self.id        = uuid
+        self.name      = name
+        self.url       = url
+        self.url_admin = url_admin
+        self.tenant    = tenant
+        self.user      = user
+        self.passwd    = passwd
+        self.extra     = extra
+    
+    def __getitem__(self,index):
+        if index=='tenant':
+            return self.tenant
+        elif index=='id':
+            return self.id
+        elif index=='name':
+            return self.name
+        elif index=='user':
+            return self.user
+        elif index=='passwd':
+            return self.passwd
+        elif index=='url':
+            return self.url
+        elif index=='url_admin':
+            return self.url_admin
+        elif index in self.extra:
+            return self.extra[index]
+        else:
+            raise KeyError("Invalid key '%s'" %str(index))
+        
+    def __setitem__(self,index, value):
+        if index=='tenant':
+            self.tenant = value
+        elif index=='id':
+            self.id = value
+        elif index=='name':
+            self.name = value
+        elif index=='user':
+            self.user = value
+        elif index=='passwd':
+            self.passwd = value
+        elif index=='url':
+            self.url = value
+        elif index=='url_admin':
+            self.url_admin = value
+        else:
+            raise KeyError("Invalid key '%s'" %str(index))
+        
+    def new_host(self, host_data):
         '''Adds a new host to VIM'''
         '''Returns status code of the VIM response'''
         print "VIMConnector: Adding a new host"
         headers_req = {'content-type': 'application/json'}
         payload_req = host_data
         try:
-            vim_response = requests.post(vimURIadmin+'/hosts', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url_admin+'/hosts', headers = headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_host Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -67,18 +115,18 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to add new host. HTTP Response: %d. Error: %s' % (vimURIadmin, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to add new host. HTTP Response: %d. Error: %s' % (self.url_admin, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
     
-    def new_external_port(self,vimURIadmin,port_data):
+    def new_external_port(self, port_data):
         '''Adds a external port to VIM'''
         '''Returns the port identifier'''
         print "VIMConnector: Adding a new external port"
         headers_req = {'content-type': 'application/json'}
         payload_req = port_data
         try:
-            vim_response = requests.post(vimURIadmin+'/ports', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url_admin+'/ports', headers = headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_external_port Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -100,12 +148,11 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to add new external port. HTTP Response: %d. Error: %s' % (vimURIadmin, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to add new external port. HTTP Response: %d. Error: %s' % (self.url_admin, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
-    
-    
-    def new_external_network(self,vimURI,net_name,net_type):
+        
+    def new_external_network(self,net_name,net_type):
         '''Adds a external network to VIM (shared)'''
         '''Returns the network identifier'''
         print "VIMConnector: Adding external shared network to VIM (type " + net_type + "): "+ net_name
@@ -113,7 +160,7 @@ class vimconnector():
         headers_req = {'content-type': 'application/json'}
         payload_req = '{"network":{"name": "' + net_name + '","shared":true,"type": "' + net_type + '"}}'
         try:
-            vim_response = requests.post(vimURI+'/networks', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url+'/networks', headers = headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_external_network Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -135,20 +182,25 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to add new external network. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to add new external network. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
-
         
-    def connect_port_network(self, vimURIadmin, port_id, network_id):
+    def connect_port_network(self, port_id, network_id, admin=False):
         '''Connects a external port to a network'''
         '''Returns status code of the VIM response'''
         print "VIMConnector: Connecting external port to network"
         
         headers_req = {'content-type': 'application/json'}
         payload_req = '{"port":{"network_id":"' + network_id + '"}}'
+        if admin:
+            if self.url_admin==None:
+                return -HTTP_Unauthorized, "datacenter cannot contain  admin URL"
+            url= self.url_admin
+        else:
+            url= self.url
         try:
-            vim_response = requests.put(vimURIadmin+'/ports/'+port_id, headers = headers_req, data=payload_req)
+            vim_response = requests.put(url +'/ports/'+port_id, headers = headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "connect_port_network Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -170,11 +222,11 @@ class vimconnector():
         else:
             print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to connect external port to network. HTTP Response: %d. Error: %s' % (vimURIadmin, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to connect external port to network. HTTP Response: %d. Error: %s' % (self.url_admin, vim_response.status_code, jsonerror)
             print text
             return -vim_response.status_code,text
         
-    def new_tenant(self,vimURI,tenant_name,tenant_description):
+    def new_tenant(self,tenant_name,tenant_description):
         '''Adds a new tenant to VIM'''
         '''Returns the tenant identifier'''
         print "VIMConnector: Adding a new tenant to VIM"
@@ -184,7 +236,7 @@ class vimconnector():
         #print payload_req
 
         try:
-            vim_response = requests.post(vimURI+'/tenants', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url+'/tenants', headers = headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_tenant Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -205,17 +257,17 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to add new tenant. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to add new tenant. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
 
-    def delete_tenant(self,vimURI,tenant_id,):
+    def delete_tenant(self,tenant_id,):
         '''Delete a tenant from VIM'''
         '''Returns the tenant identifier'''
         print "VIMConnector: Deleting  a  tenant from VIM"
         headers_req = {'content-type': 'application/json'}
         try:
-            vim_response = requests.delete(vimURI+'/tenants/'+tenant_id, headers = headers_req)
+            vim_response = requests.delete(self.url+'/tenants/'+tenant_id, headers = headers_req)
         except requests.exceptions.RequestException, e:
             print "delete_tenant Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -225,22 +277,21 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to delete tenant. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to delete tenant. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
 
-
-    def new_tenant_network(self,vimURI,tenant_id,net_name,net_type):
+    def new_tenant_network(self,net_name,net_type):
         '''Adds a tenant network to VIM'''
         '''Returns the network identifier'''
         if net_type=="bridge":
             net_type="bridge_data"
-        print "VIMConnector: Adding a new tenant network to VIM (tenant: " + tenant_id + ", type: " + net_type + "): "+ net_name
+        print "VIMConnector: Adding a new tenant network to VIM (tenant: " + self.tenant + ", type: " + net_type + "): "+ net_name
 
         headers_req = {'content-type': 'application/json'}
-        payload_req = '{"network":{"name": "' + net_name + '", "type": "' + net_type + '","tenant_id":"' + tenant_id + '"}}'
+        payload_req = '{"network":{"name": "' + net_name + '", "type": "' + net_type + '","self.tenant":"' + self.tenant + '"}}'
         try:
-            vim_response = requests.post(vimURI+'/networks', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url+'/networks', headers = headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_tenant_network Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -262,11 +313,11 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to add new tenant network. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to add new tenant network. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
 
-    def get_tenant_network(self,vimURI,tenant_id=None, filter_dict={}):
+    def get_tenant_network(self,tenant_id=None, filter_dict={}):
         '''Obtain tenant networks of VIM'''
         '''Returns the network list'''
         print "VIMConnector: Getting tenant network from VIM (tenant: " + str(tenant_id) + "): "
@@ -280,8 +331,8 @@ class vimconnector():
             filterquery_text='?'+ '&'.join(filterquery)
         headers_req = {'content-type': 'application/json'}
         try:
-            print vimURI+'/networks'+filterquery_text
-            vim_response = requests.get(vimURI+'/networks'+filterquery_text, headers = headers_req)
+            print self.url+'/networks'+filterquery_text
+            vim_response = requests.get(self.url+'/networks'+filterquery_text, headers = headers_req)
         except requests.exceptions.RequestException, e:
             print "get_tenant_network Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -296,19 +347,18 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to get tenant network. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to get tenant network. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
 
-
-    def delete_tenant_network(self,vimURI, tenant_id, net_id):
+    def delete_tenant_network(self, net_id):
         '''Deletes a tenant network from VIM'''
         '''Returns the network identifier'''
-        print "VIMConnector: Deleting a new tenant network from VIM tenant: " + tenant_id + ", id: " + net_id
+        print "VIMConnector: Deleting a new tenant network from VIM tenant: " + self.tenant + ", id: " + net_id
 
         headers_req = {'content-type': 'application/json'}
         try:
-            vim_response = requests.delete(vimURI+'/networks/'+net_id, headers=headers_req)
+            vim_response = requests.delete(self.url+'/networks/'+net_id, headers=headers_req)
         except requests.exceptions.RequestException, e:
             print "delete_tenant_network Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -320,27 +370,27 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to delete tenant network. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to delete tenant network. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
 
-    def refresh_tenant_network(self, vimURI, tenant_id, net_id):
+    def refresh_tenant_network(self, net_id):
         '''Refreshes the status of the tenant network'''
         '''Returns: 0 if no error,
                     <0 if error'''
         return 0
     
-    def new_tenant_flavor(self,vimURI,tenant_id,flavor_data):
+    def new_tenant_flavor(self, flavor_data):
         '''Adds a tenant flavor to VIM'''
         '''Returns the flavor identifier'''
         print "VIMConnector: Adding a new flavor to VIM"
-        #print "VIM URL:",vimURI
-        #print "Tenant id:",tenant_id
+        #print "VIM URL:",self.url
+        #print "Tenant id:",self.tenant
         #print "Flavor:",flavor_data
         headers_req = {'content-type': 'application/json'}
-        payload_req = flavor_data
+        payload_req = json.dumps({'flavor': flavor_data})
         try:
-            vim_response = requests.post(vimURI+'/'+tenant_id+'/flavors', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url+'/'+self.tenant+'/flavors', headers = headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_tenant_flavor Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -363,21 +413,21 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to add new flavor. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to add new flavor. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
 
-    def delete_tenant_flavor(self,vimURI,tenant_id,flavor_id):
+    def delete_tenant_flavor(self,flavor_id):
         '''Deletes a tenant flavor from VIM'''
         '''Returns the HTTP response code and a message indicating details of the success or fail'''
         print "VIMConnector: Deleting a flavor from VIM"
-        print "VIM URL:",vimURI
-        print "Tenant id:",tenant_id
+        print "VIM URL:",self.url
+        print "Tenant id:",self.tenant
         print "Flavor id:",flavor_id
         #headers_req = {'content-type': 'application/json'}
         #payload_req = flavor_data
         try:
-            vim_response = requests.delete(vimURI+'/'+tenant_id+'/flavors/'+flavor_id)
+            vim_response = requests.delete(self.url+'/'+self.tenant+'/flavors/'+flavor_id)
         except requests.exceptions.RequestException, e:
             print "delete_tenant_flavor Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -389,22 +439,30 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to delete flavor. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to delete flavor. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
 
-    def new_tenant_image(self,vimURI,tenant_id,image_data):
+    def new_tenant_image(self,image_dict):
         '''
         Adds a tenant image to VIM
         Returns:
             200, image-id        if the image is created
             <0, message          if there is an error
         '''
-        print "VIMConnector: Adding a new image to VIM", image_data
+        print "VIMConnector: Adding a new image to VIM", image_dict['location']
         headers_req = {'content-type': 'application/json'}
-        payload_req = image_data
+        new_image_dict={'name': image_dict['name']}
+        if 'description' in image_dict and image_dict['description'] != None:
+            new_image_dict['description'] = image_dict['description']
+        if 'metadata' in image_dict and image_dict['metadata'] != None:
+            new_image_dict['metadata'] = image_dict['metadata']
+        if 'location' in image_dict and image_dict['location'] != None:
+            new_image_dict['path'] = image_dict['location']
+        payload_req = json.dumps({"image":new_image_dict})
+        url=self.url + '/' + self.tenant + '/images'
         try:
-            vim_response = requests.post(vimURI+'/'+tenant_id+'/images', headers = headers_req, data=payload_req)
+            vim_response = requests.post(url, headers = headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_tenant_image Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -426,23 +484,21 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to add new image. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to add new image. HTTP Response: %d. Error: %s' % (url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
 
-    def delete_tenant_image(self,vimURI,tenant_id,image_id):
+    def delete_tenant_image(self, image_id):
         '''Deletes a tenant image from VIM'''
         '''Returns the HTTP response code and a message indicating details of the success or fail'''
         print "VIMConnector: Deleting an image from VIM"
-        print "VIM URL:",vimURI
-        print "Tenant id:",tenant_id
-        print "Image id:",image_id
         #headers_req = {'content-type': 'application/json'}
         #payload_req = flavor_data
+        url=self.url + '/'+ self.tenant +'/images/'+image_id
         try:
-            vim_response = requests.delete(vimURI+'/'+tenant_id+'/images/'+image_id)
+            vim_response = requests.delete(url)
         except requests.exceptions.RequestException, e:
-            print "delete_tenant_image Exception: ", e.args
+            print "delete_tenant_image Exception url '%s': " % url, e.args
             return -HTTP_Not_Found, str(e.args[0])
         print vim_response
         print vim_response.status_code
@@ -452,18 +508,18 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to delete image. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to delete image. HTTP Response: %d. Error: %s' % (url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
         
-    def new_tenant_vminstancefromJSON(self,vimURI,tenant_id,vm_data):
+    def new_tenant_vminstancefromJSON(self, vm_data):
         '''Adds a VM instance to VIM'''
         '''Returns the instance identifier'''
         print "VIMConnector: Adding a new VM instance from JSON to VIM"
         headers_req = {'content-type': 'application/json'}
         payload_req = vm_data
         try:
-            vim_response = requests.post(vimURI+'/'+tenant_id+'/servers', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url+'/'+self.tenant+'/servers', headers = headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_tenant_vminstancefromJSON Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -485,11 +541,11 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to add new vm instance. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to add new vm instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
 
-    def new_tenant_vminstance(self,vimURI,tenant_id,name,description,start,image_id,flavor_id,net_list,iface_list=None):
+    def new_tenant_vminstance(self,name,description,start,image_id,flavor_id,net_list,iface_list=None):
         '''Adds a VM instance to VIM'''
         '''Returns the instance identifier'''
         print "VIMConnector: Adding a new VM instance to VIM"
@@ -506,9 +562,9 @@ class vimconnector():
         if start != None:
             payload_req += ',"start": "' + start+ '"'
         payload_req += '}}'
-        print vimURI+'/'+tenant_id+'/servers'+payload_req
+        print self.url+'/'+self.tenant+'/servers'+payload_req
         try:
-            vim_response = requests.post(vimURI+'/'+tenant_id+'/servers', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url+'/'+self.tenant+'/servers', headers = headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_tenant_vminstance Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -532,7 +588,7 @@ class vimconnector():
                                 if i['internal_name'] == iface['name']:
                                     i['vim_id'] = iface['iface_id']
                     except KeyError, e:
-                        print "Attach vim_id to interface list: Error No bridge interfaces KeyError " + e.message
+                        print "Attach vim_id to interface list: Error No bridge interfaces KeyError " + str(e)
                         pass
                     #extended interfaces
                     try:
@@ -542,7 +598,7 @@ class vimconnector():
                                     if i['internal_name'] == iface['name']:
                                         i['vim_id'] = iface['iface_id']
                     except KeyError, e:
-                        print "Attach vim_id to interface list: Error No numa interfaces KeyError " + e.message
+                        print "Attach vim_id to interface list: Error No numa interfaces KeyError " + str(e)
                         pass
                 
                 
@@ -553,16 +609,16 @@ class vimconnector():
         else:
             print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to add new vm instance. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to add new vm instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
         
-    def get_tenant_vminstance(self,vimURI,tenant_id,vm_id):
+    def get_tenant_vminstance(self,vm_id):
         '''Returns the VM instance information from VIM'''
         print "VIMConnector: Getting tenant VM instance information from VIM"
         headers_req = {'content-type': 'application/json'}
         
-        url = vimURI+'/'+tenant_id+'/servers/'+vm_id
+        url = self.url+'/'+self.tenant+'/servers/'+vm_id
         print url
         try:
             vim_response = requests.get(url, headers = headers_req)
@@ -584,18 +640,18 @@ class vimconnector():
         else:
             print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to get vm instance. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to get vm instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
         
-    def delete_tenant_vminstance(self,vimURI,tenant_id, vm_id):
+    def delete_tenant_vminstance(self, vm_id):
         '''Removes a VM instance from VIM'''
         '''Returns the instance identifier'''
         print "VIMConnector: Delete a VM instance from VIM " + vm_id
         headers_req = {'content-type': 'application/json'}
         
         try:
-            vim_response = requests.delete(vimURI+'/'+tenant_id+'/servers/'+vm_id, headers = headers_req)
+            vim_response = requests.delete(self.url+'/'+self.tenant+'/servers/'+vm_id, headers = headers_req)
         except requests.exceptions.RequestException, e:
             print "delete_tenant_vminstance Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -607,11 +663,11 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to delete vm instance. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to delete vm instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code, text
 
-    def refresh_tenant_vms_and_nets(self, vimURI, tenant_id, vmDict, netDict):
+    def refresh_tenant_vms_and_nets(self, vmDict, netDict):
         '''Refreshes the status of the dictionaries of VM instances and nets passed as arguments. It modifies the dictionaries'''
         '''Returns:
             - result: 0 if all elements could be refreshed (even if its status didn't change)
@@ -627,7 +683,7 @@ class vimconnector():
             print "VIMConnector refresh_tenant_vms and nets: Getting tenant VM instance information from VIM"
             headers_req = {'content-type': 'application/json'}
         
-            url = vimURI+'/'+tenant_id+'/servers/'+ vm_id
+            url = self.url+'/'+self.tenant+'/servers/'+ vm_id
             print url
             try:
                 vim_response = requests.get(url, headers = headers_req)
@@ -656,15 +712,15 @@ class vimconnector():
             else:
                 #print vim_response.text
                 jsonerror = af.format_jsonerror(vim_response)
-                print 'VIMConnector refresh_tenant_vms_and_nets. Error in VIM "%s": not possible to get VM instance. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+                print 'VIMConnector refresh_tenant_vms_and_nets. Error in VIM "%s": not possible to get VM instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
                 vms_unrefreshed.append(vm_id)
         
         #print "VMs refreshed: %s" % str(vms_refreshed)
         for net_id in netDict:
-            print "VIMConnector refresh_tenant_vms_and_nets: Getting tenant network from VIM (tenant: " + str(tenant_id) + "): "
+            print "VIMConnector refresh_tenant_vms_and_nets: Getting tenant network from VIM (tenant: " + str(self.tenant) + "): "
             headers_req = {'content-type': 'application/json'}
             try:
-                vim_response = requests.get(vimURI+'/networks/'+net_id, headers = headers_req)
+                vim_response = requests.get(self.url+'/networks/'+net_id, headers = headers_req)
             except requests.exceptions.RequestException, e:
                 print "get_tenant_network Exception: ", e.args
                 nets_unrefreshed.append(net_id)
@@ -685,7 +741,7 @@ class vimconnector():
             else:
                 #print vim_response.text
                 jsonerror = af.format_jsonerror(vim_response)
-                print 'VIMConnector refresh_tenant_vms_and_nets. Error in VIM "%s": not possible to get tenant network. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+                print 'VIMConnector refresh_tenant_vms_and_nets. Error in VIM "%s": not possible to get tenant network. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
                 nets_unrefreshed.append(net_id)
 
         #print "Nets refreshed: %s" % str(nets_refreshed)
@@ -698,14 +754,14 @@ class vimconnector():
         #return len(vms_unrefreshed)+len(nets_unrefreshed), error_msg, vms_refreshed, nets_refreshed
         return len(vms_unrefreshed)+len(nets_unrefreshed), error_msg
     
-    def action_tenant_vminstance(self,vimURI,tenant_id, vm_id, action_dict):
+    def action_tenant_vminstance(self, vm_id, action_dict):
         '''Send and action over a VM instance from VIM'''
         '''Returns the status'''
         print "VIMConnector: Action over VM instance from VIM " + vm_id
         headers_req = {'content-type': 'application/json'}
         
         try:
-            vim_response = requests.post(vimURI+'/'+tenant_id+'/servers/'+vm_id+"/action", headers = headers_req, data=json.dumps(action_dict) )
+            vim_response = requests.post(self.url+'/'+self.tenant+'/servers/'+vm_id+"/action", headers = headers_req, data=json.dumps(action_dict) )
         except requests.exceptions.RequestException, e:
             print "action_tenant_vminstance Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
@@ -717,10 +773,9 @@ class vimconnector():
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": action over vm instance. HTTP Response: %d. Error: %s' % (vimURI, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": action over vm instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return vim_response.status_code, text
-        
         
     def host_vim2gui(self, host, server_dict):
         '''Transform host dictionary from VIM format to GUI format,
@@ -759,11 +814,11 @@ class vimconnector():
             occupation[ numa['numa_socket'] ] = occupation_item
         server_dict[ host['host']['name'] ] = {'RAD':RAD, 'occupation':occupation}
 
-    def get_hosts_info(self,vimURI):
+    def get_hosts_info(self):
         '''Get the information of deployed hosts
         Returns the hosts content'''
     #obtain hosts list
-        url=vimURI+'/hosts'
+        url=self.url+'/hosts'
         try:
             vim_response = requests.get(url)
         except requests.exceptions.RequestException, e:
@@ -785,7 +840,7 @@ class vimconnector():
     #obtain hosts details
         hosts_dict={}
         for host in hosts['hosts']:
-            url=vimURI+'/hosts/'+host['id']
+            url=self.url+'/hosts/'+host['id']
             try:
                 vim_response = requests.get(url)
             except requests.exceptions.RequestException, e:
@@ -803,11 +858,11 @@ class vimconnector():
             self.host_vim2gui(host_detail, hosts_dict)
         return 200, hosts_dict
 
-    def get_hosts(self,vimURI, vim_tenant):
+    def get_hosts(self, vim_tenant):
         '''Get the hosts and deployed instances
         Returns the hosts content'''
     #obtain hosts list
-        url=vimURI+'/hosts'
+        url=self.url+'/hosts'
         try:
             vim_response = requests.get(url)
         except requests.exceptions.RequestException, e:
@@ -828,7 +883,7 @@ class vimconnector():
             return HTTP_Internal_Server_Error, hosts
     #obtain instances from hosts
         for host in hosts['hosts']:
-            url=vimURI+'/' + vim_tenant + '/servers?hostId='+host['id']
+            url=self.url+'/' + vim_tenant + '/servers?hostId='+host['id']
             try:
                 vim_response = requests.get(url)
             except requests.exceptions.RequestException, e:
@@ -846,9 +901,9 @@ class vimconnector():
             host['instances'] = servers['servers']
         return 200, hosts['hosts']
 
-    def get_processor_rankings(self, vimURI):
+    def get_processor_rankings(self):
         '''Get the processor rankings in the VIM database'''
-        url=vimURI+'/processor_ranking'
+        url=self.url+'/processor_ranking'
         try:
             vim_response = requests.get(url)
         except requests.exceptions.RequestException, e:
@@ -865,18 +920,18 @@ class vimconnector():
         res,rankings = af.format_in(vim_response, openmano_schemas.get_processor_rankings_response_schema)
         return res, rankings['rankings']
     
-    def get_image_id_from_path(self, vimURI, vim_tenant, path):
+    def get_image_id_from_path(self, path):
         '''Get the image id from image path in the VIM database'''
         '''Returns:
              0,"Image not found"   if there are no images with that path
              1,image-id            if there is one image with that path
              <0,message            if there was an error (Image not found, error contacting VIM, more than 1 image with that path, etc.) 
         '''
-        url=vimURI+'/'+vim_tenant+'/images?path='+path
+        url=self.url + '/' + self.tenant + '/images?path='+path
         try:
             vim_response = requests.get(url)
         except requests.exceptions.RequestException, e:
-            print "get_image_id_from_path Exception: ", e.args
+            print "get_image_id_from_path url='%s'Exception: '%s'" % (url, str(e.args))
             return -HTTP_Not_Found, str(e.args[0])
         print "vim get_image_id_from_path", url, "response:", vim_response.status_code, vim_response.json()
         #print vim_response.status_code
