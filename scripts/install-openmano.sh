@@ -195,8 +195,10 @@ if [ "$KK" == "y" -o   "$KK" == "yes" ]
 then
 
     echo "downloading v0.90 from the oficial page"
-    su $SUDO_USER -c 'wget http://floodlight-download.projectfloodlight.org/files/floodlight-source-0.90.tar.gz'
-    su $SUDO_USER -c 'tar xvzf floodlight-source-0.90.tar.gz'
+    su $SUDO_USER -c 'wget https://github.com/floodlight/floodlight/archive/v0.90.tar.gz'
+    su $SUDO_USER -c 'tar xvzf v0.90.tar.gz'
+    #wget http://floodlight-download.projectfloodlight.org/files/floodlight-source-0.90.tar.gz'
+    #su $SUDO_USER -c 'tar xvzf floodlight-source-0.90.tar.gz'
     
     #Install Java JDK and Ant packages at the VM 
     [ "$_DISTRO" == "Ubuntu" ] && install_packets "build-essential default-jdk ant python-dev" #TODO revise if packets are needed apart from ant
