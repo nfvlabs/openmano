@@ -29,8 +29,8 @@ Useful for human CLI management of items at openvim
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$26-nov-2014 19:09:29$"
-__version__="0.1.06-r382"
-version_date="May 2015"
+__version__="0.3.0-r390"
+version_date="July 2015"
 name="openvim"
 
 from argcomplete.completers import FilesCompleter
