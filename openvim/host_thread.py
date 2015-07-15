@@ -37,7 +37,7 @@ import Queue
 import paramiko
 from jsonschema import validate as js_v, exceptions as js_e
 import libvirt
-from vim_schema import path_schema, localinfo_schema, hostinfo_schema
+from vim_schema import localinfo_schema, hostinfo_schema
 #import math
 #from logging import Logger
 #import utils.auxiliary_functions as af
@@ -457,7 +457,10 @@ class host_thread(threading.Thread):
             self.tab()+'<apic/>' +\
             self.tab()+'<pae/>'+ \
             self.dec_tab() +'</features>'
-        text += self.tab() + "<cpu mode='host-model'> <topology sockets='1' cores='%d' threads='1' /> </cpu>"% vcpus
+        if windows_os:
+            text += self.tab() + "<cpu mode='host-model'> <topology sockets='1' cores='%d' threads='1' /> </cpu>"% vcpus
+        else:
+            text += self.tab() + "<cpu mode='host-model'></cpu>"
         text += self.tab() + "<clock offset='utc'/>" +\
             self.tab() + "<on_poweroff>preserve</on_poweroff>" + \
             self.tab() + "<on_reboot>restart</on_reboot>" + \
@@ -720,7 +723,7 @@ class host_thread(threading.Thread):
             raise paramiko.ssh_exception.SSHException("Error deleting file: " + error_msg)
 
     def copy_file(self, source, destination, perserve_time=True):
-        command = 'cp '
+        command = 'cp --no-preserve=mode '
         if perserve_time: command += '--preserve=timestamps '
         command +=  source + ' '  + destination
         print self.name, ': command:', command
