@@ -431,7 +431,7 @@ new_vminstance_response_schema = {
 internal_connection_element_schema = {
     "type":"object",
     "properties":{
-        "VNFC": nameshort_schema,
+        "VNFC": name_schema,
         "local_iface_name": nameshort_schema
     }
 }
@@ -453,7 +453,7 @@ external_connection_schema = {
     "properties":{
         "name": name_schema,
         "type":{"type":"string", "enum":["mgmt","bridge","data"]},
-        "VNFC": nameshort_schema,
+        "VNFC": name_schema,
         "local_iface_name": nameshort_schema ,
         "description":description_schema
     },
