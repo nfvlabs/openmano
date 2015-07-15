@@ -273,6 +273,8 @@ then
   mkdir -p /opt/VNF/
   ln -s /var/lib/libvirt/images /opt/VNF/images
   chown -R ${user_name}:admin /opt/VNF
+  chown -R root:admin /var/lib/libvirt/images
+  chmod g+rwx /var/lib/libvirt/images
 
   # Selinux management
   #echo "configure  Selinux management"
