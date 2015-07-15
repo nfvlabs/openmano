@@ -8,13 +8,20 @@
 
 <img src="https://github.com/nfvlabs/openmano/raw/master/images/openmano-nfv.png" align="middle" alt="openmano-nfv" height="400"/>
 
-#Quick installation
+#Releases
+
+Current releases/branches in openmano are the following:
+
+- v0.3: current stable release for normal use
+- master: development branch intended for contributors, with new features that will be incorporated into the stable release
+
+#Quick installation of current release (v0.3)
 
 - Download a VDI Ubuntu Server 14.10 LAMP image from [here](https://virtualboximages.com/Ubuntu+14.10+amd64+LAMP+Server+VirtualBox+VDI+Virtual+Computer "download VM image").
 - Start the VM and execute the following command in a terminal:
 
-        wget https://github.com/nfvlabs/openmano/raw/master/scripts/install-openmano.sh
-        chmod +x install-openmano.sh 
+        wget https://github.com/nfvlabs/openmano/raw/v0.3/scripts/install-openmano.sh
+        chmod +x install-openmano.sh
         sudo ./install-openmano.sh root adminuser
         #NOTE: **root adminuser** are the mysql user and password of this VM image
 
@@ -28,9 +35,11 @@ Manual installation can be done following these [instructions](https://github.co
 - [Openvim usage manual](https://github.com/nfvlabs/openmano/wiki/openvim-usage  "openvim usage manual")
 - [Openvim API](https://github.com/nfvlabs/openmano/raw/master/docs/openvim-api-0.6.pdf "openvim API")
 - Openmano API (coming soon)
+- [Guidelines for developers](https://github.com/nfvlabs/openmano/wiki/guidelines-for-developers "guidelines for developers")
 
 #License
 Check the [License](https://github.com/nfvlabs/openmano/blob/master/LICENSE "license") file.
 
 #Contact
 For bug reports or clarification, contact [nfvlabs@tid.es](mailto:nfvlabs@tid.es "nfvlabs")
+

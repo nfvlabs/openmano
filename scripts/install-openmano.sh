@@ -165,7 +165,10 @@ echo '
 #####        DOWNLOAD SOURCE                                #####
 #################################################################'
 su $SUDO_USER -c 'git clone https://github.com/nfvlabs/openmano.git openmano'
-su $SUDO_USER -c 'pushd openmano; git checkout -b v0.3 origin/v0.3; popd'
+#su $SUDO_USER -c 'pushd openmano; git checkout -b v0.3 origin/v0.3; popd'
+pushd openmano
+su $SUDO_USER -c 'git checkout v0.3'
+popd
 
 echo '
 #################################################################
