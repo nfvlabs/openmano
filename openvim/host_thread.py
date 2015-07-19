@@ -1145,31 +1145,42 @@ class host_thread(threading.Thread):
         return 1 
         
     def create_image(self,dom, req):
-        server_id = req['uuid']
-        createImage=req['action']['createImage']
-        file_orig = self.localinfo['server_files'][server_id] [ createImage['source']['image_id'] ] ['source file']
-        if 'path' in req['action']['createImage']:
-            file_dst = req['action']['createImage']['path']
-        else:
-            img_name= createImage['source']['path']
-            index=img_name.rfind('/')
-            file_dst = self.get_notused_filename(img_name[:index+1] + createImage['name'] + '.qcow2')
-              
-        self.copy_file(file_orig, file_dst)
-        qemu_info = self.qemu_get_info(file_orig)
-        if 'backing file' in qemu_info:
-            for k,v in self.localinfo['files'].items():
-                if v==qemu_info['backing file']:
-                    self.qemu_change_backing(file_dst, k)
-                    break
+        for retry in (0,1):
+            try:
+                server_id = req['uuid']
+                createImage=req['action']['createImage']
+                file_orig = self.localinfo['server_files'][server_id] [ createImage['source']['image_id'] ] ['source file']
+                if 'path' in req['action']['createImage']:
+                    file_dst = req['action']['createImage']['path']
+                else:
+                    img_name= createImage['source']['path']
+                    index=img_name.rfind('/')
+                    file_dst = self.get_notused_filename(img_name[:index+1] + createImage['name'] + '.qcow2')
+                      
+                self.copy_file(file_orig, file_dst)
+                qemu_info = self.qemu_get_info(file_orig)
+                if 'backing file' in qemu_info:
+                    for k,v in self.localinfo['files'].items():
+                        if v==qemu_info['backing file']:
+                            self.qemu_change_backing(file_dst, k)
+                            break
+                image_status='ACTIVE'
+            except paramiko.ssh_exception.SSHException, e:
+                image_status='ERROR'
+                error_text = e.args[0]
+                print self.name, "': create_image(",server_id,") ssh Exception:", error_text
+                if "SSH session not active" in error_text and retry==0:
+                    self.ssh_connect()
+            except Exception, e:
+                image_status='ERROR'
+                error_text = str(e)
+                print self.name, "': create_image(",server_id,") Exception:", error_text
         
+                #TODO insert a last_error at database
         self.db_lock.acquire()
-        self.db.update_rows('images', {'status':'ACTIVE', 'progress': 100, 'path':file_dst}, 
+        self.db.update_rows('images', {'status':image_status, 'progress': 100, 'path':file_dst}, 
                 {'uuid':req['new_image']['uuid']}, log=True)
         self.db_lock.release()
-        #print "Haciendose, paciencia. Los clones no dan mas de si"  
-        #todo falta untry catch, y comprobar que esl servidor esta PARADO. Por ejemplo si dom!=None
-
   
 def create_server(server, db, db_lock, only_of_ports):
     #print "server"
