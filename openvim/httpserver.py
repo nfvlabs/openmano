@@ -1600,9 +1600,9 @@ def http_post_networks():
                         return
                     bridge_net=brnet
                     break
-            if bridge_net==None:     
-                bottle.abort(HTTP_Bad_Request, "invalid binding at 'provider:physical', bridge '%s' is not one of the provisioned 'bridge_ifaces' in the configuration file" % bridge_net_name)
-                return
+#            if bridge_net==None:     
+#                bottle.abort(HTTP_Bad_Request, "invalid binding at 'provider:physical', bridge '%s' is not one of the provisioned 'bridge_ifaces' in the configuration file" % bridge_net_name)
+#                return
     elif 'type' not in network or network['type']=='bridge_data' or network['type']=='bridge_man':
         #look for a free precreated nets
         for brnet in config_dic['bridge_nets']:
