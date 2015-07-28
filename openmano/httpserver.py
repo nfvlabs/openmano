@@ -342,7 +342,7 @@ def http_get_datacenters(tenant_id):
             bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
             return
     select_,where_,limit_ = filter_query_string(bottle.request.query, None,
-            ('uuid','name','vim_url','created_at') )
+            ('uuid','name','vim_url','type','created_at') )
     if tenant_id != 'any':
         where_['nfvo_tenant_id'] = tenant_id
         if 'created_at' in select_:
@@ -374,19 +374,18 @@ def http_get_datacenter_id(tenant_id, datacenter_id):
             return
     #obtain data
     what = 'uuid' if af.check_valid_uuid(datacenter_id) else 'name'
-    where={}
-    where[what] = datacenter_id
+    where_={}
+    where_[what] = datacenter_id
+    select_=('uuid', 'name','vim_url', 'vim_url_admin', 'type', 'config', 'd.created_at as created_at')
     if tenant_id != 'any':
-        where['td.nfvo_tenant_id']= tenant_id
-        result, content = mydb.get_table(
-                SELECT=('uuid', 'name','vim_url', 'vim_url_admin', 'd.created_at as created_at'),
-                FROM='datacenters as d join tenants_datacenters as td on d.uuid=td.datacenter_id',
-                WHERE=where)
+        where_['td.nfvo_tenant_id']= tenant_id
+        from_='datacenters as d join tenants_datacenters as td on d.uuid=td.datacenter_id'
     else:
-        result, content = mydb.get_table(
-                SELECT=('uuid', 'name','vim_url', 'vim_url_admin', 'created_at'),
-                FROM='datacenters',
-                WHERE=where)
+        from_='datacenters as d'
+    result, content = mydb.get_table(
+                SELECT=select_,
+                FROM=from_,
+                WHERE=where_)
 
     if result < 0:
         print "http_get_datacenter_id error %d %s" % (result, content)
@@ -398,6 +397,12 @@ def http_get_datacenter_id(tenant_id, datacenter_id):
 
 
     print content
+    if content[0]['config'] != None:
+        try:
+            config_dict = json.loads(content[0]['config'])
+            content[0]['config'] = config_dict
+        except Exception, e:
+            print "Exception '%s' while trying to load config information" % str(e)
     #change_keys_http2db(content, http2db_datacenter, reverse=True)
     convert_datetime2str(content[0])
     data={'datacenter' : content[0]}
@@ -425,21 +430,13 @@ def http_edit_datacenter_id(datacenter_id):
     r = af.remove_extra_items(http_content, datacenter_edit_schema)
     if r is not None: print "http_edit_datacenter_id: Warning: remove extra items ", r
     
-    #obtain data, check that only one exist
-    result, content = mydb.get_table_by_uuid_name('datacenters', datacenter_id)
-    if result < 0:
-        print "http_edit_datacenter_id error %d %s" % (result, content)
-        bottle.abort(-result, content)
     
-    #edit data 
-    datacenter_id = content['uuid']
-    where={'uuid': content['uuid']}
-    result, content = mydb.update_rows('datacenters', http_content['datacenter'], where)
+    result, data = nfvo.edit_datacenter(mydb, datacenter_id, http_content['datacenter'])
     if result < 0:
-        print "http_edit_datacenter_id error %d %s" % (result, content)
-        bottle.abort(-result, content)
-
-    return http_get_datacenter_id('any', datacenter_id)
+        print "http_edit_datacenter_id error %d %s" % (-result, data)
+        bottle.abort(-result, data)
+    else:
+        return http_get_datacenter_id('any', datacenter_id)
 
 @bottle.route(url_base + '/datacenters/<datacenter_id>/networks', method='GET')
 def http_getnetwork_datacenter_id(datacenter_id):
@@ -463,8 +460,8 @@ def http_getnetwork_datacenter_id(datacenter_id):
     data={'networks' : content}
     return format_out(data)
 
-@bottle.route(url_base + '/datacenters/<datacenter_id>/action', method='POST')
-def http_action_datacenter_id(datacenter_id):
+@bottle.route(url_base + '/<tenant_id>/datacenters/<datacenter_id>/action', method='POST')
+def http_action_datacenter_id(tenant_id, datacenter_id):
     '''perform an action over datacenter, can use both uuid or name'''
     #parse input data
     http_content = format_in( datacenter_action_schema )
@@ -472,7 +469,7 @@ def http_action_datacenter_id(datacenter_id):
     if r is not None: print "http_action_datacenter_id: Warning: remove extra items ", r
     
     #obtain data, check that only one exist
-    result, content = nfvo.datacenter_action(mydb, datacenter_id, http_content)
+    result, content = nfvo.datacenter_action(mydb, tenant_id, datacenter_id, http_content)
     if result < 0:
         print "http_action_datacenter_id error %d %s" % (result, content)
         bottle.abort(-result, content)
@@ -503,7 +500,10 @@ def http_associate_datacenters(tenant_id, datacenter_id):
     if r != None: print "http_associate_datacenters: Warning: remove extra items ", r
     result, data = nfvo.associate_datacenter_to_tenant(mydb, tenant_id, datacenter_id, 
                                 http_content['datacenter'].get('vim_tenant'),
-                                http_content['datacenter'].get('vim_tenant_name') )
+                                http_content['datacenter'].get('vim_tenant_name'),
+                                http_content['datacenter'].get('vim_username'),
+                                http_content['datacenter'].get('vim_password')
+                     )
     if result < 0:
         print "http_associate_datacenters error %d %s" % (-result, data)
         bottle.abort(-result, data)

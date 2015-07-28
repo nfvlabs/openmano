@@ -22,7 +22,7 @@
 ##
 
 '''
-osconnector implements all the methods to interact with openstack using the python-stackclient.
+osconnector implements all the methods to interact with openstack using the python-client.
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$22-jun-2014 11:19:29$"
@@ -54,7 +54,7 @@ netStatus2manoFormat={'ACTIVE':'ACTIVE','PAUSED':'PAUSED','INACTIVE':'INACTIVE',
                      }
 
 class osconnector():
-    def __init__(self, uuid, name, tenant, url, url_admin=None, user=None, passwd=None, debug=True, network_vlan_ranges=None, extra={}):
+    def __init__(self, uuid, name, tenant, url, url_admin=None, user=None, passwd=None, debug=True, config={}):
         '''using common constructor parameters. In this case 
         'url' is the keystone authorization url,
         'url_admin' is not use
@@ -82,8 +82,7 @@ class osconnector():
         if passwd:
             self.k_creds['password'] = passwd
             self.n_creds['api_key']  = passwd
-        self.network_vlan_ranges = network_vlan_ranges
-        self.extra               = extra
+        self.config              = config
         self.debug               = debug
         self.reload_client       = True
     
@@ -102,10 +101,8 @@ class osconnector():
             return self.url
         elif index=='url_admin':
             return self.url_admin
-        elif index=='network_vlan_ranges':
-            return self.network_vlan_ranges
-        elif index in self.extra:
-            return self.extra[index]
+        elif index=='config':
+            return self.config
         else:
             raise KeyError("Invalid key '%s'" %str(index))
         
@@ -155,8 +152,6 @@ class osconnector():
 
         elif index=='url_admin':
             self.url_admin = value
-        elif index=='network_vlan_ranges':
-            self.network_vlan_ranges = value
         else:
             raise KeyError("Invalid key '%s'" %str(index))
      
@@ -336,6 +331,14 @@ class osconnector():
             print "delete_tenant " + error_text
         return error_value, error_text
 
+    def __net_os2mano(self, net_list):
+        '''Transform the net openstack format to mano format'''
+        for net in net_list:
+            if net.get('provider:physical_network'):
+                net['type']='data'
+            else:
+                net['type']='bridge'
+        
     def new_tenant_network(self,net_name,net_type,public=False,cidr=None,vlan=None):
         '''Adds a tenant network to VIM'''
         '''Returns the network identifier'''
@@ -345,10 +348,10 @@ class osconnector():
             self.reload_connection()
             network_dict = {'name': net_name, 'admin_state_up': True}
             if net_type=="data" or net_type=="ptp":
-                if self.network_vlan_ranges == None:
-                    return -HTTP_Bad_Request, "You must provide the 'network_vlan_ranges' value before creating sriov network "
+                if self.config.get('network_vlan_ranges') == None:
+                    return -HTTP_Bad_Request, "You must provide a 'network_vlan_ranges' at config value before creating sriov network "
                     
-                network_dict["provider:physical_network"] = "physnet_sriov" #TODO physical
+                network_dict["provider:physical_network"] = self.config['network_vlan_ranges'] #"physnet_sriov" #TODO physical
                 network_dict["provider:network_type"]     = "vlan"
                 if vlan!=None:
                     network_dict["provider:network_type"] = vlan
@@ -387,6 +390,7 @@ class osconnector():
             if tenant_id:
                 filter_dict["tenant_id"]=tenant_id
             net_list=self.neutron.list_networks(**filter_dict)
+            self.__net_os2mano(net_list["networks"])
             return 1, net_list
         except neClient.exceptions.ConnectionFailed, e:
             error_value=-1

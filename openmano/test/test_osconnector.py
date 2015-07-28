@@ -156,7 +156,7 @@ if __name__=="__main__":
             myvim=osconnector.osconnector(uuid=None, name='test-openstack', tenant=creds['tenant_name'], 
                 url=creds['auth_url'], url_admin=None,
                 user=creds['username'], passwd=creds['password'],
-                debug = False, network_vlan_ranges="physnet_sriov")
+                debug = False, config={'network_vlan_ranges':'physnet_sriov'} )
             print " Ok"
         except Exception, e:
             print " Fail"

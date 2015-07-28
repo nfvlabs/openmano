@@ -28,7 +28,7 @@ openmano client used to interact with openmano-server (openmanod)
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$09-oct-2014 09:09:48$"
-__version__="0.3.0-r390"
+__version__="0.3.3-r400"
 version_date="Jul 2015"
 
 from argcomplete.completers import FilesCompleter
@@ -571,6 +571,10 @@ def datacenter_attach(args):
         datacenter_dict['vim_tenant'] = args.vim_tenant_id
     if args.vim_tenant_name != None:
         datacenter_dict['vim_tenant_name'] = args.vim_tenant_name
+    if args.user != None:
+        datacenter_dict['vim_username'] = args.user
+    if args.password != None:
+        datacenter_dict['vim_password'] = args.password
     payload_req = json.dumps( {"datacenter": datacenter_dict })
     
     #print payload_req
@@ -608,9 +612,11 @@ def datacenter_create(args):
         datacenter_dict["type"] = args.type 
     if args.url!=None:
         datacenter_dict["vim_url_admin"] = args.url_admin 
+    if args.config!=None:
+        datacenter_dict["config"] = _load_file_or_yaml(args.config) 
     payload_req = json.dumps( {"datacenter": datacenter_dict })
     
-    #print payload_req
+    print payload_req
         
     URLrequest = "http://%s:%s/openmano/datacenters" %(mano_host, mano_port)
     mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
@@ -660,7 +666,7 @@ def datacenter_net_action(args):
             args.verbose += 1
     else:
         headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
-        URLrequest = "http://%s:%s/openmano/datacenters/%s/action" %(mano_host, mano_port, args.datacenter)
+        URLrequest = "http://%s:%s/openmano/%s/datacenters/%s/action" %(mano_host, mano_port, mano_tenant, args.datacenter)
         if not args.force:
             if args.action=="net-update":
                 r = raw_input(" Edit datacenter " + args.datacenter + " (y/N)? ")
@@ -822,6 +828,7 @@ if __name__=="__main__":
     datacenter_create_parser.add_argument("url", action="store", help="url for the datacenter")
     datacenter_create_parser.add_argument("--url_admin", action="store", help="url for administration for the datacenter")
     datacenter_create_parser.add_argument("--type", action="store", help="datacenter type: openstack or openvim (default)")
+    datacenter_create_parser.add_argument("--config", action="store", help="aditional configuration in json/yaml format")
     datacenter_create_parser.add_argument("--description", action="store", help="description of the datacenter")
     datacenter_create_parser.add_argument('--verbose', '-v', action='count')
     datacenter_create_parser.set_defaults(func=datacenter_create)
@@ -841,6 +848,8 @@ if __name__=="__main__":
     datacenter_attach_parser.add_argument("name", help="name or uuid of the datacenter")
     datacenter_attach_parser.add_argument('--vim-tenant-id', action='store', help="specify a datacenter tenant to use. A new one is created by default")
     datacenter_attach_parser.add_argument('--vim-tenant-name', action='store', help="specify a datacenter tenant name.")
+    datacenter_attach_parser.add_argument("--user", action="store", help="user credentials for the datacenter")
+    datacenter_attach_parser.add_argument("--password", action="store", help="password credentials for the datacenter")
     datacenter_attach_parser.add_argument('--verbose', '-v', action='count')
     datacenter_attach_parser.set_defaults(func=datacenter_attach)
 

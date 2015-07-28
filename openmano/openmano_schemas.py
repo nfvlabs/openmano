@@ -128,6 +128,13 @@ datacenter_schema_properties={
                 "type": {"type":"string","enum":["openvim","openstack"]},
                 "vim_url": description_schema,
                 "vim_url_admin": description_schema,
+                "config": {
+                    "type":"object",
+                    "properties":{
+                        "network_vlan_ranges": {"type": "string"}
+                    },
+                    "additionalProperties": False
+                }
             }
 
 datacenter_schema = {
@@ -205,6 +212,8 @@ datacenter_associate_schema={
             "properties":{
                 "vim_tenant": id_schema,
                 "vim_tenant_name": name_schema,
+                "vim_username": name_schema,
+                "vim_password": name_schema,
             },
 #            "required": ["vim_tenant"],
             "additionalProperties": True

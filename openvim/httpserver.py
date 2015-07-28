@@ -722,14 +722,14 @@ def http_post_tenants():
         bottle.abort(-result, content)
         return
     
-@bottle.route(url_base + '/tenants/<tenant_id>', method='POST')
-def http_post_tenant_id(tenant_id):
+@bottle.route(url_base + '/tenants/<tenant_id>', method='PUT')
+def http_put_tenant_id(tenant_id):
     '''update a tenant into the database.'''
     my = config_dic['http_threads'][ threading.current_thread().name ]
     #parse input data
     http_content = format_in( tenant_edit_schema )
     r = remove_extra_items(http_content, tenant_edit_schema)
-    if r is not None: print "http_post_tenant_id: Warning: remove extra items ", r
+    if r is not None: print "http_put_tenant_id: Warning: remove extra items ", r
     change_keys_http2db(http_content['tenant'], http2db_tenant)
 
     #insert in data base

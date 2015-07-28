@@ -33,9 +33,9 @@ It loads the configuration file and launches the http_server thread that will li
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$26-aug-2014 11:09:29$"
-__version__="0.3.1-r391"
+__version__="0.3.3-r400"
 version_date="Jul 2015"
-database_version="0.2"      #expected database schema version
+database_version="0.3"      #expected database schema version
 
 import httpserver
 import time

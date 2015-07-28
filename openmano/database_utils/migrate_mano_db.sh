@@ -156,6 +156,7 @@ fi
 DATABASE_TARGET_VER_NUM=0
 [ $OPENMANO_VER_NUM -ge 2002 ] && DATABASE_TARGET_VER_NUM=1   #0.2.2 =>  1
 [ $OPENMANO_VER_NUM -ge 2005 ] && DATABASE_TARGET_VER_NUM=2   #0.2.5 =>  2
+[ $OPENMANO_VER_NUM -ge 3003 ] && DATABASE_TARGET_VER_NUM=3   #0.3.3 =>  3
 #TODO ... put next versions here
 
 
@@ -269,6 +270,48 @@ function downgrade_from_2(){
     echo "DROP TABLE \`flavors\`;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "DELETE FROM mano_db.schema_version WHERE version_int='2';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
+
+function upgrade_to_3(){
+    echo "    upgrade database from version 0.2 to version 0.3"
+    echo "      Add column config to table 'datacenters'"
+    echo "ALTER TABLE datacenters ADD COLUMN config VARCHAR(4000) NULL DEFAULT NULL COMMENT 'extra config information in json' AFTER vim_url_admin;
+	" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Add column datacenter_id to table 'vim_tenants'"
+    echo "ALTER TABLE vim_tenants ADD COLUMN datacenter_id VARCHAR(36) NULL COMMENT 'Datacenter of this tenant' AFTER uuid,
+	DROP INDEX name, DROP INDEX vim_tenant_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE vim_tenants CHANGE COLUMN name vim_tenant_name VARCHAR(36) NULL DEFAULT NULL COMMENT 'tenant name at VIM' AFTER datacenter_id,
+	CHANGE COLUMN vim_tenant_id vim_tenant_id VARCHAR(36) NULL DEFAULT NULL COMMENT 'Tenant ID at VIM' AFTER vim_tenant_name;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "UPDATE vim_tenants as vt LEFT JOIN tenants_datacenters as td ON vt.uuid=td.vim_tenant_id
+	SET vt.datacenter_id=td.datacenter_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM vim_tenants WHERE datacenter_id is NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE vim_tenants ALTER datacenter_id DROP DEFAULT;
+	ALTER TABLE vim_tenants
+	CHANGE COLUMN datacenter_id datacenter_id VARCHAR(36) NOT NULL COMMENT 'Datacenter of this tenant' AFTER uuid;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE vim_tenants ADD CONSTRAINT FK_vim_tenants_datacenters FOREIGN KEY (datacenter_id) REFERENCES datacenters (uuid)
+	ON UPDATE CASCADE ON DELETE CASCADE;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+
+    echo "INSERT INTO mano_db.schema_version (version_int, version, openmano_ver, comments, date) VALUES (3, '0.3', '0.3.3', 'alter vim_tenant tables', '2015-07-28');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+
+
+function downgrade_from_3(){
+    echo "    downgrade database from version 0.3 to version 0.2"
+    echo "       Delete column config to table 'datacenters'"
+    echo "ALTER TABLE datacenters DROP COLUMN config;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "       Delete column datacenter_id to table 'vim_tenants'"
+    echo "ALTER TABLE vim_tenants DROP COLUMN datacenter_id, DROP FOREIGN KEY FK_vim_tenants_datacenters;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE vim_tenants CHANGE COLUMN vim_tenant_name name VARCHAR(36) NULL DEFAULT NULL COMMENT '' AFTER uuid"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE vim_tenants ALTER name DROP DEFAULT;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE vim_tenants CHANGE COLUMN name name VARCHAR(36) NOT NULL AFTER uuid"| $DBCMD || ! echo "Warning changing column name at vim_tenants!"
+    echo "ALTER TABLE vim_tenants ADD UNIQUE INDEX name (name);" | $DBCMD || ! echo "Warning add unique index name at vim_tenants!"
+    echo "ALTER TABLE vim_tenants ALTER vim_tenant_id DROP DEFAULT;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE vim_tenants CHANGE COLUMN vim_tenant_id vim_tenant_id VARCHAR(36) NOT NULL COMMENT 'Tenant ID in the VIM DB' AFTER name;"| $DBCMD || ! echo "Warning changing column vim_tenant_id at vim_tenants!"
+    echo "ALTER TABLE vim_tenants ADD UNIQUE INDEX vim_tenant_id (vim_tenant_id);" | $DBCMD || ! echo "Warning add unique index vim_tenant_id at vim_tenants!"
+    echo "DELETE FROM mano_db.schema_version WHERE version_int='3';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+
+
+
 #TODO ... put funtions here
 
 
