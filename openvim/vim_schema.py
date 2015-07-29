@@ -68,6 +68,9 @@ config_schema = {
         "of_controller_port": port_schema,
         "of_controller_dpid": nameshort_schema,
         "of_controller_nets_with_same_vlan": {"type" : "boolean"},
+        "of_controller": {"type":"string", "enum":["floodlight", "opendaylight"]},
+        "of_user": nameshort_schema,
+        "of_password": nameshort_schema,
         "test_mode": {"type": "boolean"}, #leave for backward compatibility
         "mode": {"type":"string", "enum":["normal", "host only", "development", "test"] },
         "development_bridge": {"type":"string"},
@@ -87,7 +90,7 @@ config_schema = {
         }
     },
     "required": ['db_host', 'db_user', 'db_passwd', 'db_name',
-            'of_controller_ip', 'of_controller_port', 'of_controller_dpid', 'bridge_ifaces'],
+            'of_controller_ip', 'of_controller_port', 'of_controller_dpid', 'bridge_ifaces', 'of_controller'],
     "additionalProperties": False
 }
 

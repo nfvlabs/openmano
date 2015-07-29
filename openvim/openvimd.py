@@ -45,7 +45,8 @@ import os
 from jsonschema import validate as js_v, exceptions as js_e
 import host_thread as ht
 import openflow_thread as oft
-import floodlight as fl09_conn
+import floodlight as fl_conn
+import ODL as odl_conn
 import threading
 from vim_schema import config_schema
 
@@ -185,9 +186,33 @@ if __name__=="__main__":
     # create connector to the openflow controller
     # TODO: Make this generic using variable from configuration file to select the appropriate connector
         of_test_mode = False if config_dic['mode']=='normal' else True
-        OF_conn = fl09_conn.FL_conn(of_url = "http://"+str(config_dic['of_controller_ip']) + ":" +
-                                             str(config_dic['of_controller_port']), of_test = of_test_mode,
-                        of_dpid=config_dic['of_controller_dpid'])
+
+        ofc = config_dic.get('OFC')
+        if ofc is None:
+            print 'ERROR. The Openflow controller specified in the configuration file is not valid. Only valid options ' \
+                  'for OFC are \'floodlight\' and \'opendaylight\''
+            exit()
+
+        if config_dic['of_controller']=='floodlight':
+            OF_conn = fl_conn.FL_conn(of_url = "http://"+str(config_dic['of_controller_ip']) + ":" +
+                                            str(config_dic['of_controller_port']), of_test = of_test_mode,
+                                            of_dpid=config_dic['of_controller_dpid'])
+        elif config_dic['of_controller']=='opendaylight':
+            of_user = config_dic.get('of_user')
+            of_password = config_dic.get('of_password')
+            if of_user is None or of_password is None:
+                print 'ERROR. When using OpenDayLight as Openflow Controller is compulsory to specify in the ' \
+                      'configuration file the of_user and the of_password '
+                exit()
+
+            OF_conn = odl_conn.FL_conn(of_url = "http://"+str(config_dic['of_controller_ip']) + ":" +
+                                            str(config_dic['of_controller_port']), of_test = of_test_mode,
+                                            of_dpid=config_dic['of_controller_dpid'], of_user = of_user,
+                                            of_password = of_password)
+        else:
+            print 'ERROR. The Openflow controller specified in the configuration file is not valid. Only valid options ' \
+                  'for OFC are \'floodlight\' and \'opendaylight\''
+            exit()
 
 
     #create openflow thread
