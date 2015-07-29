@@ -184,7 +184,7 @@ if __name__=="__main__":
         config_dic['db_lock'] = db_lock
 
         # create connector to the openflow controller
-        of_test_mode = False if config_dic['mode']=='normal' else True
+        of_test_mode = False if config_dic['mode']=='normal' or config_dic['mode']=="OF only" else True
 
         if config_dic['of_controller']=='floodlight':
             OF_conn = fl_conn.FL_conn(of_url = "http://"+str(config_dic['of_controller_ip']) + ":" +
@@ -239,7 +239,7 @@ if __name__=="__main__":
     
         
     #Create one thread for each host
-        host_test_mode = True if config_dic['mode']=='test' else False
+        host_test_mode = True if config_dic['mode']=='test' or config_dic['mode']=="OF only" else False
         host_develop_mode = True if config_dic['mode']=='development' else False
         host_develop_bridge_iface = config_dic.get('development_bridge', None)
         config_dic['host_threads'] = {}

@@ -72,7 +72,7 @@ config_schema = {
         "of_user": nameshort_schema,
         "of_password": nameshort_schema,
         "test_mode": {"type": "boolean"}, #leave for backward compatibility
-        "mode": {"type":"string", "enum":["normal", "host only", "development", "test"] },
+        "mode": {"type":"string", "enum":["normal", "host only", "OF only", "development", "test"] },
         "development_bridge": {"type":"string"},
         "tenant_id": {"type" : "string"},
         "image_path": path_schema,

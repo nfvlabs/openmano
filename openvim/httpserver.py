@@ -587,7 +587,7 @@ def http_post_hosts():
     if result >= 0:
         if content['admin_state_up']:
             #create thread
-            host_test_mode = True if config_dic['mode']=='test' else False
+            host_test_mode = True if config_dic['mode']=='test' or config_dic['mode']=="OF only" else False
             host_develop_mode = True if config_dic['mode']=='development' else False
             host_develop_bridge_iface = config_dic.get('development_bridge', None)
             thread = ht.host_thread(name=host.get('name',ip_name), user=user, host=ip_name, db=config_dic['db'], db_lock=config_dic['db_lock'], 
