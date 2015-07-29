@@ -109,9 +109,27 @@ class FL_conn():
             print self.name, ": FAKE new_flow", data
             return 0, None
         try:
+            #We have to build the data for the floodlight call from the generic data
+            sdata = dict(data)
+            sdata['actions'] = ""
+
+            actions_nb = len(data['actions'])
+            for action in data['actions']:
+                actions_nb -= 1
+                add_comma = True
+                if action == 'set-vlan-id' or action == 'output':
+                    sdata['actions'] +=  action + '='
+                    add_comma = False
+                else:
+                    sdata['actions'] +=  action
+
+                if actions_nb > 0 and add_comma:
+                    sdata['actions'] +=  ', '
+
+
             of_response = requests.post(self.url+"/wm/staticflowentrypusher/json",
-                                headers=self.headers, data=json.dumps(data) )
-            print self.name, ": new_flow():", data, of_response
+                                headers=self.headers, data=json.dumps(sdata) )
+            print self.name, ": new_flow():", sdata, of_response
             #print vim_response.status_code
             if of_response.status_code != 200:
                 raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))

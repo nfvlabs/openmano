@@ -304,7 +304,7 @@ class openflow_thread(threading.Thread):
 
             index += 1
             
-            self.new_flow(flow)
+            self.OF_connector.new_flow(flow)
             
             INSERT={'name':flow['name'], 'net_id':net_id, 'vlan_id':flow.get('vlan-id',None),
                     'ingress_port':str(pair[0]['switch_port']),
@@ -345,7 +345,7 @@ class openflow_thread(threading.Thread):
 
                 index += 1
 
-                self.new_flow(flow)
+                self.OF_connector.new_flow(flow)
                 INSERT={'name':flow['name'], 'net_id':net_id, 'vlan_id':flow.get('vlan-id',None),
                         'ingress_port':str(p1['switch_port']),
                         'priority':flow['priority'], 'actions':flow['actions'],
