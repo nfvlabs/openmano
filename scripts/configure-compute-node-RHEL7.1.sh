@@ -323,10 +323,14 @@ chkconfig ksm off
 
 # Libvirt options (uncomment the following)
 echo "configure Libvirt options"
+cp /etc/libvirt/libvirtd.conf /etc/libvirt/libvirtd.conf.old
 sed -i 's/#unix_sock_group = "libvirt"/unix_sock_group = "libvirt"/' /etc/libvirt/libvirtd.conf
 sed -i 's/#unix_sock_rw_perms = "0770"/unix_sock_rw_perms = "0770"/' /etc/libvirt/libvirtd.conf
 sed -i 's/#unix_sock_dir = "\/var\/run\/libvirt"/unix_sock_dir = "\/var\/run\/libvirt"/' /etc/libvirt/libvirtd.conf
 sed -i 's/#auth_unix_rw = "none"/auth_unix_rw = "none"/' /etc/libvirt/libvirtd.conf
+
+#Openstack specific
+( id nova && usermod -aG libvirt nova ) >/dev/null 2>&1
 
 #creating the polkit grant access for libvirt user. 
 #This does not work !!!! so commented. No way to get running without uncomented the auth_unix_rw = "none" line
