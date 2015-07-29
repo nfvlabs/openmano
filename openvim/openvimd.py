@@ -45,6 +45,7 @@ import os
 from jsonschema import validate as js_v, exceptions as js_e
 import host_thread as ht
 import openflow_thread as oft
+import floodlight as fl09_conn
 import threading
 from vim_schema import config_schema
 
@@ -181,14 +182,18 @@ if __name__=="__main__":
         config_dic['db'] = db_of
         config_dic['db_lock'] = db_lock
 
-    #create openflow thread
+    # create connector to the openflow controller
+    # TODO: Make this generic using variable from configuration file to select the appropriate connector
         of_test_mode = False if config_dic['mode']=='normal' else True
-        thread = oft.openflow_thread(of_url = "http://"+str(config_dic['of_controller_ip']) + ":"+ str(config_dic['of_controller_port']),
-                        of_test=of_test_mode,
-                        of_dpid=config_dic['of_controller_dpid'],
-                        db=db_of,  db_lock=db_lock,
+        OF_conn = fl09_conn.FL_conn(of_url = "http://"+str(config_dic['of_controller_ip']) + ":" +
+                                             str(config_dic['of_controller_port']), of_test = of_test_mode,
+                        of_dpid=config_dic['of_controller_dpid'])
+
+
+    #create openflow thread
+        thread = oft.openflow_thread(OF_conn, of_test=of_test_mode, db=db_of,  db_lock=db_lock,
                         pmp_with_same_vlan=config_dic['of_controller_nets_with_same_vlan'])
-        r,c = thread.get_of_controller_info()
+        r,c = thread.OF_connector.obtain_port_correspondence()
         if r<0:
             print "Error getting openflow information", c
             exit()
