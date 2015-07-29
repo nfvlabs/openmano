@@ -183,15 +183,8 @@ if __name__=="__main__":
         config_dic['db'] = db_of
         config_dic['db_lock'] = db_lock
 
-    # create connector to the openflow controller
-    # TODO: Make this generic using variable from configuration file to select the appropriate connector
+        # create connector to the openflow controller
         of_test_mode = False if config_dic['mode']=='normal' else True
-
-        ofc = config_dic.get('OFC')
-        if ofc is None:
-            print 'ERROR. The Openflow controller specified in the configuration file is not valid. Only valid options ' \
-                  'for OFC are \'floodlight\' and \'opendaylight\''
-            exit()
 
         if config_dic['of_controller']=='floodlight':
             OF_conn = fl_conn.FL_conn(of_url = "http://"+str(config_dic['of_controller_ip']) + ":" +
@@ -205,7 +198,7 @@ if __name__=="__main__":
                       'configuration file the of_user and the of_password '
                 exit()
 
-            OF_conn = odl_conn.FL_conn(of_url = "http://"+str(config_dic['of_controller_ip']) + ":" +
+            OF_conn = odl_conn.ODL_conn(of_url = "http://"+str(config_dic['of_controller_ip']) + ":" +
                                             str(config_dic['of_controller_port']), of_test = of_test_mode,
                                             of_dpid=config_dic['of_controller_dpid'], of_user = of_user,
                                             of_password = of_password)

@@ -135,12 +135,65 @@ class ODL_conn():
             print self.name, ": FAKE new_flow", data
             return 0, None
         try:
-            #TODO: fill flow_name from data
-            #TODO: edit data
+            #We have to build the data for the opendaylight call from the generic data
+            sdata = dict()
+            sdata['flow-node-inventory:flow'] = list()
+            sdata['flow-node-inventory:flow'][0] = dict()
+            flow = sdata['flow-node-inventory:flow'][0]
+            flow['id'] = data['name']
+            flow['flow-name'] = data['name']
+            flow['idle-timeout'] = 0
+            flow['hard-timeout'] = 0
+            flow['table_id'] = 0
+            flow['priority'] = data['priority']
+            flow['match'] = dict()
+            flow['match']['in-port'] = self.pp2ofi[data['ingress-port']]
+            if 'dst-mac' in data:
+                flow['match']['ethernet-match'] = dict()
+                flow['match']['ethernet-match']['ethernet-destination'] = dict()
+                flow['match']['ethernet-match']['ethernet-destination']['address'] = data['dst-mac']
+            if 'vlan-id' in data:
+                flow['match']['vlan-match'] = dict()
+                flow['match']['vlan-match']['vlan-id'] = dict()
+                flow['match']['vlan-match']['vlan-id']['vlan-id-present'] = True
+                flow['match']['vlan-match']['vlan-id'] = data['vlan-id']
+            flow['instructions'] = dict()
+            flow['instructions']['instruction'] = list()
+            flow['instructions']['instruction'][0] = dict()
+            flow['instructions']['instruction'][0]['order'] = 1
+            flow['instructions']['instruction'][0]['apply-actions'] = dict()
+            flow['instructions']['instruction'][0]['apply-actions']['action'] = list()
+            actions = flow['instructions']['instruction'][0]['apply-actions']['action']
+
+            order = 0
+            new_action = None
+            while len(data['actions']) > 0:
+                if new_action is None:
+                    new_action = dict()
+                    new_action['order'] = order
+
+                action = data['actions'].pop(0)
+
+                if  action == 'set-vlan-id':
+                    new_action['set-field']['vlan-match'] = dict()
+                    new_action['set-field']['vlan-match']['vlan-id'] = dict()
+                    new_action['set-field']['vlan-match']['vlan-id']['vlan-id-present'] = True
+                    new_action['set-field']['vlan-match']['vlan-id']['vlan-id'] = data['actions'].pop(0)
+                elif action == 'output':
+                    new_action['output-action'] = dict()
+                    new_action['output-action']['output-node-connector'] = self.pp2ofi[data['actions'].pop(0)]
+                else:
+                    error_msj = 'Error. Data information used to create a new flow has not the expected format'
+                    print error_msj
+                    return -1, error_msj
+
+                actions.append(new_action)
+                new_action = None
+
             of_response = requests.post(self.url+"restconf/config/opendaylight-inventory:nodes/node/" + self.id +
-                          "/table/0/flow/" + flow_name,
-                                headers=self.headers, data=json.dumps(data) )
-            print self.name, ": new_flow():", data, of_response
+                          "/table/0/flow/" + data['name'],
+                                headers=self.headers, data=json.dumps(sdata) )
+            print self.name, ": new_flow():", sdata, of_response
             #print vim_response.status_code
             if of_response.status_code != 200:
                 raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
