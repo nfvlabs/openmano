@@ -111,21 +111,19 @@ class FL_conn():
         try:
             #We have to build the data for the floodlight call from the generic data
             sdata = dict(data)
+            sdata['switch'] = self.dpid
+            sdata['ingress-port'] = self.pp2ofi[data['ingress-port']]
             sdata['actions'] = ""
 
-            actions_nb = len(data['actions'])
-            for action in data['actions']:
-                actions_nb -= 1
-                add_comma = True
-                if action == 'set-vlan-id' or action == 'output':
-                    sdata['actions'] +=  action + '='
-                    add_comma = False
-                else:
-                    sdata['actions'] +=  action
+            while len(data['actions']) > 0:
+                action = data['actions'].pop(0)
+                if action == 'set-vlan-id':
+                    sdata['actions'] +=  action + '=' + data['actions'].pop(0)
+                elif action == 'output':
+                    sdata['actions'] +=  action + '=' + self.pp2ofi[data['actions'].pop(0)]
 
-                if actions_nb > 0 and add_comma:
+                if len(data['actions']) > 0:
                     sdata['actions'] +=  ', '
-
 
             of_response = requests.post(self.url+"/wm/staticflowentrypusher/json",
                                 headers=self.headers, data=json.dumps(sdata) )

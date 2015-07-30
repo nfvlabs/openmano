@@ -197,7 +197,7 @@ class openflow_thread(threading.Thread):
                         return result, content
             
         # launch to openflow
-        result, db_of_inserts = self.OF_connector.install_netrules(net_id, ports)
+        result, db_of_inserts = self.install_netrules(net_id, ports)
         if result < 0:
             return result, db_of_inserts
         for INSERT in db_of_inserts:
@@ -314,8 +314,7 @@ class openflow_thread(threading.Thread):
         # BROADCAST:
         if nb_rules > 2:  # point to multipoint or nets with more than 2 elements
             for p1 in ports:
-                flow = {'switch': self.dpid,
-                    'priority': '1000',
+                flow = {'priority': '1000',
                     'dst-mac': 'ff:ff:ff:ff:ff:ff',
                     'active': "true",
                     'actions': []

@@ -121,6 +121,9 @@ class ODL_conn():
             of_response = requests.delete(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
                                           "/table/0/flow/"+flow_name, headers=self.headers)
             print self.name, ": del_flow", flow_name, of_response
+            print self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id + \
+                                          "/table/0/flow/"+flow_name
+            print self.headers
             #print vim_response.status_code
             if of_response.status_code != 200:
                 raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
@@ -138,14 +141,14 @@ class ODL_conn():
             #We have to build the data for the opendaylight call from the generic data
             sdata = dict()
             sdata['flow-node-inventory:flow'] = list()
-            sdata['flow-node-inventory:flow'][0] = dict()
+            sdata['flow-node-inventory:flow'].append(dict())
             flow = sdata['flow-node-inventory:flow'][0]
             flow['id'] = data['name']
             flow['flow-name'] = data['name']
             flow['idle-timeout'] = 0
             flow['hard-timeout'] = 0
             flow['table_id'] = 0
-            flow['priority'] = data['priority']
+            flow['priority'] = int(data['priority'])
             flow['match'] = dict()
             flow['match']['in-port'] = self.pp2ofi[data['ingress-port']]
             if 'dst-mac' in data:
@@ -156,10 +159,10 @@ class ODL_conn():
                 flow['match']['vlan-match'] = dict()
                 flow['match']['vlan-match']['vlan-id'] = dict()
                 flow['match']['vlan-match']['vlan-id']['vlan-id-present'] = True
-                flow['match']['vlan-match']['vlan-id'] = data['vlan-id']
+                flow['match']['vlan-match']['vlan-id']['vlan-id'] = int(data['vlan-id'])
             flow['instructions'] = dict()
             flow['instructions']['instruction'] = list()
-            flow['instructions']['instruction'][0] = dict()
+            flow['instructions']['instruction'].append(dict())
             flow['instructions']['instruction'][0]['order'] = 1
             flow['instructions']['instruction'][0]['apply-actions'] = dict()
             flow['instructions']['instruction'][0]['apply-actions']['action'] = list()
@@ -175,10 +178,11 @@ class ODL_conn():
                 action = data['actions'].pop(0)
 
                 if  action == 'set-vlan-id':
+                    new_action['set-field'] = dict()
                     new_action['set-field']['vlan-match'] = dict()
                     new_action['set-field']['vlan-match']['vlan-id'] = dict()
                     new_action['set-field']['vlan-match']['vlan-id']['vlan-id-present'] = True
-                    new_action['set-field']['vlan-match']['vlan-id']['vlan-id'] = data['actions'].pop(0)
+                    new_action['set-field']['vlan-match']['vlan-id']['vlan-id'] = int(data['actions'].pop(0))
                 elif action == 'output':
                     new_action['output-action'] = dict()
                     new_action['output-action']['output-node-connector'] = self.pp2ofi[data['actions'].pop(0)]
@@ -189,11 +193,14 @@ class ODL_conn():
 
                 actions.append(new_action)
                 new_action = None
+                order += 1
 
-            of_response = requests.post(self.url+"restconf/config/opendaylight-inventory:nodes/node/" + self.id +
+            print json.dumps(sdata)
+            of_response = requests.put(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
                           "/table/0/flow/" + data['name'],
                                 headers=self.headers, data=json.dumps(sdata) )
             print self.name, ": new_flow():", sdata, of_response
+
             #print vim_response.status_code
             if of_response.status_code != 200:
                 raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))

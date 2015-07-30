@@ -1780,7 +1780,7 @@ def http_clear_openflow_rules():
 def http_get_openflow_ports():
     '''Obtain switch ports names of openflow controller
     '''
-    data={'ports' : config_dic['of_thread'].pp2ofi}
+    data={'ports' : config_dic['of_thread'].OF_connector.pp2ofi}
     return format_out(data)
 
 
