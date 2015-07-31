@@ -167,15 +167,25 @@ def vnf_create(args):
         print myvnf
         return -1
 
-    if args.name or args.description:
+    if args.name or args.description or args.image_path:
         #print args.name
-        if not 'vnf' in myvnf: 
-            print 'Wrong file. Not a VNF descriptor. Expecting the following text: "vnf"'
-            return -1
-        if args.name:
-            myvnf['vnf']['name'] = args.name
-        if args.description:
-            myvnf['vnf']['description'] = args.description
+        try:
+            if args.name:
+                myvnf['vnf']['name'] = args.name
+            if args.description:
+                myvnf['vnf']['description'] = args.description
+            if args.image_path:
+                myvnf['vnf']['VNFC'][0]['VNFC image']=args.image_path
+        except (KeyError, TypeError), e:
+            if str(e)=='vnf':           error_pos= "missing field 'vnf'"
+            elif str(e)=='name':        error_pos= "missing field  'vnf':'name'"
+            elif str(e)=='description': error_pos= "missing field  'vnf':'description'"
+            elif str(e)=='VNFC':        error_pos= "missing field  'vnf':'VNFC'"
+            elif str(e)=='0':           error_pos= "field  'vnf':'VNFC' must be an array"
+            elif str(e)=='VNFC image':  error_pos= "missing field 'vnf':'VNFC'['VNFC image']"
+            else:                       error_pos="wrong format"
+            print "Wrong VNF descriptor: " + error_pos
+            return -1 
     payload_req = json.dumps(myvnf)
         
     #print payload_req
@@ -616,7 +626,7 @@ def datacenter_create(args):
         datacenter_dict["config"] = _load_file_or_yaml(args.config) 
     payload_req = json.dumps( {"datacenter": datacenter_dict })
     
-    print payload_req
+    #print payload_req
         
     URLrequest = "http://%s:%s/openmano/datacenters" %(mano_host, mano_port)
     mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
@@ -736,6 +746,7 @@ if __name__=="__main__":
     vnf_create_parser.add_argument("file", action="store", help="location of the JSON file describing the VNF").completer = FilesCompleter
     vnf_create_parser.add_argument("--name", action="store", help="name of the VNF (if it exists in the VNF descriptor, it is overwritten)")
     vnf_create_parser.add_argument("--description", action="store", help="description of the VNF (if it exists in the VNF descriptor, it is overwritten)")
+    vnf_create_parser.add_argument("--image-path", action="store",  help="change image path locations (overwritten)")
     vnf_create_parser.add_argument('--verbose', '-v', action='count')
     vnf_create_parser.set_defaults(func=vnf_create)
 

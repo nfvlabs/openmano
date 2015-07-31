@@ -187,7 +187,7 @@ function upgrade_to_2(){
     echo "      Add columns user/passwd to table 'vim_tenants'"
     echo "ALTER TABLE vim_tenants ADD COLUMN user VARCHAR(36) NULL COMMENT 'Credentials for vim' AFTER created,
 	ADD COLUMN passwd VARCHAR(50) NULL COMMENT 'Credentials for vim' AFTER user;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
-    echo "      Add table 'images' and 'datacenter_images'"
+    echo "      Add table 'images' and 'datacenters_images'"
     echo "CREATE TABLE images (
 	uuid VARCHAR(36) NOT NULL,
 	name VARCHAR(50) NOT NULL,
@@ -273,6 +273,15 @@ function downgrade_from_2(){
 
 function upgrade_to_3(){
     echo "    upgrade database from version 0.2 to version 0.3"
+    echo "      Change table 'logs'"
+    echo "ALTER TABLE logs CHANGE COLUMN related related VARCHAR(36) NOT NULL COMMENT 'Relevant element for the log' AFTER nfvo_tenant_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Add column created to table 'datacenters_images' and 'datacenters_flavors'"
+    for table in datacenters_images datacenters_flavors
+    do
+        echo "ALTER TABLE $table ADD COLUMN created ENUM('true','false') NOT NULL DEFAULT 'false' 
+            COMMENT 'Indicates if it has been created by openmano, or already existed' AFTER vim_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    done
+    echo "ALTER TABLE images CHANGE COLUMN metadata metadata VARCHAR(2000) NULL DEFAULT NULL AFTER description;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "      Add column config to table 'datacenters'"
     echo "ALTER TABLE datacenters ADD COLUMN config VARCHAR(4000) NULL DEFAULT NULL COMMENT 'extra config information in json' AFTER vim_url_admin;
 	" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
@@ -296,6 +305,14 @@ function upgrade_to_3(){
 
 function downgrade_from_3(){
     echo "    downgrade database from version 0.3 to version 0.2"
+    echo "      Change back table 'logs'"
+    echo "ALTER TABLE logs CHANGE COLUMN related related ENUM('nfvo_tenants','datacenters','vim_tenants','tenants_datacenters','vnfs','vms','interfaces','nets','scenarios','sce_vnfs','sce_interfaces','sce_nets','instance_scenarios','instance_vnfs','instance_vms','instance_nets','instance_interfaces') NOT NULL COMMENT 'Relevant element for the log' AFTER nfvo_tenant_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Delete column created from table 'datacenters_images' and 'datacenters_flavors'"
+    for table in datacenters_images datacenters_flavors
+    do
+        echo "ALTER TABLE $table DROP COLUMN created;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    done
+    echo "ALTER TABLE images CHANGE COLUMN metadata metadata VARCHAR(400) NULL DEFAULT NULL AFTER description;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "       Delete column config to table 'datacenters'"
     echo "ALTER TABLE datacenters DROP COLUMN config;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "       Delete column datacenter_id to table 'vim_tenants'"

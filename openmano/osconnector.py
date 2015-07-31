@@ -39,6 +39,7 @@ import keystoneclient.exceptions as ksExceptions
 import glanceclient.v2.client as glClient
 import glanceclient.client as gl1Client
 import glanceclient.exc as gl1Exceptions
+from httplib import HTTPException
 from neutronclient.neutron import client as neClient
 from neutronclient.common import exceptions as neExceptions
 
@@ -334,7 +335,7 @@ class osconnector():
     def __net_os2mano(self, net_list):
         '''Transform the net openstack format to mano format'''
         for net in net_list:
-            if net.get('provider:physical_network'):
+            if net.get('provider:network_type') == "vlan":
                 net['type']='data'
             else:
                 net['type']='bridge'
@@ -435,7 +436,7 @@ class osconnector():
             print "delete_tenant_network " + error_text
         return error_value, error_text
 
-    def new_tenant_flavor(self, flavor_dict, change_name_if_used=False):
+    def new_tenant_flavor(self, flavor_dict, change_name_if_used=True):
         '''Adds a tenant flavor to openstack VIM
         if change_name_if_used is True, it will change name in case of conflict
         Returns the flavor identifier
@@ -574,6 +575,7 @@ class osconnector():
                         disk_format="ami"
                     else:
                         disk_format="raw"
+                print "new_tenant_image: '%s' loading from '%s'" % (image_dict['name'], image_dict['location'])
                 if image_dict['location'][0:4]=="http":
                     new_image = glancev1.images.create(name=image_dict['name'], is_public=image_dict.get('public',"yes")=="yes",
                             container_format="bare", location=image_dict['location'], disk_format=disk_format)
@@ -581,19 +583,27 @@ class osconnector():
                     with open(image_dict['location']) as fimage:
                         new_image = glancev1.images.create(name=image_dict['name'], is_public=image_dict.get('public',"yes")=="yes",
                             container_format="bare", data=fimage, disk_format=disk_format)
-                #insert metadata
-                new_image.properties.setdefault('location',image_dict['location'])
-                for k,v in image_dict.get('metadata',{}).iteritems():
-                    new_image.properties.setdefault(k,v)
+                #insert metadata. We cannot use 'new_image.properties.setdefault' 
+                #because nova and glance are "INDEPENDENT" and we are using nova for reading metadata
+                new_image_nova=self.nova.images.find(id=new_image.id)
+                new_image_nova.metadata.setdefault('location',image_dict['location'])
+                metadata_to_load = image_dict.get('metadata')
+                if metadata_to_load:
+                    for k,v in metadata_to_load.iteritems():
+                        new_image_nova.metadata.setdefault(k,v)
                 return 1, new_image.id
             except nvExceptions.Conflict, e:
                 error_value=-HTTP_Conflict
                 error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
-            except gl1Exceptions.CommunicationError, e:
+            except (gl1Exceptions.HTTPException, gl1Exceptions.CommunicationError), e:
                 error_value=-1
                 error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 continue
+            except IOError, e:  #can not open the file
+                error_value=-1
+                error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+                break
             except (ksExceptions.ClientException, nvExceptions.ClientException), e:
                 error_value=-1
                 error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
@@ -635,7 +645,8 @@ class osconnector():
                 <0, error_text
         '''
         if self.debug:
-            print "osconnector: Creatng VM into VIM"
+            print "osconnector: Creating VM into VIM"
+            print "   image %s  flavor %s   nics=%s" %(image_id, flavor_id,net_list)
         try:
             net_list_vim=[]
             for net in net_list:
@@ -652,7 +663,7 @@ class osconnector():
 #            error_value=-HTTP_Not_Found
 #            error_text= "vm instance %s not found" % vm_id
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
             #raise e
         #if reaching here is because an exception

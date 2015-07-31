@@ -18,6 +18,9 @@ topology:
     bridge1: 
       type:      network
       model:     bridge_net
+    default: 
+      type:      external_network # Datacenter net
+      model:     default
   connections: 
     dataconn1:
       nodes: 
@@ -42,7 +45,13 @@ topology:
     bridgeconn1:
       nodes: 
       -   bridge1: null
-      -   linux1: eth0
-      -   node2: control
-      -   node3: control
+      -   linux1:  eth0
+      -   node2:   control
+      -   node3:   control
+    mngmt-net:
+      nodes: 
+      -   default: null
+      -   node1:   mgmt
+      -   node2:   mgmt
+      -   node3:   mgmt
 
