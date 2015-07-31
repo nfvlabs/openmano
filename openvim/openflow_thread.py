@@ -50,7 +50,7 @@ class openflow_thread(threading.Thread):
         self.OF_connector = OF_connector
 
         self.queueLock = threading.Lock()
-        self.taskQueue = Queue.Queue(50)
+        self.taskQueue = Queue.Queue(200)
         
     def insert_task(self, task, *aditional):
         try:
@@ -272,44 +272,47 @@ class openflow_thread(threading.Thread):
         nb_rules = len(ports)
 
         # Insert rules so each point can reach other points using dest mac information
-        pairs = itertools.product(ports, repeat=2)
         index = 0
-        for pair in pairs:
-            if pair[0]['switch_port'] == pair[1]['switch_port']:
-                continue
-            flow = {
-                "name": net_id+'_'+str(index),
-                "priority": "1000",
-                "ingress-port": str(pair[0]['switch_port']),
-                "active": "true",
-                'actions': []
-            }
-            # allow that one port have no mac
-            if pair[1]['mac'] is None or nb_rules==2:  # point to point or nets with 2 elements
-                flow['priority'] = "990"  # less priority
-            else:
-                flow['dst-mac'] = str(pair[1]['mac'])
+        #rules portA to portB
+        for i in range(0,len(ports)):
+            for j in range(0,len(ports)):
+                if i==j:
+                    continue # same port, skip
+                portA=ports[i]
+                portB=ports[j]
+                flow = {
+                    "name": net_id+'_'+str(index),
+                    "priority": "1000",
+                    "ingress-port": str(portA['switch_port']),
+                    "active": "true",
+                    'actions': []
+                }
+                # allow that one port have no mac
+                if portB['mac'] is None or nb_rules==2:  # point to point or nets with 2 elements
+                    flow['priority'] = "990"  # less priority
+                else:
+                    flow['dst-mac'] = str(portB['mac'])
+                    
+                if portA['vlan'] is not None:
+                    flow['vlan-id'] = str(portA['vlan'])
+    
+                if portB['vlan'] is None:
+                    if portA['vlan'] is not None:
+                        flow['actions'].append('strip-vlan')
+                else:
+                    flow['actions'].append('set-vlan-id')
+                    flow['actions'].append(str(portB['vlan']))
+                flow['actions'].append('output')
+                flow['actions'].append(str(portB['switch_port']))
+    
+                index += 1
                 
-            if pair[0]['vlan'] is not None:
-                flow['vlan-id'] = str(pair[0]['vlan'])
-
-            if pair[1]['vlan'] is None:
-                if pair[0]['vlan'] is not None:
-                    flow['actions'].append('strip-vlan')
-            else:
-                flow['actions'].append('set-vlan-id')
-                flow['actions'].append(str(pair[1]['vlan']))
-            flow['actions'].append('output')
-            flow['actions'].append(str(pair[1]['switch_port']))
-
-            index += 1
-            
-            self.OF_connector.new_flow(flow)
-            
-            INSERT={'name':flow['name'], 'net_id':net_id, 'vlan_id':flow.get('vlan-id',None),
-                    'ingress_port':str(pair[0]['switch_port']),
-                    'priority':flow['priority'], 'actions':flow['actions'], 'dst_mac': flow.get('dst-mac', None)}
-            db_list.append(INSERT)
+                self.OF_connector.new_flow(flow)
+                
+                INSERT={'name':flow['name'], 'net_id':net_id, 'vlan_id':flow.get('vlan-id',None),
+                        'ingress_port':flow('ingress-port'),
+                        'priority':flow['priority'], 'actions':flow['actions'], 'dst_mac': flow.get('dst-mac', None)}
+                db_list.append(INSERT)
         
         # BROADCAST:
         if nb_rules > 2:  # point to multipoint or nets with more than 2 elements
