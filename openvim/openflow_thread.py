@@ -30,13 +30,13 @@ __author__="Pablo Montes, Alfonso Tierno"
 __date__ ="17-jul-2015"
 
 
-import json
+#import json
 import utils.auxiliary_functions as af
 import threading
 import time
 import Queue
 import requests
-import itertools
+#import itertools
 
 class openflow_thread(threading.Thread):
     def __init__(self, OF_connector, db, db_lock, of_test, pmp_with_same_vlan):
@@ -50,7 +50,7 @@ class openflow_thread(threading.Thread):
         self.OF_connector = OF_connector
 
         self.queueLock = threading.Lock()
-        self.taskQueue = Queue.Queue(200)
+        self.taskQueue = Queue.Queue(2000)
         
     def insert_task(self, task, *aditional):
         try:
