@@ -22,7 +22,7 @@
 ##
 
 # Authors: Antonio Lopez, Pablo Montes, Alfonso Tierno
-# June 2015
+# July 2015
 
 # Personalize RHEL7.1 on compute nodes
 # Prepared to work with the following network card drivers:
@@ -107,15 +107,15 @@ echo '
 #################################################################'
 
 # Add required groups
-groupadd -f admin
+groupadd -f nfvgroup
 groupadd -f libvirt   #for other operating systems may be libvirtd
 
 # Adds user, default password same as name
 if grep -q "^${user_name}:" /etc/passwd
 then 
   #user exist, add to group
-  echo "adding user ${user_name} to groups libvirt,admin"
-  usermod -a -G libvirt,admin -g admin $user_name
+  echo "adding user ${user_name} to groups libvirt,nfvgroup"
+  usermod -a -G libvirt,nfvgroup -g nfvgroup $user_name
 else 
   #create user if it does not exist
   [ -z "$FORCE" ] && read -p "user '${user_name}' does not exist, create (Y/n)" kk
@@ -124,7 +124,7 @@ else
     exit
   fi
   echo "creating and configuring user ${user_name}"
-  useradd -m -G libvirt,admin -g admin $user_name       
+  useradd -m -G libvirt,nfvgroup -g nfvgroup $user_name       
   #Password
   if [ -z "$FORCE" ] 
   then 
@@ -135,24 +135,11 @@ else
   fi
 fi
 
-# Allow admin users to access without password
-if ! grep -q "#openmano" /etc/sudoers
-then
-    cat >> /home/${user_name}/script_visudo.sh << EOL
-#!/bin/bash
-cat \$1 | awk '(\$0~"requiretty"){print "#"\$0}(\$0!~"requiretty"){print \$0}' > tmp
-cat tmp > \$1
-rm tmp
-echo "" >> \$1
-echo "#openmano allow to group admin to grant root privileges without password" >> \$1
-echo "%admin ALL=(ALL) NOPASSWD: ALL" >> \$1
-EOL
-    chmod +x /home/${user_name}/script_visudo.sh
-    echo "allowing admin user to get root privileges withut password"
-    export EDITOR=/home/${user_name}/script_visudo.sh && sudo -E visudo
-    rm -f /home/${user_name}/script_visudo.sh
-fi
-
+#Setting default libvirt URI for the user
+echo "Setting default libvirt URI for the user"
+echo "if test -x `which virsh`; then" >> /home/${user_name}/.bash_profile
+echo "  export LIBVIRT_DEFAULT_URI=qemu:///system" >> /home/${user_name}/.bash_profile
+echo "fi" >> /home/${user_name}/.bash_profile
 
 echo '
 #################################################################
@@ -258,6 +245,32 @@ echo '
 #####       OTHER CONFIGURATION                             #####
 #################################################################'
 
+# Disable requiretty
+if ! grep -q "#openmano" /etc/sudoers
+then
+    cat >> /home/${user_name}/script_visudo.sh << EOL
+#!/bin/bash
+cat \$1 | awk '(\$0~"requiretty"){print "#"\$0}(\$0!~"requiretty"){print \$0}' > tmp
+cat tmp > \$1
+rm tmp
+EOL
+    chmod +x /home/${user_name}/script_visudo.sh
+    echo "Disabling requitetty"
+    export EDITOR=/home/${user_name}/script_visudo.sh && sudo -E visudo
+    rm -f /home/${user_name}/script_visudo.sh
+fi
+
+#Configure polkint to run virsh as a normal user
+echo "Configuring polkint to run virsh as a normal user"
+cat >> /etc/polkit-1/localauthority/50-local.d/50-org.libvirt-access.pkla  << EOL
+[libvirt Admin Access]
+Identity=unix-group:libvirt
+Action=org.libvirt.unix.manage
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+EOL
+
 # Links the OpenMANO required folder /opt/VNF/images to /var/lib/libvirt/images. The OS installation
 # should have only a / partition with all possible space available
 
@@ -265,15 +278,15 @@ echo " link /opt/VNF/images to /var/lib/libvirt/images"
 if [ "$user_name" != "" ]
 then
   #mkdir -p /home/${user_name}/VNF_images
-  #chown -R ${user_name}:admin /home/${user_name}/VNF_images
+  #chown -R ${user_name}:nfvgroup /home/${user_name}/VNF_images
   #chmod go+x $HOME
 
   # The orchestator needs to link the images folder 
   rm -f /opt/VNF/images
   mkdir -p /opt/VNF/
   ln -s /var/lib/libvirt/images /opt/VNF/images
-  chown -R ${user_name}:admin /opt/VNF
-  chown -R root:admin /var/lib/libvirt/images
+  chown -R ${user_name}:nfvgroup /opt/VNF
+  chown -R root:nfvgroup /var/lib/libvirt/images
   chmod g+rwx /var/lib/libvirt/images
 
   # Selinux management
