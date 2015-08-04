@@ -1,0 +1,45 @@
+---
+vnf:
+    name:        dataplaneVNF3
+    description: "Example of a dataplane VNF consisting of one VM with two SR-IOV"
+    # class: parent      # Optional. Used to organize VNFs
+    external-connections:
+    -   name:              mgmt
+        type:              bridge
+        VNFC:              dataplaneVNF3-VM
+        local_iface_name:  eth0
+        description:       control interface VM1
+    -   name:              data0
+        type:              data
+        VNFC:              dataplaneVNF3-VM
+        local_iface_name:  xe0
+        description:       Dataplane interface
+    -   name:              data1
+        type:              data
+        VNFC:              dataplaneVNF3-VM
+        local_iface_name:  xe1
+        description:       Dataplane interface
+    VNFC:
+    -   name:        dataplaneVNF3-VM
+        description: "Dataplane VM with 2 threads, 2 GB hugepages, 2 SR-IOV interface"
+        #Copy the image to a compute path and edit this path
+        VNFC image:  /path/to/imagefolder/dataplaneVNF3.qcow2
+        disk: 10
+        numas: 
+        -   threads: 2         # "cores", "paired-threads", "threads"
+            memory: 2                 # GBytes
+            interfaces:
+            -   name:      xe0
+                vpci:      "0000:00:11.0"
+                dedicated: "no"         # "yes"(passthrough), "no"(sriov with vlan tags), "yes:sriov"(sriovi, but exclusive and without vlan tag)
+                bandwidth: 1 Gbps
+            -   name:      xe1
+                vpci:      "0000:00:12.0"
+                dedicated: "no"
+                bandwidth: 1 Gbps
+        bridge-ifaces:
+        -   name:      eth0
+            vpci:      "0000:00:09.0"
+            bandwidth: 1 Mbps          # Optional, informative only
+
+

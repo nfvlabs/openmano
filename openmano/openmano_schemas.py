@@ -540,7 +540,7 @@ vnfc_schema = {
     "properties":{
         "name": name_schema,
         "description": description_schema,
-        "VNFC image": path_schema,
+        "VNFC image": {"oneOf": [path_schema, http_schema]},
         "image metadata": metadata_schema, 
         "processor": {
             "type":"object",
@@ -560,6 +560,7 @@ vnfc_schema = {
         },
         "ram":integer0_schema,
         "vcpus":integer0_schema,
+        "disk": integer1_schema,
         "numas": {
             "type": "array",
             "items":numa_schema

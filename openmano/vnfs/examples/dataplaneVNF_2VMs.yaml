@@ -1,0 +1,80 @@
+---
+vnf:
+    name:        dataplaneVNF_2VMs
+    description: "Example of a dataplane VNF consisting of two VMs for data plane workloads with one internal network"
+    # class: parent      # Optional. Used to organize VNFs
+    internal-connections:
+    -   name:        datanet
+        description: datanet
+        type:        data
+        elements:
+        -   VNFC:             VNF_2VMs-VM1
+            local_iface_name: xe0
+        -   VNFC:             VNF_2VMs-VM2
+            local_iface_name: xe0
+    external-connections:
+    -   name:              control0
+        type:              bridge
+        VNFC:              VNF_2VMs-VM1
+        local_iface_name:  eth0
+        description:       control interface VM1
+    -   name:              control1
+        type:              bridge
+        VNFC:              VNF_2VMs-VM2
+        local_iface_name:  eth0
+        description:       control interface VM2
+    -   name:              in
+        type:              data
+        VNFC:              VNF_2VMs-VM1
+        local_iface_name:  xe1
+        description:       Dataplane interface input
+    -   name:              out
+        type:              data
+        VNFC:              VNF_2VMs-VM2
+        local_iface_name:  xe1
+        description:       Dataplane interface output
+    VNFC:
+    -   name:        VNF_2VMs-VM1
+        description: "Dataplane VM1 with 4 threads, 2 GB hugepages, 2 SR-IOV interface"
+        #Copy the image to a compute path and edit this path
+        VNFC image:  /path/to/imagefolder/dataplaneVNF_2VMs.qcow2
+        disk: 10
+        numas: 
+        -   paired-threads: 2         # "cores", "paired-threads", "threads"
+            memory: 2                 # GBytes
+            interfaces:
+            -   name:      xe0
+                vpci:      "0000:00:11.0"
+                dedicated: "no"         # "yes"(passthrough), "no"(sriov with vlan tags), "yes:sriov"(sriovi, but exclusive and without vlan tag)
+                bandwidth: 1 Gbps
+            -   name:      xe1
+                vpci:      "0000:00:12.0"
+                dedicated: "no"
+                bandwidth: 1 Gbps
+        bridge-ifaces:
+        -   name:      eth0
+            vpci:      "0000:00:09.0"
+            bandwidth: 1 Mbps          # Optional, informative only
+
+    -   name:        VNF_2VMs-VM2
+        description: "Dataplane VM1 with 2 threads, 2 GB hugepages, 2 SR-IOV interface"
+        #Copy the image to a compute path and edit this path
+        VNFC image:  /path/to/imagefolder/dataplaneVNF_2VMs.qcow2
+        disk: 10
+        numas: 
+        -   paired-threads: 1         # "cores", "paired-threads", "threads"
+            memory: 2                 # GBytes
+            interfaces:
+            -   name:      xe0
+                vpci:      "0000:00:11.0"
+                dedicated: "no"         # "yes"(passthrough), "no"(sriov with vlan tags), "yes:sriov"(sriovi, but exclusive and without vlan tag)
+                bandwidth: 1 Gbps
+            -   name:      xe1
+                vpci:      "0000:00:12.0"
+                dedicated: "no"
+                bandwidth: 1 Gbps
+        bridge-ifaces:
+        -   name:      eth0
+            vpci:      "0000:00:09.0"
+            bandwidth: 1 Mbps          # Optional, informative only
+

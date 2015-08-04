@@ -258,7 +258,7 @@ def create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vi
     return 1, image_vim_id if only_create_at_vim else image_mano_id
 
 def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_vim=False):
-    temp_flavor_dict= {'disk':flavor_dict.get('disk'),
+    temp_flavor_dict= {'disk':flavor_dict.get('disk',1),
             'ram':flavor_dict.get('ram'),
             'vcpus':flavor_dict.get('vcpus'),
         }
@@ -359,10 +359,11 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
             flavor_vim_id=flavor_db[0]["vim_id"]
             continue
         #create flavor at vim
+        print "nfvo.create_or_use_flavor() adding flavor to VIM %s" % vim["name"]
         result, flavor_vim_id = vim.new_tenant_flavor(flavor_dict)
         
         if result < 0:
-            print "Error creating flavor at VIM: %s." %flavor_vim_id
+            print "Error creating flavor at VIM %s: %s." %(vim["name"], flavor_vim_id)
             continue
         else:
             rollback_list.append({"where":"vim", "vim_id": vim_id, "what":"flavor","uuid":flavor_vim_id})
@@ -445,6 +446,7 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
             myflavorDict["description"] = VNFCitem["description"]
             myflavorDict["ram"] = vnfc.get("ram", 0)
             myflavorDict["vcpus"] = vnfc.get("vcpus", 0)
+            myflavorDict["disk"] = vnfc.get("disk", 1)
             myflavorDict["extended"] = {}
             
             devices = vnfc.get("devices")
@@ -1084,6 +1086,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                                 netDict['type']="VF"    #siov
                             elif flavor_iface['dedicated'] == 'yes-sriov':
                                 netDict['type']="VF not shared"   #sriov but only one sriov on the PF
+                            netDict["mac_address"] = flavor_iface.get("mac_address")
                             break;
                 netDict["use"]=iface['type']
                 if netDict["use"]=="data" and not "type" in netDict:
@@ -1093,6 +1096,8 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                                 Try to delete and create the scenarios and VNFs again"
                     else:
                         return -HTTP_Internal_Server_Error, e_text
+                if netDict["use"]=="mgmt" or netDict["use"]=="bridge":
+                    netDict["type"]="virtio"
                 if "vpci" in iface and iface["vpci"] is not None:
                     netDict['vpci'] = iface['vpci']
                 netDict['name'] = iface['internal_name']
@@ -1103,22 +1108,21 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                         print iface
                         print vnf_iface
                         if vnf_iface['interface_id']==iface['uuid']:
-                            netDict['uuid'] = auxNetDict['scenario'][ vnf_iface['sce_net_id'] ]
+                            netDict['net_id'] = auxNetDict['scenario'][ vnf_iface['sce_net_id'] ]
                             break
                 else:
-                    netDict['uuid'] = auxNetDict[ sce_vnf['uuid'] ][ iface['net_id'] ]
+                    netDict['net_id'] = auxNetDict[ sce_vnf['uuid'] ][ iface['net_id'] ]
                 #skip bridge ifaces not connected to any net
-                if 'uuid' not in netDict or netDict['uuid']==None:
-                    continue
+                #if 'net_id' not in netDict or netDict['net_id']==None:
+                #    continue
                 myVMDict['networks'].append(netDict)
             print ">>>>>>>>>>>>>>>>>>>>>>>>>>>"
             print myVMDict['name']
             print "networks", json.dumps(myVMDict['networks'], indent=4)
             print "interfaces", json.dumps(vm['interfaces'], indent=4)
             print ">>>>>>>>>>>>>>>>>>>>>>>>>>>"
-#            result, vm_id = myvim.new_tenant_vminstance(myVMDict['name'],myVMDict['description'],myVMDict.get('start', None),
-#                    myVMDict['imageRef'],myVMDict['flavorRef'],myVMDict['networks'],vm['interfaces'])
-            vm_id="alf"
+            result, vm_id = myvim.new_tenant_vminstance(myVMDict['name'],myVMDict['description'],myVMDict.get('start', None),
+                    myVMDict['imageRef'],myVMDict['flavorRef'],myVMDict['networks'],vm['interfaces'])
             if result < 0:
                 error_text = "Error creating vm instance: %s." % vm_id
                 _, message = rollback(mydb, vims, rollbackList)
@@ -1128,40 +1132,13 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             print "VIM vm instance id (server id) for scenario %s: %s" % (scenarioDict['name'],vm_id)
             vm['vim_id'] = vm_id
             rollbackList.append({'what':'vm','where':'vim','vim_id':datacenter_id,'uuid':vm_id})
-    return 1, {"done":  "alf"}
-    #attach interfaces to nets
-    print "4. attach interfaces to nets"
-    #create an auxiliare dictionary
-    net_nfvo2vim={}
-    for sce_vnf in scenarioDict['vnfs']:
-        for net in sce_vnf['nets']: 
-            net_nfvo2vim[ net['uuid'] ] = net['vim_id']
-    for net in scenarioDict['nets']: 
-        net_nfvo2vim[ net['uuid'] ] = net['vim_id']
-
-    #attach inter vnf nets
-        
-    #attach nets
-    for sce_vnf in scenarioDict['vnfs']:
-        for vm in sce_vnf['vms']: 
-            for interface in vm['interfaces']:
-                #look for net_id to connect at vnfs[interfaces]
-                net_id = interface.get('net_id', None)
-                if net_id is None:
-                    for external_iface in sce_vnf['interfaces']:
-                        if external_iface['interface_id'] == interface['uuid']:
-                            net_id = external_iface.get('sce_net_id', None)
+            #put interface uuid back to scenario[vnfs][vms[[interfaces]
+            for net in myVMDict['networks']:
+                if "vim_id" in net:
+                    for iface in vm['interfaces']:
+                        if net["name"]==iface["internal_name"]:
+                            iface["vim_id"]=net["vim_id"]
                             break
-                if net_id is None:
-                    continue
-                result, port_id = myvim.connect_port_network(interface['vim_id'], net_nfvo2vim[net_id])
-                if result < 0:
-                    error_text = "Error attaching port to network: %s." % port_id
-                    _, message = rollback(mydb, vims, rollbackList)
-                    error_text += message
-                    print "start_scenario: " + error_text
-                    return result, error_text
-
     
     print "==================Deployment done=========="
     scenarioDict['vim_tenants_uuid'] = vim_tenants_uuid

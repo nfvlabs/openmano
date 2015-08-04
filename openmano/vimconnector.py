@@ -556,8 +556,17 @@ class vimconnector():
 #             print k,v
 #             net_list.append('{"name":"' + k + '", "uuid":"' + v + '"}')
 #         net_list_string = ', '.join(net_list) 
-            
-        payload_req = '{"server":{"networks": ' + json.dumps(net_list) + ',"name":"' + name + '","description":"' + description + \
+        virtio_net_list=[]
+        for net in net_list:
+            if net["type"]!="virtio" or not net.get("net_id"):
+                continue
+            net_dict={'uuid': net["net_id"]}
+            if net.get("name"):        net_dict["name"] = net["name"]
+            if net.get("vpci"):        net_dict["vpci"] = net["vpci"]
+            if net.get("model"):       net_dict["model"] = net["model"]
+            if net.get("mac_address"): net_dict["mac_address"] = net["mac_address"]
+            virtio_net_list.append(net_dict)
+        payload_req = '{"server":{"networks": ' + json.dumps(virtio_net_list) + ',"name":"' + name + '","description":"' + description + \
         '","imageRef":"' + image_id + '","flavorRef":"' + flavor_id + '"'
         if start != None:
             payload_req += ',"start": "' + start+ '"'
@@ -570,48 +579,54 @@ class vimconnector():
             return -HTTP_Not_Found, str(e.args[0])
         print vim_response
         #print vim_response.status_code
-        if vim_response.status_code == 200:
-            print vim_response.json()
-            print json.dumps(vim_response.json(), indent=4)
-            res,http_content = af.format_in(vim_response, openmano_schemas.new_vminstance_response_schema)
-            #print http_content
-            if res:
-                #r = af.remove_extra_items(http_content, openmano_schemas.new_vminstance_response_schema)
-                #if r is not None: print "Warning: remove extra items ", r
-                print json.dumps(http_content, indent=4)
-                #insert interface vim id at iface_list
-                if iface_list is not None and len(iface_list)>0:
-                    #bridges interfaces
-                    try:
-                        for iface in http_content['server']['networks']:
-                            for i in iface_list:
-                                if i['internal_name'] == iface['name']:
-                                    i['vim_id'] = iface['iface_id']
-                    except KeyError, e:
-                        print "Attach vim_id to interface list: Error No bridge interfaces KeyError " + str(e)
-                        pass
-                    #extended interfaces
-                    try:
-                        for numa in http_content['server']['extended']['numas']:
-                            for iface in numa['interfaces']:
-                                for i in iface_list:
-                                    if i['internal_name'] == iface['name']:
-                                        i['vim_id'] = iface['iface_id']
-                    except KeyError, e:
-                        print "Attach vim_id to interface list: Error No numa interfaces KeyError " + str(e)
-                        pass
-                
-                
-                vminstance_id = http_content['server']['id']
-                print "VM instance id: ",vminstance_id
-                return vim_response.status_code,vminstance_id
-            else: return -HTTP_Bad_Request,http_content
-        else:
+        if vim_response.status_code != 200:
             print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to add new vm instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
+        #ok
+        print vim_response.json()
+        print json.dumps(vim_response.json(), indent=4)
+        res,http_content = af.format_in(vim_response, openmano_schemas.new_vminstance_response_schema)
+        #print http_content
+        if  not res:
+            return -HTTP_Bad_Request,http_content
+        #r = af.remove_extra_items(http_content, openmano_schemas.new_vminstance_response_schema)
+        #if r is not None: print "Warning: remove extra items ", r
+        vminstance_id = http_content['server']['id']
+        print json.dumps(http_content, indent=4)
+        #connect data plane interfaces to network
+        for net in net_list:
+            if net["type"]=="virtio":
+                if not net.get("net_id"):
+                    continue
+                for iface in http_content['server']['networks']:
+                    if "name" in net:
+                        if net["name"]==iface["name"]:
+                            net["vim_id"] = iface['iface_id']
+                            break
+                    elif "net_id" in net:
+                        if net["net_id"]==iface["net_id"]:
+                            net["vim_id"] = iface['iface_id']
+                            break
+            else: #dataplane
+                for numa in http_content['server'].get('extended',{}).get('numas',() ):
+                    for iface in numa.get('interfaces',() ):
+                        if net['name'] == iface['name']:
+                            net['vim_id'] = iface['iface_id']
+                            if net.get("net_id"):
+                            #connect dataplane interface
+                                result, port_id = self.connect_port_network(iface['iface_id'], net["net_id"])
+                                if result < 0:
+                                    error_text = "Error attaching port %s to network %s: %s." % (iface['iface_id'], net["net_id"], port_id)
+                                    print "new_tenant_vminstance: " + error_text
+                                    self.delete_tenant_vminstance(vminstance_id)
+                                    return result, error_text
+                            break
+        
+        print "VM instance id: ",vminstance_id
+        return vim_response.status_code,vminstance_id
         
     def get_tenant_vminstance(self,vm_id):
         '''Returns the VM instance information from VIM'''

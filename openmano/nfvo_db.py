@@ -1229,7 +1229,7 @@ class nfvo_db():
                                     continue
                                 interface_type='external' if interface['external_name'] is not None else 'internal'
                                 INSERT_={'instance_vm_id': instance_vm_uuid,  'instance_net_id': net_scene2instance[net_id],
-                                    'interface_id': interface['uuid'], 'vim_interface_id': interface['vim_id'], 'type':  interface_type  }
+                                    'interface_id': interface['uuid'], 'vim_interface_id': interface.get('vim_id'), 'type':  interface_type  }
                                 r,interface_uuid =  self._new_row_internal('instance_interfaces', INSERT_, tenant_id, True, instance_uuid, True)
                                 if r<0:
                                     print 'nfvo_db.new_instance_scenario_as_a_whole() Error inserting at table instance_interfaces: ' + interface_uuid

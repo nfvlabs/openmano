@@ -489,7 +489,7 @@ class osconnector():
                 new_flavor=self.nova.flavors.create(name, 
                                 ram, 
                                 vcpus, 
-                                flavor_dict.get('disk',4),
+                                flavor_dict.get('disk',1),
                                 is_public=flavor_dict.get('is_public', True)
                             ) 
                 #add metadata
@@ -596,7 +596,7 @@ class osconnector():
                 error_value=-HTTP_Conflict
                 error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
-            except (gl1Exceptions.HTTPException, gl1Exceptions.CommunicationError), e:
+            except (HTTPException, gl1Exceptions.HTTPException, gl1Exceptions.CommunicationError), e:
                 error_value=-1
                 error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 continue
@@ -649,11 +649,35 @@ class osconnector():
             print "   image %s  flavor %s   nics=%s" %(image_id, flavor_id,net_list)
         try:
             net_list_vim=[]
-            for net in net_list:
-                net_list_vim.append({'net-id': net})
-                #TODO differentiate between net and port
             self.reload_connection()
-            server = self.nova.servers.create(name, image_id, flavor_id, nics=net_list_vim, description=description)
+            for net in net_list:
+                if not net.get("net_id"): #skip non connected iface
+                    continue
+                if net["type"]=="virtio":
+                    net_list_vim.append({'net-id': net["net_id"]})
+                elif net["type"]=="PF":
+                    print "new_tenant_vminstance: Warning, can not connect a passthrough interface "
+                    #TODO insert this when openstack consider passthrough ports as openstack neutron ports
+                else: #VF
+                    port_dict={
+                         "network_id": net["net_id"],
+                         "name": net["name"],
+                         "binding:vnic_type": "direct", 
+                         "admin_state_up": True
+                    }
+                    if net.get("mac_address"):
+                        port_dict["mac_address"]=net["mac_address"]
+                    #TODO: manage having SRIOV without vlan tag
+                    #if net["type"] == "VF not shared"
+                    #    port_dict["vlan"]=0
+                    new_port = self.neutron.create_port({"port": port_dict })
+                    net["mac_adress"] = new_port["port"]["mac_address"]
+                    net["vim_id"] = new_port["port"]["id"]
+                    net["ip"] = new_port["port"].get("fixed_ips",[{}])[0].get("ip_address")
+                    net_list_vim.append({"port-id": new_port["port"]["id"]})
+            print "name '%s' image_id '%s'flavor_id '%s' net_list_vim '%s' description '%s'"  % (name, image_id, flavor_id, str(net_list_vim), description)
+            server = self.nova.servers.create(name, image_id, flavor_id, nics=net_list_vim) #, description=description)
+            print "DONE :-)", server
             #TODO parse input and translate to VIM format (openmano_schemas.new_vminstance_response_schema)
             #print server
             #print dir(server)

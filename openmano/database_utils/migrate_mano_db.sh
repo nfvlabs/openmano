@@ -273,8 +273,9 @@ function downgrade_from_2(){
 
 function upgrade_to_3(){
     echo "    upgrade database from version 0.2 to version 0.3"
-    echo "      Change table 'logs'"
+    echo "      Change table 'logs', 'uuids"
     echo "ALTER TABLE logs CHANGE COLUMN related related VARCHAR(36) NOT NULL COMMENT 'Relevant element for the log' AFTER nfvo_tenant_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE uuids CHANGE COLUMN used_at used_at VARCHAR(36) NULL DEFAULT NULL COMMENT 'Table that uses this UUID' AFTER created_at;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "      Add column created to table 'datacenters_images' and 'datacenters_flavors'"
     for table in datacenters_images datacenters_flavors
     do
@@ -282,6 +283,8 @@ function upgrade_to_3(){
             COMMENT 'Indicates if it has been created by openmano, or already existed' AFTER vim_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     done
     echo "ALTER TABLE images CHANGE COLUMN metadata metadata VARCHAR(2000) NULL DEFAULT NULL AFTER description;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Allow null to column 'vim_interface_id' in 'instance_interfaces'"
+    echo "ALTER TABLE instance_interfaces CHANGE COLUMN vim_interface_id vim_interface_id VARCHAR(36) NULL DEFAULT NULL COMMENT 'vim identity for that interface' AFTER interface_id; " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "      Add column config to table 'datacenters'"
     echo "ALTER TABLE datacenters ADD COLUMN config VARCHAR(4000) NULL DEFAULT NULL COMMENT 'extra config information in json' AFTER vim_url_admin;
 	" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
@@ -305,14 +308,17 @@ function upgrade_to_3(){
 
 function downgrade_from_3(){
     echo "    downgrade database from version 0.3 to version 0.2"
-    echo "      Change back table 'logs'"
+    echo "      Change back table 'logs', 'uuids'"
     echo "ALTER TABLE logs CHANGE COLUMN related related ENUM('nfvo_tenants','datacenters','vim_tenants','tenants_datacenters','vnfs','vms','interfaces','nets','scenarios','sce_vnfs','sce_interfaces','sce_nets','instance_scenarios','instance_vnfs','instance_vms','instance_nets','instance_interfaces') NOT NULL COMMENT 'Relevant element for the log' AFTER nfvo_tenant_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE uuids CHANGE COLUMN used_at used_at ENUM('nfvo_tenants','datacenters','vim_tenants','vnfs','vms','interfaces','nets','scenarios','sce_vnfs','sce_interfaces','sce_nets','instance_scenarios','instance_vnfs','instance_vms','instance_nets','instance_interfaces') NULL DEFAULT NULL COMMENT 'Table that uses this UUID' AFTER created_at;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "      Delete column created from table 'datacenters_images' and 'datacenters_flavors'"
     for table in datacenters_images datacenters_flavors
     do
         echo "ALTER TABLE $table DROP COLUMN created;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     done
     echo "ALTER TABLE images CHANGE COLUMN metadata metadata VARCHAR(400) NULL DEFAULT NULL AFTER description;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Deny back null to column 'vim_interface_id' in 'instance_interfaces'"
+    echo "ALTER TABLE instance_interfaces CHANGE COLUMN vim_interface_id vim_interface_id VARCHAR(36) NOT NULL COMMENT 'vim identity for that interface' AFTER interface_id; " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "       Delete column config to table 'datacenters'"
     echo "ALTER TABLE datacenters DROP COLUMN config;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "       Delete column datacenter_id to table 'vim_tenants'"

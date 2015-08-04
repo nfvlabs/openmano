@@ -55,6 +55,7 @@ vnf:
         #     version: "10002|12001|2.6.32-358.el6.x86_64"
         # vcpus: 1          # Only for traditional cloud VMs. Number of virtual CPUs (oversubscription is allowed).
         # ram: 1024         # Only for traditional cloud VMs. Memory in MBytes (not from hugepages, oversubscription is allowed)
+        # disk: 10          # disk size in GiB, by default 1
         numas: 
         -   paired-threads: 5          # "cores", "paired-threads", "threads"
             paired-threads-id: [ [0,1], [2,3], [4,5], [6,7], [8,9] ] # By default follows incremental order
@@ -113,6 +114,7 @@ vnf:
         #     version: "10002|12001|2.6.32-358.el6.x86_64"
         # vcpus: 1          # Only for traditional cloud VMs. Number of virtual CPUs (oversubscription is allowed).
         # ram: 1024         # Only for traditional cloud VMs. Memory in MBytes (not from hugepages, oversubscription is allowed)
+        # disk: 10          # disk size in GiB, by default 1
         numas:
         -   paired-threads: 5          # "cores", "paired-threads", "threads"
             paired-threads-id: [ [0,1], [2,3], [4,5], [6,7], [8,9] ] # By default follows incremental order

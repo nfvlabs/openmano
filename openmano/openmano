@@ -175,13 +175,17 @@ def vnf_create(args):
             if args.description:
                 myvnf['vnf']['description'] = args.description
             if args.image_path:
-                myvnf['vnf']['VNFC'][0]['VNFC image']=args.image_path
+                index=0
+                for image_path_ in args.image_path.split(","):
+                    print "image-path", image_path_
+                    myvnf['vnf']['VNFC'][index]['VNFC image']=image_path_
+                    index=index+1
         except (KeyError, TypeError), e:
             if str(e)=='vnf':           error_pos= "missing field 'vnf'"
             elif str(e)=='name':        error_pos= "missing field  'vnf':'name'"
             elif str(e)=='description': error_pos= "missing field  'vnf':'description'"
             elif str(e)=='VNFC':        error_pos= "missing field  'vnf':'VNFC'"
-            elif str(e)=='0':           error_pos= "field  'vnf':'VNFC' must be an array"
+            elif str(e)==str(index):    error_pos= "field  'vnf':'VNFC' must be an array"
             elif str(e)=='VNFC image':  error_pos= "missing field 'vnf':'VNFC'['VNFC image']"
             else:                       error_pos="wrong format"
             print "Wrong VNF descriptor: " + error_pos
