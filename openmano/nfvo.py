@@ -1122,7 +1122,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             print "interfaces", json.dumps(vm['interfaces'], indent=4)
             print ">>>>>>>>>>>>>>>>>>>>>>>>>>>"
             result, vm_id = myvim.new_tenant_vminstance(myVMDict['name'],myVMDict['description'],myVMDict.get('start', None),
-                    myVMDict['imageRef'],myVMDict['flavorRef'],myVMDict['networks'],vm['interfaces'])
+                    myVMDict['imageRef'],myVMDict['flavorRef'],myVMDict['networks'])
             if result < 0:
                 error_text = "Error creating vm instance: %s." % vm_id
                 _, message = rollback(mydb, vims, rollbackList)
@@ -1557,14 +1557,14 @@ def datacenter_action(mydb, tenant_id, datacenter, action_dict):
     myvim=vims[datacenter_id]
 
     if 'net-update' in action_dict:
-        result, content = myvim.get_tenant_network(None, {'shared': True, 'admin_state_up': True, 'status': 'ACTIVE'})
+        result, content = myvim.get_network_list(filter_dict={'shared': True, 'admin_state_up': True, 'status': 'ACTIVE'})
         print content
         if result < 0:
-            print " Not possible to get_tenant_network from VIM: %s " % (content)
+            print " Not possible to get_network_list from VIM: %s " % (content)
             return -HTTP_Internal_Server_Error, content
         #update nets Change from VIM format to NFVO format
         net_list=[]
-        for net in content['networks']:
+        for net in content:
             net_nfvo={'datacenter_id': datacenter_id}
             net_nfvo['name']       = net['name']
             #net_nfvo['description']= net['name']

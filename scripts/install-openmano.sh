@@ -159,6 +159,9 @@ echo '
 #The only way to install python-bottle on Centos7 is with easy_install or pip
 [ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && easy_install -U bottle
 
+#install openstack client needed for using openstack as a VIM
+[ "$_DISTRO" == "Ubuntu" ] && install_packets "python-novaclient python-keystoneclient python-glanceclient python-neutronclient"
+[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && install_packets "python-devel" && easy_install python-novaclient python-keystoneclient python-glanceclient python-neutronclient #TODO revise if gcc python-pip is needed
 
 echo '
 #################################################################

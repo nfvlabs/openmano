@@ -34,7 +34,7 @@ import requests
 import json
 from utils import auxiliary_functions as af
 import openmano_schemas
-from nfvo_db import HTTP_Bad_Request, HTTP_Internal_Server_Error, HTTP_Not_Found, HTTP_Unauthorized
+from nfvo_db import HTTP_Bad_Request, HTTP_Internal_Server_Error, HTTP_Not_Found, HTTP_Unauthorized, HTTP_Conflict
 
 #TODO: Decide if it makes sense to have the methods outside the class as static generic methods
 class vimconnector():
@@ -317,16 +317,22 @@ class vimconnector():
             #print text
             return -vim_response.status_code,text
 
-    def get_tenant_network(self,tenant_id=None, filter_dict={}):
-        '''Obtain tenant networks of VIM'''
-        '''Returns the network list'''
-        print "VIMConnector: Getting tenant network from VIM (tenant: " + str(tenant_id) + "): "
+    def get_network_list(self, filter_dict={}):
+        '''Obtain tenant networks of VIM
+        Filter_dict can be:
+            name: network name
+            id: network uuid
+            shared: boolean
+            tenant_id: tenant
+            admin_state_up: boolean
+            status: 'ACTIVE'
+        Returns the network list of dictionaries
+        '''
+        print "VIMConnector.get_network_list: Getting tenant network from VIM (filter: " + str(filter_dict) + "): "
         filterquery=[]
         filterquery_text=''
         for k,v in filter_dict.iteritems():
             filterquery.append(str(k)+'='+str(v))
-        if tenant_id!=None:
-            filterquery.append('tenant_id='+tenant_id)
         if len(filterquery)>0:
             filterquery_text='?'+ '&'.join(filterquery)
         headers_req = {'content-type': 'application/json'}
@@ -334,7 +340,7 @@ class vimconnector():
             print self.url+'/networks'+filterquery_text
             vim_response = requests.get(self.url+'/networks'+filterquery_text, headers = headers_req)
         except requests.exceptions.RequestException, e:
-            print "get_tenant_network Exception: ", e.args
+            print "get_network_list Exception: ", e.args
             return -HTTP_Not_Found, str(e.args[0])
         print vim_response
         #print vim_response.status_code
@@ -343,13 +349,30 @@ class vimconnector():
             #print json.dumps(vim_response.json(), indent=4)
             #TODO: parse input datares,http_content = af.format_in(vim_response, openmano_schemas.new_network_response_schema)
             #print http_content
-            return vim_response.status_code, vim_response.json()
+            return vim_response.status_code, vim_response.json()["networks"]
         else:
             #print vim_response.text
             jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to get tenant network. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
+            text = 'Error in VIM "%s": not possible to get network list. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
+
+    def get_tenant_network(self, net_id, tenant_id=None):
+        '''Obtain tenant networks of VIM'''
+        '''Returns the network information from a network id'''
+        if self.debug:
+            print "VIMconnector.get_tenant_network(): Getting tenant network %s from VIM" % net_id
+        filter_dict={"id": net_id}
+        if tenant_id:
+            filter_dict["tenant_id"] = tenant_id
+        r, net_list = self.get_network_list(filter_dict)
+        if r<0:
+            return r, net_list
+        if len(net_list)==0:
+            return -HTTP_Not_Found, "Network '%s' not found" % net_id
+        elif len(net_list)>1:
+            return -HTTP_Conflict, "Found more than one network with this criteria"
+        return 1, net_list[0]
 
     def delete_tenant_network(self, net_id):
         '''Deletes a tenant network from VIM'''
@@ -545,9 +568,24 @@ class vimconnector():
             #print text
             return -vim_response.status_code,text
 
-    def new_tenant_vminstance(self,name,description,start,image_id,flavor_id,net_list,iface_list=None):
-        '''Adds a VM instance to VIM'''
-        '''Returns the instance identifier'''
+    def new_tenant_vminstance(self,name,description,start,image_id,flavor_id,net_list):
+        '''Adds a VM instance to VIM
+        Params:
+            start: indicates if VM must start or boot in pause mode. Ignored
+            image_id,flavor_id: iamge and flavor uuid
+            net_list: list of interfaces, each one is a dictionary with:
+                name:
+                net_id: network uuid to connect
+                vpci: virtual vcpi to assign
+                model: interface model, virtio, e2000, ...
+                mac_address: 
+                use: 'data', 'bridge',  'mgmt'
+                type: 'virtio', 'PF', 'VF', 'VF not shared'
+                vim_id: filled/added by this function
+                #TODO ip, security groups
+        Returns >=0, the instance identifier
+                <0, error_text
+        '''
         print "VIMConnector: Adding a new VM instance to VIM"
         headers_req = {'content-type': 'application/json'}
         
@@ -649,7 +687,6 @@ class vimconnector():
             #print http_content
             if res:
                 print json.dumps(http_content, indent=4)
-                #insert interface vim id at iface_list
                 return vim_response.status_code,http_content
             else: return -HTTP_Bad_Request,http_content
         else:
@@ -734,30 +771,15 @@ class vimconnector():
         for net_id in netDict:
             print "VIMConnector refresh_tenant_vms_and_nets: Getting tenant network from VIM (tenant: " + str(self.tenant) + "): "
             headers_req = {'content-type': 'application/json'}
-            try:
-                vim_response = requests.get(self.url+'/networks/'+net_id, headers = headers_req)
-            except requests.exceptions.RequestException, e:
-                print "get_tenant_network Exception: ", e.args
-                nets_unrefreshed.append(net_id)
-            #print vim_response
-            #print vim_response.status_code
-            if vim_response.status_code == 200:
-                #print vim_response.json()
-                #print vim_response.status_code
-                #print json.dumps(vim_response.json(), indent=4)
-                http_content=vim_response.json()
-                # OLD:
-                #status = http_content['network']['status']
-                #if netDict[net_id] != status:
-                #    netDict[net_id] = status
-                #    nets_refreshed.append(net_id)
-                # NEW:
-                netDict[net_id] = http_content['network']['status']
+            r,c = self.get_tenant_network(net_id)
+            if r<0:
+                print "VIMconnector refresh_tenant_network. Error getting net_id '%s' status: %s" % (net_id, c)
+                if r==-HTTP_Not_Found:
+                    netDict[net_id] = "DELETED" #TODO check exit status
+                else:
+                    nets_unrefreshed.append(net_id)
             else:
-                #print vim_response.text
-                jsonerror = af.format_jsonerror(vim_response)
-                print 'VIMConnector refresh_tenant_vms_and_nets. Error in VIM "%s": not possible to get tenant network. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
-                nets_unrefreshed.append(net_id)
+                netDict[net_id] = c['status']
 
         #print "Nets refreshed: %s" % str(nets_refreshed)
         

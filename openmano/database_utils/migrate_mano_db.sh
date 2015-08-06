@@ -244,7 +244,7 @@ function upgrade_to_2(){
           ADD CONSTRAINT FK_vms_images  FOREIGN KEY (image_id) REFERENCES  images (uuid),
           ADD CONSTRAINT FK_vms_flavors FOREIGN KEY (flavor_id) REFERENCES flavors (uuid);
          " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
-    echo "INSERT INTO mano_db.schema_version (version_int, version, openmano_ver, comments, date) VALUES (2, '0.2', '0.2.5', 'new tables images,flavors', '2015-07-13');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (2, '0.2', '0.2.5', 'new tables images,flavors', '2015-07-13');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 
 }   
      
@@ -268,7 +268,7 @@ function downgrade_from_2(){
     echo "        delete tables 'datacenter_flavors', 'flavors'"
     echo "DROP TABLE \`datacenters_flavors\`;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "DROP TABLE \`flavors\`;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
-    echo "DELETE FROM mano_db.schema_version WHERE version_int='2';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int='2';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 
 function upgrade_to_3(){
@@ -302,7 +302,7 @@ function upgrade_to_3(){
     echo "ALTER TABLE vim_tenants ADD CONSTRAINT FK_vim_tenants_datacenters FOREIGN KEY (datacenter_id) REFERENCES datacenters (uuid)
 	ON UPDATE CASCADE ON DELETE CASCADE;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 
-    echo "INSERT INTO mano_db.schema_version (version_int, version, openmano_ver, comments, date) VALUES (3, '0.3', '0.3.3', 'alter vim_tenant tables', '2015-07-28');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (3, '0.3', '0.3.3', 'alter vim_tenant tables', '2015-07-28');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 
 
@@ -330,7 +330,7 @@ function downgrade_from_3(){
     echo "ALTER TABLE vim_tenants ALTER vim_tenant_id DROP DEFAULT;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "ALTER TABLE vim_tenants CHANGE COLUMN vim_tenant_id vim_tenant_id VARCHAR(36) NOT NULL COMMENT 'Tenant ID in the VIM DB' AFTER name;"| $DBCMD || ! echo "Warning changing column vim_tenant_id at vim_tenants!"
     echo "ALTER TABLE vim_tenants ADD UNIQUE INDEX vim_tenant_id (vim_tenant_id);" | $DBCMD || ! echo "Warning add unique index vim_tenant_id at vim_tenants!"
-    echo "DELETE FROM mano_db.schema_version WHERE version_int='3';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int='3';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 
 

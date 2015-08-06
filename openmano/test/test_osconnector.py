@@ -249,8 +249,8 @@ if __name__=="__main__":
         name="tos-vm-cloud"
         print ("creating new VM '%s'"%name).ljust(50),
         sys.stdout.flush()
-        result,new_vm1=myvim.new_tenant_vminstance(name, "vm-cloud-description", False,new_image1,new_flavor1,[new_net1] )
-        #["78995d19-d437-4cbe-93e9-ea1662dee8a9"])
+        result,new_vm1=myvim.new_tenant_vminstance(name, "vm-cloud-description", False,new_image1,new_flavor1,
+                                    [{"net_id":new_net1, "type":"virtio"}] )
         if result<0:
             print " Fail"
             print "  VIM response:", new_vm1

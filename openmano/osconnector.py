@@ -28,10 +28,10 @@ __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$22-jun-2014 11:19:29$"
 
 import requests
-import json
+#import json
 from utils import auxiliary_functions as af
 import openmano_schemas
-from nfvo_db import HTTP_Bad_Request, HTTP_Internal_Server_Error, HTTP_Not_Found, HTTP_Unauthorized, HTTP_Conflict
+from nfvo_db import HTTP_Bad_Request, HTTP_Not_Found, HTTP_Unauthorized, HTTP_Conflict, HTTP_Internal_Server_Error
 
 from novaclient import client as nClient, exceptions as nvExceptions
 import keystoneclient.v2_0.client as ksClient
@@ -157,7 +157,8 @@ class osconnector():
             raise KeyError("Invalid key '%s'" %str(index))
      
     def reload_connection(self):
-        #TODO control the timing 
+        '''called before any operation, it check if credentials has changed'''
+        #TODO control the timing and possible token timeout, but it seams that python client does this task for us :-) 
         if self.reload_client:
             self.nova = nClient.Client(2, **self.n_creds)
             self.keystone = ksClient.Client(**self.k_creds)
@@ -168,79 +169,16 @@ class osconnector():
             self.reload_client = False
     
     def new_external_port(self, port_data):
-        #TODO openstack
+        #TODO openstack if needed
         '''Adds a external port to VIM'''
         '''Returns the port identifier'''
-        print "osconnector: Adding a new external port"
-        headers_req = {'content-type': 'application/json'}
-        payload_req = port_data
-        try:
-            vim_response = requests.post(self.url_admin+'/ports', headers = headers_req, data=payload_req)
-        except requests.exceptions.RequestException, e:
-            print "new_external_port Exception: ", e.args
-            return -HTTP_Not_Found, str(e.args[0])
-        print vim_response
-        #print vim_response.status_code
-        if vim_response.status_code == 200:
-        #print vim_response.json()
-        #print json.dumps(vim_response.json(), indent=4)
-            res, http_content = af.format_in(vim_response, openmano_schemas.new_port_response_schema)
-        #print http_content
-            if res:
-                r = af.remove_extra_items(http_content, openmano_schemas.new_port_response_schema)
-                if r is not None: print "Warning: remove extra items ", r
-                #print http_content
-                port_id = http_content['port']['id']
-                print "Port id: ",port_id
-                return vim_response.status_code,port_id
-            else: return -HTTP_Bad_Request,http_content
-        else:
-            #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to add new external port. HTTP Response: %d. Error: %s' % (self.url_admin, vim_response.status_code, jsonerror)
-            #print text
-            return -vim_response.status_code,text
+        return -HTTP_Internal_Server_Error, "osconnector.new_external_port() not implemented" 
         
     def connect_port_network(self, port_id, network_id, admin=False):
-        #TODO openstack
+        #TODO openstack if needed
         '''Connects a external port to a network'''
         '''Returns status code of the VIM response'''
-        print "osconnector: Connecting external port to network"
-        
-        headers_req = {'content-type': 'application/json'}
-        payload_req = '{"port":{"network_id":"' + network_id + '"}}'
-        if admin:
-            if self.url_admin==None:
-                return -HTTP_Unauthorized, "datacenter cannot contain  admin URL"
-            url= self.url_admin
-        else:
-            url= self.url
-        try:
-            vim_response = requests.put(url +'/ports/'+port_id, headers = headers_req, data=payload_req)
-        except requests.exceptions.RequestException, e:
-            print "connect_port_network Exception: ", e.args
-            return -HTTP_Not_Found, str(e.args[0])
-        print vim_response
-        #print vim_response.status_code
-        if vim_response.status_code == 200:
-            #print vim_response.json()
-            #print json.dumps(vim_response.json(), indent=4)
-            res,http_content = af.format_in(vim_response, openmano_schemas.new_port_response_schema)
-            #print http_content
-            if res:
-                r = af.remove_extra_items(http_content, openmano_schemas.new_port_response_schema)
-                if r is not None: print "Warning: remove extra items ", r
-                #print http_content
-                port_id = http_content['port']['id']
-                print "Port id: ",port_id
-                return vim_response.status_code,port_id
-            else: return -HTTP_Bad_Request,http_content
-        else:
-            print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
-            text = 'Error in VIM "%s": not possible to connect external port to network. HTTP Response: %d. Error: %s' % (self.url_admin, vim_response.status_code, jsonerror)
-            print text
-            return -vim_response.status_code,text
+        return -HTTP_Internal_Server_Error, "osconnector.connect_port_network() not implemented" 
     
     def new_user(self, user_name, user_passwd, tenant_id=None):
         '''Adds a new user to openstack VIM'''
@@ -253,12 +191,12 @@ class osconnector():
             #self.keystone.tenants.add_user(self.k_creds["username"], #role)
             return 1, user.id
         except ksExceptions.ConnectionError, e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except ksExceptions.ClientException, e: #TODO remove
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "new_tenant " + error_text
@@ -274,15 +212,15 @@ class osconnector():
             self.keystone.users.delete(user_id)
             return 1, user_id
         except ksExceptions.ConnectionError, e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except ksExceptions.NotFound, e:
             error_value=-HTTP_Not_Found
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except ksExceptions.ClientException, e: #TODO remove
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "delete_tenant " + error_text
@@ -299,12 +237,12 @@ class osconnector():
             #self.keystone.tenants.add_user(self.k_creds["username"], #role)
             return 1, tenant.id
         except ksExceptions.ConnectionError, e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except ksExceptions.ClientException, e: #TODO remove
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "new_tenant " + error_text
@@ -321,20 +259,27 @@ class osconnector():
             #self.keystone.tenants.add_user(self.k_creds["username"], #role)
             return 1, tenant_id
         except ksExceptions.ConnectionError, e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except ksExceptions.ClientException, e: #TODO remove
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "delete_tenant " + error_text
         return error_value, error_text
 
-    def __net_os2mano(self, net_list):
-        '''Transform the net openstack format to mano format'''
-        for net in net_list:
+    def __net_os2mano(self, net_list_dict):
+        '''Transform the net openstack format to mano format
+        net_list_dict can be a list of dict or a single dict'''
+        if type(net_list_dict) is dict:
+            net_list_=(net_list_dict,)
+        elif type(net_list_dict) is list:
+            net_list_=net_list_dict
+        else:
+            raise TypeError("param net_list_dict must be a list or a dictionary")
+        for net in net_list_:
             if net.get('provider:network_type') == "vlan":
                 net['type']='data'
             else:
@@ -370,40 +315,65 @@ class osconnector():
             self.neutron.create_subnet({"subnet": subnet} )
             return 1, new_net["network"]["id"]
         except neExceptions.ConnectionFailed, e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except (ksExceptions.ClientException, neExceptions.NeutronException), e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
-            print "get_tenant_network " + error_text
+            print "new_tenant_network " + error_text
         return error_value, error_text
 
-    def get_tenant_network(self,tenant_id=None, filter_dict={}):
-        '''Obtain tenant networks of VIM'''
-        '''Returns the network list'''
+    def get_network_list(self, filter_dict={}):
+        '''Obtain tenant networks of VIM
+        Filter_dict can be:
+            name: network name
+            id: network uuid
+            shared: boolean
+            tenant_id: tenant
+            admin_state_up: boolean
+            status: 'ACTIVE'
+        Returns the network list of dictionaries
+        '''
         if self.debug:
-            print "osconnector: Getting tenant network from VIM (tenant: " + str(tenant_id) + "): "
+            print "osconnector.get_network_list(): Getting network from VIM (filter: " + str(filter_dict) + "): "
         try:
             self.reload_connection()
-            if tenant_id:
-                filter_dict["tenant_id"]=tenant_id
-            net_list=self.neutron.list_networks(**filter_dict)
-            self.__net_os2mano(net_list["networks"])
+            net_dict=self.neutron.list_networks(**filter_dict)
+            net_list=net_dict["networks"]
+            self.__net_os2mano(net_list)
             return 1, net_list
         except neClient.exceptions.ConnectionFailed, e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except (ksExceptions.ClientException, neExceptions.NeutronException), e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
-            print "get_tenant_network " + error_text
+            print "get_network_list " + error_text
         return error_value, error_text
+
+    def get_tenant_network(self, net_id, tenant_id=None):
+        '''Obtain tenant networks of VIM'''
+        '''Returns the network information from a network id'''
+        if self.debug:
+            print "osconnector.get_tenant_network(): Getting tenant network %s from VIM" % net_id
+        filter_dict={"id": net_id}
+        if tenant_id:
+            filter_dict["tenant_id"] = tenant_id
+        r, net_list = self.get_network_list(filter_dict)
+        if r<0:
+            return r, net_list
+        if len(net_list)==0:
+            return -HTTP_Not_Found, "Network '%s' not found" % net_id
+        elif len(net_list)>1:
+            return -HTTP_Conflict, "Found more than one network with this criteria"
+        return 1, net_list[0]
+
 
     def delete_tenant_network(self, net_id):
         '''Deletes a tenant network from VIM'''
@@ -422,15 +392,15 @@ class osconnector():
             self.neutron.delete_network(net_id)
             return 1, net_id
         except neClient.exceptions.ConnectionFailed, e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except neExceptions.NetworkNotFoundClient, e:
             error_value=-HTTP_Not_Found
             error_text= str(type(e))[6:-1] + ": "+  str(e.args[0])
         except (ksExceptions.ClientException, neExceptions.NeutronException), e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "delete_tenant_network " + error_text
@@ -504,10 +474,10 @@ class osconnector():
                 break
             #except nvExceptions.BadRequest, e:
             except (ksExceptions.ClientException, nvExceptions.ClientException), e:
-                error_value=-1
+                error_value=-HTTP_Bad_Request
                 error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
-                #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "new_tenant_flavor " + error_text
@@ -530,7 +500,7 @@ class osconnector():
                 break
             #except nvExceptions.BadRequest, e:
             except (ksExceptions.ClientException, nvExceptions.ClientException), e:
-                error_value=-1
+                error_value=-HTTP_Bad_Request
                 error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
         if self.debug:
@@ -597,18 +567,18 @@ class osconnector():
                 error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
             except (HTTPException, gl1Exceptions.HTTPException, gl1Exceptions.CommunicationError), e:
-                error_value=-1
+                error_value=-HTTP_Bad_Request
                 error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 continue
             except IOError, e:  #can not open the file
-                error_value=-1
+                error_value=-HTTP_Bad_Request
                 error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
             except (ksExceptions.ClientException, nvExceptions.ClientException), e:
-                error_value=-1
+                error_value=-HTTP_Bad_Request
                 error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
-                #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "new_tenant_image " + error_text
@@ -631,7 +601,7 @@ class osconnector():
                 break
             #except nvExceptions.BadRequest, e:
             except (ksExceptions.ClientException, nvExceptions.ClientException), e: #TODO remove
-                error_value=-1
+                error_value=-HTTP_Bad_Request
                 error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
         if self.debug:
@@ -639,8 +609,21 @@ class osconnector():
         #if reaching here is because an exception
         return error_value, error_text
         
-    def new_tenant_vminstance(self,name,description,start,image_id,flavor_id,net_list,iface_list=None):
+    def new_tenant_vminstance(self,name,description,start,image_id,flavor_id,net_list):
         '''Adds a VM instance to VIM
+        Params:
+            start: indicates if VM must start or boot in pause mode. Ignored
+            image_id,flavor_id: iamge and flavor uuid
+            net_list: list of interfaces, each one is a dictionary with:
+                name:
+                net_id: network uuid to connect
+                vpci: virtual vcpi to assign, ignored because openstack lack #TODO
+                model: interface model, ignored #TODO
+                mac_address: used for  SR-IOV ifaces #TODO for other types
+                use: 'data', 'bridge',  'mgmt'
+                type: 'virtio', 'PF', 'VF', 'VF not shared'
+                vim_id: filled/added by this function
+                #TODO ip, security groups
         Returns >=0, the instance identifier
                 <0, error_text
         '''
@@ -689,7 +672,7 @@ class osconnector():
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
             error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "get_tenant_vminstance Exception",e, error_text
@@ -708,9 +691,9 @@ class osconnector():
             error_value=-HTTP_Not_Found
             error_text= "vm instance %s not found" % vm_id
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "get_tenant_vminstance " + error_text
@@ -731,9 +714,9 @@ class osconnector():
             error_value=-HTTP_Not_Found
             error_text= (str(e) if len(e.args)==0 else str(e.args[0]))
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "get_tenant_vminstance " + error_text
@@ -774,9 +757,11 @@ class osconnector():
                 print "osconnector refresh_tenant_network. Error getting net_id '%s' status: %s" % (net_id, c)
                 if r==-HTTP_Not_Found:
                     netDict[net_id] = "DELETED" #TODO check exit status
+                else:
+                    nets_unrefreshed.append(net_id)
             else:
                 try:
-                    netDict[net_id] = netStatus2manoFormat[ c['network']['status'] ]
+                    netDict[net_id] = netStatus2manoFormat[ c['status'] ]
                 except KeyError, e:
                     print "osconnector refresh_tenant_elements KeyError %s getting vm_id '%s' status  %s" % (str(e), vm_id, c['network']['status'])
                     nets_unrefreshed.append(net_id)
@@ -836,9 +821,9 @@ class osconnector():
             error_value=-HTTP_Not_Found
             error_text= (str(e) if len(e.args)==0 else str(e.args[0]))
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "action_tenant_vminstance " + error_text
@@ -860,9 +845,9 @@ class osconnector():
             error_value=-HTTP_Not_Found
             error_text= (str(e) if len(e.args)==0 else str(e.args[0]))
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "get_hosts_info " + error_text
@@ -889,9 +874,9 @@ class osconnector():
             error_value=-HTTP_Not_Found
             error_text= (str(e) if len(e.args)==0 else str(e.args[0]))
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-            #raise e
+        #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
             print "get_hosts " + error_text
@@ -912,7 +897,7 @@ class osconnector():
                     return 1, image.id
             return 0, "image with location '%s' not found" % path
         except (ksExceptions.ClientException, nvExceptions.ClientException), e: #TODO remove
-            error_value=-1
+            error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         if self.debug:
             print "get_image_id_from_path " + error_text

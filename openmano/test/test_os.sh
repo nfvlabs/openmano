@@ -22,19 +22,29 @@
 ##
 
 #This script can be used as a basic test of openmano deployment over openstack.
-#stopping on an error
-#WARNING: It destroy the database content
+#in order to use you need to set the OS_XXXX bash variables with openstack values
+#    OS_USERNAME     e.g.: admin
+#    OS_PASSWORD     
+#    OS_AUTH_URL     url to access openstack VIM e.g. http:/openstack:35357/v2.0
+#    OS_TENANT_NAME  e.g.: admin
+#    OS_CONFIG       e.g.: "'network_vlan_ranges: sriov_net'"
+#    OS_TEST_IMAGE_PATH_LINUX  image path(location) to use by the VNF linux
+#    OS_TEST_IMAGE_PATH_LINUXDATA image path(location) to use by the VNF dataplaneVNF_2VMs and dataplaneVNF3
 
+#it should be used with source. It can modifies /home/$USER/.bashrc appending the variables
+#you need to delete them manually if desired
 
 function usage(){
-    echo -e "usage: ${BASH_SOURCE[0]} [-f] <action>\n  test openmano using a openstack VIM"
-    echo -e "  <action> is a list of the following items (by default 'reset create'"
-    echo -e "    reset     reset the database content"
+    echo -e "usage: ${BASH_SOURCE[0]} [OPTIONS] <action>\n  test openmano using a openstack VIM"
+    echo -e "  <action> is a list of the following items (by default 'reset create')"
+    echo -e "    reset     reset the openmano database content"
     echo -e "    create    creates items at openstack VIM"
     echo -e "    delete    delete created items"
     echo -e "  OPTIONS:"
-    echo -e "    -f --force : does not prompt for confirmation"
-    echo -e "    -h --help  : shows this help"
+    echo -e "    -f --force       does not prompt for confirmation"
+    echo -e "    -h --help        shows this help"
+    echo -e "    --insert-bashrc  insert the created tenant,datacenter variables at"
+    echo -e "                     ~/.bashrc to be available by openmano config"
 }
 
 function is_valid_uuid(){
@@ -68,6 +78,9 @@ do
    elif [[ $param == -f ]] || [[ $param == --force ]]
    then
        force=y
+   elif [[ $param == --insert-bashrc ]]
+   then
+       insert_bashrc=y
    else
        echo "invalid argument '$param'?" &&  usage >&2 && $_exit 1
    fi
@@ -97,25 +110,27 @@ then
 
 elif [[ $action == "delete" ]]
 then
-    echo -n "instance-scenario-deletede   simple-instance   "
     openmano instance-scenario-delete -f simple-instance     || echo "fail" >&2
-    echo
     openmano instance-scenario-delete -f complex2-instance   || echo "fail" >&2
     openmano scenario-delete -f simple       || echo "fail" >&2
     openmano scenario-delete -f complex2     || echo "fail" >&2
     openmano vnf-delete -f linux             || echo "fail" >&2
     openmano vnf-delete -f dataplaneVNF_2VMs || echo "fail" >&2
     openmano vnf-delete -f dataplaneVNF3     || echo "fail" >&2
+    openmano datacenter-detach myos          || echo "fail" >&2
+    openmano datacenter-delete -f myos       || echo "fail" >&2
+    openmano tenant-delete -f mytenant-os    || echo "fail" >&2
 
 elif [[ $action == "create" ]]
 then 
 
-    echo "Creating openmano tenant 'mytenant'"
-    result=`openmano tenant-create mytenant --description=mytenant`
+    echo "Creating openmano tenant 'mytenant-os'"
+    result=`openmano tenant-create mytenant-os --description=mytenant`
     nfvotenant=`echo $result |gawk '{print $1}'`
     #check a valid uuid is obtained
     is_valid_uuid $nfvotenant || ! echo "fail" >&2 || echo $result >$2 || $_exit 1 
     export OPENMANO_TENANT=$nfvotenant
+    [[ $insert_bashrc == y ]] && echo -e "\nexport OPENMANO_TENANT=$nfvotenant"  >> ~/.bashrc
     echo "  $nfvotenant"
 
     echo "Creating datacenter 'myos' in openmano"
@@ -125,6 +140,7 @@ then
     is_valid_uuid $datacenter || ! echo "fail" >&2 || echo $result >$2 || $_exit 1 
     echo "  $datacenter"
     export OPENMANO_DATACENTER=$datacenter
+    [[ $insert_bashrc == y ]] && echo -e "\nexport OPENMANO_DATACENTER=$datacenter"  >> ~/.bashrc
 
     echo "Adding openmano environment variables to ~/.bashrc"
     echo "export OPENMANO_TENANT=$nfvotenant" >> ~/.bashrc
