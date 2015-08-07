@@ -275,7 +275,6 @@ class openflow_thread(threading.Thread):
         # Insert rules so each point can reach other points using dest mac information
         pairs = itertools.product(ports, repeat=2)
         index = 0
-        #rules portA to portB
         for pair in pairs:
             if pair[0]['switch_port'] == pair[1]['switch_port'] and pair[0]['vlan'] == pair[1]['vlan']:
                 continue
@@ -332,6 +331,8 @@ class openflow_thread(threading.Thread):
                 
                 for p2 in ports:
                     if p1 == p2: continue
+                    if p1['switch_port']==p2['switch_port'] and p1['vlan']==p2['vlan']:
+                        continue #same physical port and same vlan, skip
                     if last_vlan != p2['vlan']:
                         if p2['vlan'] is not None:
                             flow['actions'].append('set-vlan-id')
@@ -343,9 +344,11 @@ class openflow_thread(threading.Thread):
 
                     flow['actions'].append('output')
                     flow['actions'].append(str(p2['switch_port']))
-
+                
+                if len(flow['actions'])==0:
+                    continue #nothing to do, skip
                 index += 1
-
+                
                 self.OF_connector.new_flow(flow)
                 INSERT={'name':flow['name'], 'net_id':net_id, 'vlan_id':flow.get('vlan-id',None),
                         'ingress_port':str(p1['switch_port']),
