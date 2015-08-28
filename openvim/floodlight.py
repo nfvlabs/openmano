@@ -110,20 +110,26 @@ class FL_conn():
             return 0, None
         try:
             #We have to build the data for the floodlight call from the generic data
-            sdata = dict(data)
+            sdata = {'active': "true", "priority":data["priority"], "name":data["name"]}
+            if data.get("vlan_id"):
+                sdata["vlan-id"] = data["vlan_id"]
+            if data.get("dst_mac"):
+                sdata["dst-mac"] = data["dst_mac"]
             sdata['switch'] = self.dpid
-            sdata['ingress-port'] = self.pp2ofi[data['ingress-port']]
+            sdata['ingress-port'] = self.pp2ofi[data['ingress_port']]
             sdata['actions'] = ""
 
-            while len(data['actions']) > 0:
-                action = data['actions'].pop(0)
-                if action == 'set-vlan-id':
-                    sdata['actions'] +=  action + '=' + data['actions'].pop(0)
-                elif action == 'output':
-                    sdata['actions'] +=  action + '=' + self.pp2ofi[data['actions'].pop(0)]
-
-                if len(data['actions']) > 0:
+            for action in data['actions']:
+                if len(sdata['actions']) > 0:
                     sdata['actions'] +=  ', '
+                if action[0] == "vlan":
+                    if action[1]==None:
+                        sdata['actions'] += "strip-vlan"
+                    else:
+                        sdata['actions'] += "set-vlan-id=" + str(action[1])
+                elif action[0] == 'out':
+                    sdata['actions'] += "output=" + self.pp2ofi[ actions[1] ]
+
 
             of_response = requests.post(self.url+"/wm/staticflowentrypusher/json",
                                 headers=self.headers, data=json.dumps(sdata) )

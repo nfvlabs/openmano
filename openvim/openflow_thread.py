@@ -201,7 +201,12 @@ class openflow_thread(threading.Thread):
         result, db_of_inserts = self.install_netrules(net_id, ports)
         if result < 0:
             return result, db_of_inserts
+        #insert at database, change actions to human text
         for INSERT in db_of_inserts:
+            action_str_list=[]
+            for action in INSERT['actions']:
+                action_str_list.append( action[0] + "=" + str(action[1]) )
+            INSERT['actions'] = ",".join(action_str_list)
             self.db_lock.acquire()
             result, content = self.db.new_row('of_flows', INSERT)
             self.db_lock.release()
@@ -268,10 +273,17 @@ class openflow_thread(threading.Thread):
         return 0, None  #vlan was changed
         
     def install_netrules(self, net_id, ports):
-        error_text=""
         db_list = []
         nb_rules = len(ports)
 
+        # Check switch_port information is right
+        if not self.test:
+            for port in ports:
+                if str(port['switch_port']) not in self.OF_connector.pp2ofi and not self.test:
+                    error_text= "switch port name '%s' is not valid for the openflow controller" % str(port['switch_port'])
+                    print self.name, ": ERROR " + error_text
+                    return -1, error_text
+            
         # Insert rules so each point can reach other points using dest mac information
         pairs = itertools.product(ports, repeat=2)
         index = 0
@@ -281,50 +293,45 @@ class openflow_thread(threading.Thread):
             flow = {
                 "name": net_id+'_'+str(index),
                 "priority": "1000",
-                "ingress-port": str(pair[0]['switch_port']),
-                "active": "true",
+                'net_id':  net_id,
+                "ingress_port": str(pair[0]['switch_port']),
                 'actions': []
             }
             # allow that one port have no mac
             if pair[1]['mac'] is None or nb_rules==2:  # point to point or nets with 2 elements
                 flow['priority'] = "990"  # less priority
             else:
-                flow['dst-mac'] = str(pair[1]['mac'])
+                flow['dst_mac'] = str(pair[1]['mac'])
                 
             if pair[0]['vlan'] is not None:
-                flow['vlan-id'] = str(pair[0]['vlan'])
+                flow['vlan_id'] = str(pair[0]['vlan'])
 
             if pair[1]['vlan'] is None:
                 if pair[0]['vlan'] is not None:
-                    flow['actions'].append('strip-vlan')
+                    flow['actions'].append( ('vlan',None) )
             else:
-                flow['actions'].append('set-vlan-id')
-                flow['actions'].append(str(pair[1]['vlan']))
-            flow['actions'].append('output')
-            flow['actions'].append(str(pair[1]['switch_port']))
+                flow['actions'].append( ('vlan', pair[1]['vlan']) )
+            flow['actions'].append( ('out', str(pair[1]['switch_port'])) )
 
             index += 1
             
             self.OF_connector.new_flow(flow)
             
-            INSERT={'name':flow['name'], 'net_id':net_id, 'vlan_id':flow.get('vlan-id',None),
-                    'ingress_port':flow('ingress-port'),
-                    'priority':flow['priority'], 'actions':flow['actions'], 'dst_mac': flow.get('dst-mac', None)}
-            db_list.append(INSERT)
+            db_list.append(flow)
         
         # BROADCAST:
         if nb_rules > 2:  # point to multipoint or nets with more than 2 elements
             for p1 in ports:
                 flow = {'priority': '1000',
-                    'dst-mac': 'ff:ff:ff:ff:ff:ff',
-                    'active': "true",
+                    'net_id':  net_id,
+                    'dst_mac': 'ff:ff:ff:ff:ff:ff',
                     'actions': []
                 }
 
-                flow['ingress-port'] = str(p1['switch_port'])
+                flow['ingress_port'] = str(p1['switch_port'])
                 flow['name'] = net_id+'_'+str(index)
                 if p1['vlan'] is not None:
-                    flow['vlan-id'] = str(p1['vlan'])
+                    flow['vlan_id'] = str(p1['vlan'])
                     last_vlan = 0  # indicates that a packet contains a vlan, and the vlan
                 else:
                     last_vlan = None
@@ -334,27 +341,20 @@ class openflow_thread(threading.Thread):
                     if p1['switch_port']==p2['switch_port'] and p1['vlan']==p2['vlan']:
                         continue #same physical port and same vlan, skip
                     if last_vlan != p2['vlan']:
-                        if p2['vlan'] is not None:
-                            flow['actions'].append('set-vlan-id')
-                            flow['actions'].append(str(p2['vlan']))
-                            last_vlan = p2['vlan']
-                        else:
-                            flow['actions'].append('strip-vlan')
-                            last_vlan = None
-
-                    flow['actions'].append('output')
-                    flow['actions'].append(str(p2['switch_port']))
+                        flow['actions'].append( ('vlan', p2['vlan']) ) #p2["vlan"]==None means strip-vlan
+                        last_vlan = p2['vlan']
+                    out= ('out', str(p2['switch_port']))
+                    if out not in flow['actions']:
+                        flow['actions'].append( out )
                 
                 if len(flow['actions'])==0:
                     continue #nothing to do, skip
                 index += 1
                 
+                #insert at openflow
                 self.OF_connector.new_flow(flow)
-                INSERT={'name':flow['name'], 'net_id':net_id, 'vlan_id':flow.get('vlan-id',None),
-                        'ingress_port':str(p1['switch_port']),
-                        'priority':flow['priority'], 'actions':flow['actions'],
-                        'dst_mac': flow.get('dst-mac', None)}
-                db_list.append(INSERT)
+                
+                db_list.append(flow)
             
         return 0, db_list
 

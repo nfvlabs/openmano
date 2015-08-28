@@ -150,16 +150,16 @@ class ODL_conn():
             flow['table_id'] = 0
             flow['priority'] = int(data['priority'])
             flow['match'] = dict()
-            flow['match']['in-port'] = self.pp2ofi[data['ingress-port']]
+            flow['match']['in-port'] = self.pp2ofi[data['ingress_port']]
             if 'dst-mac' in data:
                 flow['match']['ethernet-match'] = dict()
                 flow['match']['ethernet-match']['ethernet-destination'] = dict()
-                flow['match']['ethernet-match']['ethernet-destination']['address'] = data['dst-mac']
-            if 'vlan-id' in data:
+                flow['match']['ethernet-match']['ethernet-destination']['address'] = data['dst_mac']
+            if data.get('vlan_id'):
                 flow['match']['vlan-match'] = dict()
                 flow['match']['vlan-match']['vlan-id'] = dict()
                 flow['match']['vlan-match']['vlan-id']['vlan-id-present'] = True
-                flow['match']['vlan-match']['vlan-id']['vlan-id'] = int(data['vlan-id'])
+                flow['match']['vlan-match']['vlan-id']['vlan-id'] = int(data['vlan_id'])
             flow['instructions'] = dict()
             flow['instructions']['instruction'] = list()
             flow['instructions']['instruction'].append(dict())
@@ -169,30 +169,27 @@ class ODL_conn():
             actions = flow['instructions']['instruction'][0]['apply-actions']['action']
 
             order = 0
-            new_action = None
-            while len(data['actions']) > 0:
-                if new_action is None:
-                    new_action = dict()
-                    new_action['order'] = order
-
-                action = data['actions'].pop(0)
-
-                if  action == 'set-vlan-id':
-                    new_action['set-field'] = dict()
-                    new_action['set-field']['vlan-match'] = dict()
-                    new_action['set-field']['vlan-match']['vlan-id'] = dict()
-                    new_action['set-field']['vlan-match']['vlan-id']['vlan-id-present'] = True
-                    new_action['set-field']['vlan-match']['vlan-id']['vlan-id'] = int(data['actions'].pop(0))
-                elif action == 'output':
+            for action in data['actions']:
+                new_action = { 'order': order }
+                if  action[0] == "vlan":
+                    if action[1] == None:
+                        #TODO strip vlan
+                        pass  #TODO !!!!!!!!!!!!!!!!!!!!!!
+                    else:
+                        new_action['set-field'] = dict()
+                        new_action['set-field']['vlan-match'] = dict()
+                        new_action['set-field']['vlan-match']['vlan-id'] = dict()
+                        new_action['set-field']['vlan-match']['vlan-id']['vlan-id-present'] = True
+                        new_action['set-field']['vlan-match']['vlan-id']['vlan-id'] = int(action[1])
+                elif action[0] == 'out':
                     new_action['output-action'] = dict()
-                    new_action['output-action']['output-node-connector'] = self.pp2ofi[data['actions'].pop(0)]
+                    new_action['output-action']['output-node-connector'] = self.pp2ofi[ action[1] ]
                 else:
                     error_msj = 'Error. Data information used to create a new flow has not the expected format'
                     print error_msj
                     return -1, error_msj
 
                 actions.append(new_action)
-                new_action = None
                 order += 1
 
             print json.dumps(sdata)
