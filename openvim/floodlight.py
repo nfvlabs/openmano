@@ -128,7 +128,7 @@ class FL_conn():
                     else:
                         sdata['actions'] += "set-vlan-id=" + str(action[1])
                 elif action[0] == 'out':
-                    sdata['actions'] += "output=" + self.pp2ofi[ actions[1] ]
+                    sdata['actions'] += "output=" + self.pp2ofi[ action[1] ]
 
 
             of_response = requests.post(self.url+"/wm/staticflowentrypusher/json",

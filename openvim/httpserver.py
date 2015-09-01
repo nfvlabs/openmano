@@ -266,9 +266,6 @@ def format_out(data):
         return json.dumps(data, indent=4) + "\n"
 
 def format_in(schema):
-    print "HEADERS :" + str(bottle.request.headers.items())
-    print "CONTENT :" + str(bottle.request.body)
-    print bottle.request.body
     try:
         format_type = bottle.request.headers.get('Content-Type', 'application/json')
         if 'application/json' in format_type:
@@ -278,6 +275,7 @@ def format_in(schema):
         elif format_type == 'application/xml':
             bottle.abort(501, "Content-Type: application/xml not supported yet.")
         else:
+            print "HTTP HEADERS: " + str(bottle.request.headers.items())
             bottle.abort(HTTP_Not_Acceptable, 'Content-Type ' + str(format_type) + ' not supported.')
             return
         #if client_data == None:
@@ -285,22 +283,25 @@ def format_in(schema):
         #    return
         #check needed_items
 
-        print "input data: ", str(client_data)
+        #print "HTTP input data: ", str(client_data)
         js_v(client_data, schema)
 
         return client_data
     except yaml.YAMLError, exc:
-        print "validate_in error, yaml exception ", exc
+        print "HTTP validate_in error, yaml exception ", exc
+        print "  CONTENT: " + str(bottle.request.body.readlines())
         error_pos = ""
         if hasattr(exc, 'problem_mark'):
             mark = exc.problem_mark
             error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
         bottle.abort(HTTP_Bad_Request, "Content error: Failed to parse Content-Type",  error_pos)
     except ValueError, exc:
-        print "validate_in error, ValueError exception ", exc
+        print "HTTP validate_in error, ValueError exception ", exc
+        print "  CONTENT: " + str(bottle.request.body.readlines())
         bottle.abort(HTTP_Bad_Request, "invalid format: "+str(exc))
     except js_e.ValidationError, exc:
-        print "validate_in error, jsonschema exception ", exc.message, "at", exc.path
+        print "HTTP validate_in error, jsonschema exception ", exc.message, "at", exc.path
+        print "  CONTENT: " + str(bottle.request.body.readlines())
         error_pos = ""
         if len(exc.path)>0: error_pos=" at '" +  ":".join(map(str, exc.path)) + "'"
         bottle.abort(HTTP_Bad_Request, "invalid format"+error_pos+": "+exc.message)
@@ -350,7 +351,7 @@ def filter_query_string(qs, http2db, allowed):
         if k in http2db: 
             select[i] = http2db[k]
     change_keys_http2db(where, http2db)
-    print "filter_query_string", select,where,limit
+    #print "filter_query_string", select,where,limit
     
     return select,where,limit
 
@@ -856,7 +857,6 @@ def http_post_flavors(tenant_id):
         convert_bandwidth(extended_dict)
         if 'devices' in extended_dict: change_keys_http2db(extended_dict['devices'], http2db_flavor)
         http_content['flavor']['extended'] = json.dumps(extended_dict)
-    
     #insert in data base
     result, content = my.db.new_flavor(http_content['flavor'], tenant_id)
     if result >= 0:
