@@ -22,7 +22,7 @@
 ##
 
 # Authors: Antonio Lopez, Pablo Montes, Alfonso Tierno
-# July 2015
+# June 2015
 
 # Personalize RHEL7.1 on compute nodes
 # Prepared to work with the following network card drivers:
@@ -71,11 +71,13 @@ done
 shift $((OPTIND-1))
 
 
+
 if [ $# -lt 1 ]  
 then
   usage
   exit
 fi
+
 
 user_name=$1
 interface=$2
@@ -94,12 +96,16 @@ echo '
 #################################################################'
 
 # Required packages
-yum repolist
-yum check-update
-yum update -y
-yum install -y screen virt-manager ethtool gcc gcc-c++ xorg-x11-xauth xorg-x11-xinit xorg-x11-deprecated-libs libXtst guestfish hwloc libhugetlbfs-utils libguestfs-tools numactl
+apt-get -y update
+#apt-get -y install grub-common screen virt-manager ethtool build-essential x11-common x11-utils x11-apps libguestfs-tools hwloc libguestfs-tools numactl vlan nfs-common nfs-kernel-server
+apt-get -y install grub-common screen virt-manager ethtool build-essential x11-common x11-utils libguestfs-tools hwloc libguestfs-tools numactl vlan nfs-common nfs-kernel-server
+
+echo "Remove unneeded packages....."
+apt-get -y autoremove
 # Selinux management
-yum install -y policycoreutils-python
+#yum install -y policycoreutils-python
+
+
 
 echo '
 #################################################################
@@ -107,15 +113,15 @@ echo '
 #################################################################'
 
 # Add required groups
-groupadd -f nfvgroup
+groupadd -f admin
 groupadd -f libvirt   #for other operating systems may be libvirtd
 
 # Adds user, default password same as name
 if grep -q "^${user_name}:" /etc/passwd
 then 
   #user exist, add to group
-  echo "adding user ${user_name} to groups libvirt,nfvgroup"
-  usermod -a -G libvirt,nfvgroup -g nfvgroup $user_name
+  echo "adding user ${user_name} to groups libvirt,admin"
+  usermod -a -G libvirt,admin -g admin $user_name
 else 
   #create user if it does not exist
   [ -z "$FORCE" ] && read -p "user '${user_name}' does not exist, create (Y/n)" kk
@@ -124,7 +130,7 @@ else
     exit
   fi
   echo "creating and configuring user ${user_name}"
-  useradd -m -G libvirt,nfvgroup -g nfvgroup $user_name       
+  useradd -m -G libvirt,admin -g admin $user_name       
   #Password
   if [ -z "$FORCE" ] 
   then 
@@ -135,11 +141,24 @@ else
   fi
 fi
 
-#Setting default libvirt URI for the user
-echo "Setting default libvirt URI for the user"
-echo "if test -x `which virsh`; then" >> /home/${user_name}/.bash_profile
-echo "  export LIBVIRT_DEFAULT_URI=qemu:///system" >> /home/${user_name}/.bash_profile
-echo "fi" >> /home/${user_name}/.bash_profile
+# Allow admin users to access without password
+if ! grep -q "#openmano" /etc/sudoers
+then
+    cat >> /home/${user_name}/script_visudo.sh << EOL
+#!/bin/bash
+cat \$1 | awk '(\$0~"requiretty"){print "#"\$0}(\$0!~"requiretty"){print \$0}' > tmp
+cat tmp > \$1
+rm tmp
+echo "" >> \$1
+echo "#openmano allow to group admin to grant root privileges without password" >> \$1
+echo "%admin ALL=(ALL) NOPASSWD: ALL" >> \$1
+EOL
+    chmod +x /home/${user_name}/script_visudo.sh
+    echo "allowing admin user to get root privileges withut password"
+    export EDITOR=/home/${user_name}/script_visudo.sh && sudo -E visudo
+    rm -f /home/${user_name}/script_visudo.sh
+fi
+
 
 echo '
 #################################################################
@@ -156,27 +175,6 @@ then
   echo "" >> /etc/fstab
 fi
 
-# Huge pages reservation service
-if ! [ -f /usr/lib/systemd/system/hugetlb-gigantic-pages.service ]
-then
-  echo "configuring huge pages service"
-  cat > /usr/lib/systemd/system/hugetlb-gigantic-pages.service << EOL
-[Unit]
-Description=HugeTLB Gigantic Pages Reservation
-DefaultDependencies=no
-Before=dev-hugepages.mount
-ConditionPathExists=/sys/devices/system/node
-ConditionKernelCommandLine=hugepagesz=1G
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/lib/systemd/hugetlb-reserve-pages
-
-[Install]
-WantedBy=sysinit.target
-EOL
-fi
 # Grub virtualization options:
 
 # Get isolcpus
@@ -188,6 +186,8 @@ isolcpus=`gawk 'BEGIN{pre=-2;}
      pre=pro;}
   END{printf("%s",cpus endrange);}' /proc/cpuinfo`
 
+
+echo "CPUS: $isolcpus"
 
 # Huge pages reservation file: reserving all memory apart from 4GB per NUMA node
 # Get the number of hugepages: all memory but 8GB reserved for the OS
@@ -229,47 +229,37 @@ EOL
 fi
 
 # Prepares the text to add at the end of the grub line, including blacklisting ixgbevf driver in the host
-textokernel="intel_iommu=on default_hugepagesz=1G hugepagesz=1G isolcpus=$isolcpus modprobe.blacklist=ixgbevf modprobe.blacklist=i40evf"  
+memtotal=`grep MemTotal /proc/meminfo | awk '{ print $2 }' `
+hpages=$(( ($memtotal/(1024*1024))-8 ))
+
+memtotal=$((memtotal+1048576-1))   #memory must be ceiled
+memtotal=$((memtotal/1048576))   #from `kB to GBa
+hpages=$((memtotal-6))
+
+
+
+
+echo "------> memtotal: $memtotal"
+
+textokernel="intel_iommu=on default_hugepagesz=1G hugepagesz=1G hugepages=$hpages isolcpus=$isolcpus modprobe.blacklist=ixgbevf modprobe.blacklist=i40evf"  
+
+echo "Text to kernel: $textokernel"
+
 
 # Add text to the kernel line
 if ! grep -q "intel_iommu=on default_hugepagesz=1G hugepagesz=1G" /etc/default/grub
 then
-  echo "adding cmdline ${textokernel}"
-  sed -i "/^GRUB_CMDLINE_LINUX=/s/\"\$/ ${textokernel}\"/" /etc/default/grub
+  echo ">>>>>>>  adding cmdline ${textokernel}"
+  sed -i "/^GRUB_CMDLINE_LINUX_DEFAULT=/s/\"\$/${textokernel}\"/" /etc/default/grub
   # grub2 upgrade
-  grub2-mkconfig -o /boot/grub2/grub.cfg
+  #grub2-mkconfig -o /boot/grub2/grub.cfg
+  update-grub
 fi
 
 echo '
 #################################################################
 #####       OTHER CONFIGURATION                             #####
 #################################################################'
-
-# Disable requiretty
-if ! grep -q "#openmano" /etc/sudoers
-then
-    cat >> /home/${user_name}/script_visudo.sh << EOL
-#!/bin/bash
-cat \$1 | awk '(\$0~"requiretty"){print "#"\$0}(\$0!~"requiretty"){print \$0}' > tmp
-cat tmp > \$1
-rm tmp
-EOL
-    chmod +x /home/${user_name}/script_visudo.sh
-    echo "Disabling requitetty"
-    export EDITOR=/home/${user_name}/script_visudo.sh && sudo -E visudo
-    rm -f /home/${user_name}/script_visudo.sh
-fi
-
-#Configure polkint to run virsh as a normal user
-echo "Configuring polkint to run virsh as a normal user"
-cat >> /etc/polkit-1/localauthority/50-local.d/50-org.libvirt-access.pkla  << EOL
-[libvirt Admin Access]
-Identity=unix-group:libvirt
-Action=org.libvirt.unix.manage
-ResultAny=yes
-ResultInactive=yes
-ResultActive=yes
-EOL
 
 # Links the OpenMANO required folder /opt/VNF/images to /var/lib/libvirt/images. The OS installation
 # should have only a / partition with all possible space available
@@ -278,15 +268,15 @@ echo " link /opt/VNF/images to /var/lib/libvirt/images"
 if [ "$user_name" != "" ]
 then
   #mkdir -p /home/${user_name}/VNF_images
-  #chown -R ${user_name}:nfvgroup /home/${user_name}/VNF_images
+  #chown -R ${user_name}:admin /home/${user_name}/VNF_images
   #chmod go+x $HOME
 
   # The orchestator needs to link the images folder 
   rm -f /opt/VNF/images
   mkdir -p /opt/VNF/
   ln -s /var/lib/libvirt/images /opt/VNF/images
-  chown -R ${user_name}:nfvgroup /opt/VNF
-  chown -R root:nfvgroup /var/lib/libvirt/images
+  chown -R ${user_name}:admin /opt/VNF
+  chown -R root:admin /var/lib/libvirt/images
   chmod g+rwx /var/lib/libvirt/images
 
   # Selinux management
@@ -312,11 +302,11 @@ fi
 chmod o+r /opt/VNF/images/hostinfo.yaml
 
 # deactivate memory overcommit
-echo "deactivate memory overcommit"
-service ksmtuned stop
-service ksm stop
-chkconfig ksmtuned off
-chkconfig ksm off
+#echo "deactivate memory overcommit"
+#service ksmtuned stop
+#service ksm stop
+#chkconfig ksmtuned off
+#chkconfig ksm off
 
 
 # Libvirt options (uncomment the following)
@@ -326,87 +316,50 @@ sed -i 's/#unix_sock_rw_perms = "0770"/unix_sock_rw_perms = "0770"/' /etc/libvir
 sed -i 's/#unix_sock_dir = "\/var\/run\/libvirt"/unix_sock_dir = "\/var\/run\/libvirt"/' /etc/libvirt/libvirtd.conf
 sed -i 's/#auth_unix_rw = "none"/auth_unix_rw = "none"/' /etc/libvirt/libvirtd.conf
 
-#creating the polkit grant access for libvirt user. 
-#This does not work !!!! so commented. No way to get running without uncomented the auth_unix_rw = "none" line
-#
-#cat > /etc/polkit-1/localauthority/50-local.d/50-org.example-libvirt-remote-access.pkla << EOL
-#[libvirt Management Access]
-# Identity=unix-user:n2;unix-user:kk
-# Action=org.libvirt.unix.manage
-# ResultAny=yes
-# ResultInactive=yes
-# ResultActive=yes
-#EOL
-
-# Configuration change of qemu for the numatune bug issue
-# RHEL7.1: for this version should not be necesary - to revise
-#if ! grep -q "cgroup_controllers = [ \"cpu\", \"devices\", \"memory\", \"blkio\", \"cpuacct\" ]" /etc/libvirt/qemu.conf
-#then
-#cat /etc/libvirt/qemu.conf | awk '{print $0}($0~"#cgroup_controllers"){print "cgroup_controllers = [ \"cpu\", \"devices\", \"memory\", \"blkio\", \"cpuacct\" ]"}' > tmp
-#mv tmp /etc/libvirt/qemu.conf
-#fi
 
 echo '
 #################################################################
 #####       NETWORK CONFIGURATION                           #####
 #################################################################'
 # Network config (if the second parameter is net)
+echo "Interface ==> $interface"
 if [ -n "$interface" ]
 then
 
-  # Deactivate network manager
-  systemctl stop NetworkManager
-  systemctl disable NetworkManager
 
   # For management and data interfaces
   rm -f /etc/udev/rules.d/pci_config.rules # it will be created to define VFs
 
-  pushd /etc/sysconfig/network-scripts/
 
   # Set ONBOOT=on and MTU=9000 on the interface used for the bridges
   echo "configuring iface $interface"
-  cat ifcfg-$interface | grep -e HWADDR -e UUID > $interface.tmp
-  echo "TYPE=Ethernet
-NAME=$interface
-DEVICE=$interface
-TYPE=Ethernet
-ONBOOT=yes
-NM_CONTROLLED=no
-MTU=9000
-BOOTPROTO=none
-IPV6INIT=no" >> $interface.tmp
-    mv $interface.tmp  ifcfg-$interface
 
-  # Management interfaces
-#  integrated_interfaces=""
-#  nb_ifaces=0
-#  for iface in `ifconfig -a | grep ":\ " | cut -f 1 -d":"| grep -v "_" | grep -v "\." | grep -v "lo" | sort`
-#  do 
-#    driver=`ethtool -i $iface| awk '($0~"driver"){print $2}'`
-#    if [ $driver != "ixgbe" ] && [ $driver != "bridge" ]
-#    then
-#      integrated_interfaces="$integrated_interfaces $iface"
-#      nb_ifaces=$((nb_ifaces+1))
-#      eval iface${nb_ifaces}=$iface
-#    fi
-#  done
+#MTU for interfaces and bridges
+MTU=9000
+
+cp /etc/network/interfaces interfaces.tmp
+
 
   #Create infrastructure bridge, normally used for connecting to compute nodes, openflow controller, ...  
-  echo "DEVICE=virbrInf
-TYPE=Bridge
-ONBOOT=yes
-DELAY=0
-NM_CONTROLLED=no
-USERCTL=no" > ifcfg-virbrInf
+
 
     #Create VLAN for infrastructure bridge
-    echo "DEVICE=${interface}.1001
-ONBOOT=yes
-NM_CONTROLLED=no
-USERCTL=no
-VLAN=yes
-BOOTPROTO=none
-BRIDGE=virbrInf" > ifcfg-${interface}.1001
+
+ echo "
+######### CUTLINE #########
+
+auto ${interface}
+iface ${interface} inet static
+	mtu $MTU
+
+auto ${interface}.1001
+iface ${interface}.1001 inet static
+	mtu $MTU
+" >> interfaces.tmp
+
+ echo "ifconfig ${interface} mtu $MTU
+ ifconfig ${interface} up
+" > mtu.tmp
 
 
   #Create bridge interfaces
@@ -416,78 +369,49 @@ BRIDGE=virbrInf" > ifcfg-${interface}.1001
     i2digits=$i
     [ $i -lt 10 ] && i2digits="0$i"
     echo "    virbrMan$i  vlan 20$i2digits"
-    echo "DEVICE=virbrMan$i
-TYPE=Bridge
-ONBOOT=yes
-DELAY=0
-NM_CONTROLLED=no
-USERCTL=no" > ifcfg-virbrMan$i
 
-#Without IP:
-#BOOTPROTO=static
-#IPADDR=10.10.10.$((i+209))
-#NETMASK=255.255.255.0" > ifcfg-virbrMan$i
+    j=$i
 
-    # create the required interfaces to connect the bridges
-    echo "DEVICE=${interface}.20$i2digits
-ONBOOT=yes
-NM_CONTROLLED=no
-USERCTL=no
-VLAN=yes
-BOOTPROTO=none
-BRIDGE=virbrMan$i" > ifcfg-${interface}.20$i2digits
+ echo "
+auto ${interface}.20$i2digits
+iface ${interface}.20$i2digits inet static
+	mtu $MTU
+
+auto virbrMan$j
+iface virbrMan$j inet static
+	bridge_ports ${interface}.20$i2digits
+	mtu $MTU
+" >> interfaces.tmp
+
+ echo "ifconfig ${interface}.20$i2digits mtu $MTU
+ifconfig virbrMan$j mtu $MTU
+ifconfig virbrMan$j up
+" >> mtu.tmp
+
   done
 
-  if [ -n "$ip_iface" ]
-  then
-    echo "configuring iface $iface interface with ip $ip_iface"
-    # Network interfaces
-    # 1Gbps interfaces are configured with ONBOOT=yes and static IP address
-    cat ifcfg-$iface | grep -e HWADDR -e UUID > $iface.tmp
-    echo "TYPE=Ethernet
-NAME=$iface
-DEVICE=$iface
-TYPE=Ethernet
-ONBOOT=yes
-NM_CONTROLLED=no
-IPV6INIT=no" >> $iface.tmp
-    [ $ip_iface = "dhcp" ] && echo -e "BOOTPROTO=dhcp\nDHCP_HOSTNAME=$HOSTNAME" >> $iface.tmp
-    [ $ip_iface != "dhcp" ] && echo -e "BOOTPROTO=static\nIPADDR=${ip_iface}\nNETMASK=255.255.255.0" >> $iface.tmp
-    mv $iface.tmp  ifcfg-$iface
-  fi
+ echo "
+auto em2.1001
+iface em2.1001 inet static
 
-  for iface in `ifconfig -a | grep ": " | cut -f 1 -d":" | grep -v -e "_" -e "\." -e "lo" -e "virbr" -e "tap"`
-  do
-    # 10/40 Gbps interfaces
-    # Intel X520 cards: driver ixgbe
-    # Intel XL710 Fortville cards: driver i40e
-    driver=`ethtool -i $iface| awk '($0~"driver"){print $2}'`
-    if [ "$driver" = "i40e" -o "$driver" = "ixgbe" ]
-    then
-      echo "configuring dataplane iface $iface"
-      
-      # Create 8 SR-IOV per PF by udev rules only for Fortville cards (i40e driver)
-      if [ "$driver" = "i40e" ]
-      then
-      	pci=`ethtool -i $iface | awk '($0~"bus-info"){print $2}'`
-      	echo "ACTION==\"add\", KERNEL==\"$pci\", SUBSYSTEM==\"pci\", RUN+=\"/usr/bin/bash -c 'echo 8 > /sys/bus/pci/devices/$pci/sriov_numvfs'\"" >> /etc/udev/rules.d/pci_config.rules
-      fi
+auto virbrInf
+iface virbrInf inet static
+	bridge_ports em2.1001
+" >> interfaces.tmp
 
-      # Configure PF to boot automatically and to have a big MTU
-      # 10Gbps interfaces are configured with ONBOOT=yes and  MTU=2000
-      cat ifcfg-$iface | grep -e HWADDR -e UUID > $iface.tmp
-      echo "TYPE=Ethernet
-NAME=$iface
-DEVICE=$iface
-ONBOOT=yes
-MTU=9000
-NM_CONTROLLED=no
-IPV6INIT=no
-BOOTPROTO=none" >> $iface.tmp
-      mv $iface.tmp ifcfg-$iface
-    fi
-  done
-  popd
+ echo "ifconfig em2.1001 mtu $MTU
+ifconfig virbrInf mtu $MTU
+ifconfig virbrInf up
+" >> mtu.tmp
+
+if ! grep -q "#### CUTLINE ####" /etc/network/interfaces
+then
+	echo "====== Copying interfaces.tmp to /etc/network/interfaces"
+	cp interfaces.tmp /etc/network/interfaces
+fi
+
+
+  #popd
 fi
 
 
@@ -501,22 +425,48 @@ then
 
 fi
 
-# Executes dracut to load drivers on boot
-echo "Regenerating initramfs"
-dracut --force
+# Set dataplane MTU
+
+echo "sleep 10" >> mtu.tmp
+
+interfaces=`ifconfig -a | grep ^p | cut -d " " -f 1`
+for ph in $interfaces
+do
+        echo "ifconfig $ph mtu $MTU" >> mtu.tmp
+        echo "ifconfig $ph up" >> mtu.tmp
+done
+
+
+
+cp mtu.tmp /etc/setmtu.sh
+chmod +x /etc/setmtu.sh
 
 # To define 8 VFs per PF we do it on rc.local, because the driver needs to be unloaded and loaded again
 #if ! grep -q "NFV" /etc/rc.local
 #then
-#  echo "" >> /etc/rc.local
-#  echo "# NFV" >> /etc/rc.local
-#  echo "modprobe -r ixgbe" >> /etc/rc.local
-#  echo "modprobe ixgbe max_vfs=8" >> /etc/rc.local
-#  echo "" >> /etc/rc.local
+  echo "#!/bin/sh -e
+" > /etc/rc.local
+  echo "# NFV" >> /etc/rc.local
+  echo "modprobe -r ixgbe" >> /etc/rc.local
+  echo "modprobe ixgbe max_vfs=8" >> /etc/rc.local
+  echo "/etc/setmtu.sh" >> /etc/rc.local
+  echo "
+exit 0" >> /etc/rc.local
+  echo "" >> /etc/rc.local
 
-#  chmod +x /etc/rc.d/rc.local
+  chmod +x /etc/rc.d/rc.local
 
 #fi
+
+chmod a+rwx /var/lib/libvirt/images
+mkdir /usr/libexec/
+pushd /usr/libexec/
+ln -s /usr/bin/qemu-system-x86_64 qemu-kvm
+popd
+
+#Deactivating apparmor while looking for a better solution
+/etc/init.d/apparmor stop
+update-rc.d -f apparmor remove
 
 echo 
 echo "Do not forget to create a shared (NFS, Samba, ...) where original virtual machine images are allocated"
@@ -525,4 +475,5 @@ echo "Do not forget to copy the public ssh key into /home/${user_name}/.ssh/auth
 echo
 
 echo "Reboot the system to make the changes effective"
+
 

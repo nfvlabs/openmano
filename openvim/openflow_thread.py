@@ -27,10 +27,10 @@ This thread interacts with a openflow floodligth controller to create dataplane 
 '''
 
 __author__="Pablo Montes, Alfonso Tierno"
-__date__ ="$28-oct-2014 12:07:15$"
+__date__ ="17-jul-2015"
 
 
-import json
+#import json
 import utils.auxiliary_functions as af
 import threading
 import time
@@ -39,96 +39,18 @@ import requests
 import itertools
 
 class openflow_thread(threading.Thread):
-    def __init__(self, of_url, of_dpid, db, db_lock, of_test, pmp_with_same_vlan):
+    def __init__(self, OF_connector, db, db_lock, of_test, pmp_with_same_vlan):
         threading.Thread.__init__(self)
-        
-        self.dpid= str(of_dpid)
+
         self.db = db
         self.pmp_with_same_vlan = pmp_with_same_vlan
         self.name = "openflow"
-        self.url = of_url
         self.test = of_test
         self.db_lock = db_lock
-        
-        self.pp2ofi={}  # Physical Port 2 OpenFlow Index
-        #self.curlPoster=pycurl.Curl()
-        #self.curlGetter=curl.Curl()
-        self.flowsctr=0 # flows counter to generate unique flow names
-        self.headers = {'content-type':'application/json', 'Accept':'application/json'}
-        
+        self.OF_connector = OF_connector
+
         self.queueLock = threading.Lock()
-        self.taskQueue = Queue.Queue(50)
-
-    def get_of_controller_info(self):
-        if self.test:
-            return 0, None
-        try:
-            of_response = requests.get(self.url+"/wm/core/controller/switches/json", headers=self.headers)
-            #print vim_response.status_code
-            if of_response.status_code != 200:
-                print self.name, ": get_of_controller_info:", self.url, of_response
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
-            info = of_response.json()
-            
-            if type(info) != list and type(info) != tuple:
-                return -1, "unexpected openflow response, not a list. Wrong version?"
-            index = -1
-            for i in range(0,len(info)):
-                if "dpid" not in info[0]:
-                    return -1, "unexpected openflow response. Not 'dpdi' in field. Wrong version?"
-                if info[i]["dpid"] == self.dpid:
-                    index = i
-                    break
-            if index == -1:
-                text = "Error "+self.dpid+" not present in controller "+self.url
-                print self.name, ": get_of_controller_info ERROR", text 
-                return -1, text
-            else:
-                for port in info[index]["ports"]:
-                    self.pp2ofi[ str(port["name"]) ] = str(port["portNumber"] )
-            print self.name, ": get_of_controller_info ports:", self.pp2ofi
-            return 0, self.pp2ofi
-        except requests.exceptions.RequestException, e:
-            print self.name, ": get_of_controller_info Exception:", str(e)
-            return -1, str(e)
-        except ValueError, e: # the case that JSON can not be decoded
-            print self.name, ": get_of_controller_info Exception:", str(e)
-            return -1, str(e)
-            
-    def del_flow(self, flow_name):
-        if self.test:
-            print self.name, ": FAKE del_flow", flow_name
-            return 0, None
-        try:
-            of_response = requests.delete(self.url+"/wm/staticflowentrypusher/json",
-                                headers=self.headers, data='{"switch": "'+self.dpid+'","name":"'+flow_name+'"}')
-            print self.name, ": del_flow", flow_name, of_response
-            #print vim_response.status_code
-            if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
-            return 0, None
-
-        except requests.exceptions.RequestException, e:
-            print self.name, ": del_flow", flow_name, "Exception:", str(e)
-            return -1, str(e)
-
-    def new_flow(self, data):
-        if self.test:
-            print self.name, ": FAKE new_flow", data
-            return 0, None
-        try:
-            of_response = requests.post(self.url+"/wm/staticflowentrypusher/json",
-                                headers=self.headers, data=json.dumps(data) )
-            print self.name, ": new_flow():", data, of_response
-            #print vim_response.status_code
-            if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
-            return 0, None
-
-        except requests.exceptions.RequestException, e:
-            print self.name, ": new_flow Exception:", str(e)
-            return -1, str(e)
-
+        self.taskQueue = Queue.Queue(2000)
         
     def insert_task(self, task, *aditional):
         try:
@@ -161,7 +83,7 @@ class openflow_thread(threading.Thread):
                     UPDATE={'status':'ERROR', 'last_error': str(c)}
                 else:
                     UPDATE={'status':'ACTIVE'}
-                self.db.update_rows('nets', UPDATE, WHERE={'uuid':task[1]} )
+                self.db.update_rows('nets', UPDATE, WHERE={'uuid':task[1]})
                 self.db_lock.release()
 
             elif task[0] == 'clear-all':
@@ -175,10 +97,10 @@ class openflow_thread(threading.Thread):
     def terminate(self):
         print self.name, ": exit from openflow_thread"
 
-        
     def update_of_flows(self, net_id):
         self.db_lock.acquire()
-        result, content = self.db.get_table(FROM='nets', SELECT=('type','admin_state_up', 'vlan'),WHERE={'uuid':net_id} )
+        result, content = self.db.get_table(FROM='nets', SELECT=('type','admin_state_up', 'vlan'),
+                                            WHERE={'uuid':net_id} )
         self.db_lock.release()
         if result < 0:
             print self.name, ": update_of_flows() ERROR getting net", content
@@ -202,9 +124,11 @@ class openflow_thread(threading.Thread):
                     print self.name, ": update_of_flows() ERROR getting ports", ports
                     return -1, "ERROR getting ports "+ ports
         
-        #Get the name of flows that will be affected by this NET or net_id==NULL that means net deleted (At DB foreign key: On delete set null)
+        # Get the name of flows that will be affected by this NET or net_id==NULL that means
+        # net deleted (At DB foreign key: On delete set null)
         self.db_lock.acquire()
-        result, flows = self.db.get_table(FROM='of_flows', SELECT=('name','id'),WHERE={'net_id':net_id},WHERE_OR={'net_id':None} )
+        result, flows = self.db.get_table(FROM='of_flows', SELECT=('name','id'),WHERE={'net_id':net_id},
+                                          WHERE_OR={'net_id':None} )
         self.db_lock.release()
         if result < 0:
             print self.name, ": update_of_flows() ERROR getting flows", flows
@@ -213,7 +137,7 @@ class openflow_thread(threading.Thread):
             #delete flows
             for flow in flows:
                 #print self.name, ": update_of_flows() Deleting", flow['name']
-                r,c= self.del_flow(flow['name'])
+                r,c= self.OF_connector.del_flow(flow['name'])
                 self.db_lock.acquire()
                 if r>=0:
                     self.db.delete_row_by_key('of_flows', 'id', flow['id'])
@@ -221,19 +145,20 @@ class openflow_thread(threading.Thread):
                     #keep the flow, but put in actions the error
                     self.db.update_rows('of_flows', {'actions':c}, {'id':flow['id']})
                 self.db_lock.release()
-                    
         
         tagged = None
         if ifaces_nb < 2:
             return 0, 'Success'
         if net['type'] == 'ptp':
             if ifaces_nb > 2:
-                print self.name, 'Error, network '+str(net_id)+' has been defined as ptp but it has '+str(ifaces_nb)+' interfaces.'
-                return -1, 'Error, network '+str(net_id)+' has been defined as ptp but it has '+str(ifaces_nb)+' interfaces.'
+                print self.name, 'Error, network '+str(net_id)+' has been defined as ptp but it has '+\
+                                 str(ifaces_nb)+' interfaces.'
+                return -1, 'Error, network '+str(net_id)+' has been defined as ptp but it has '+\
+                       str(ifaces_nb)+' interfaces.'
         elif net['type'] == 'data':
             if ifaces_nb > 2 and self.pmp_with_same_vlan:
-                #Change vlan in host
-                #check all ports are VLAN (tagged) or none
+                # Change vlan in host
+                # check all ports are VLAN (tagged) or none
                 tagged = ports[0]['vlan']
                 if ports[0]['type']=='external' and ports[0]['vlan'] != None and ports[0]['vlan']!=net['vlan']:
                     text='Error external port connected with different vlan net to a point to multipoint net'
@@ -249,7 +174,7 @@ class openflow_thread(threading.Thread):
                             text='Error external port conected with different vlan net to a point to multipoint net'
                             print text
                             return -1, text
-                #change VLAN of ports to net vlan
+                # change VLAN of ports to net vlan
                 if tagged != None :
                     for port in ports:
                         port_vlan = port['vlan_changed'] if port['vlan_changed']!=None else port['vlan']
@@ -257,12 +182,14 @@ class openflow_thread(threading.Thread):
                             result, content = self.change_vlan(port['uuid'], net['vlan'])
                             if result < 0:
                                 return result, content
-                            port['vlan'] = net['vlan']
+                            port_vlan = net['vlan']
+                        port['vlan']=port_vlan
             
         else:
             return -1, 'Only ptp and data networks are supported for openflow'
 
-        #ensure SRIOV ports are in the right VLAN, They can have a different VLAN if previosly it is attached to a pmp VLAN
+        # ensure SRIOV ports are in the right VLAN, They can have a different VLAN if previosly
+        # it is attached to a pmp VLAN
         if tagged == None:
             for port in ports:
                 if port['vlan_changed'] != None and port['vlan'] != port['vlan_changed']:
@@ -270,11 +197,16 @@ class openflow_thread(threading.Thread):
                     if result < 0:
                         return result, content
             
-        #launch to openflow
+        # launch to openflow
         result, db_of_inserts = self.install_netrules(net_id, ports)
         if result < 0:
             return result, db_of_inserts
+        #insert at database, change actions to human text
         for INSERT in db_of_inserts:
+            action_str_list=[]
+            for action in INSERT['actions']:
+                action_str_list.append( action[0] + "=" + str(action[1]) )
+            INSERT['actions'] = ",".join(action_str_list)
             self.db_lock.acquire()
             result, content = self.db.new_row('of_flows', INSERT)
             self.db_lock.release()
@@ -284,14 +216,10 @@ class openflow_thread(threading.Thread):
         
         return 0, 'Success'
 
-
     def clear_all_flows(self):
         try:
             if not self.test:
-                of_response = requests.get(self.url+"/wm/staticflowentrypusher/clear/"+str(self.dpid)+"/json")
-                print self.name, ": clear_all_flows:", of_response
-                if of_response.status_code != 200:
-                    raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+                self.OF_connector.clear_all_flows()
             #remove from database
             self.db_lock.acquire()
             self.db.delete_row_by_key('of_flows', None, None) #this will delete all lines
@@ -300,16 +228,17 @@ class openflow_thread(threading.Thread):
         except requests.exceptions.RequestException, e:
             print self.name, ": clear_all_flows Exception:", str(e)
             return -1, str(e)
-    
-    
+
     def change_vlan(self, uuid, net_vlan):
         if self.test:
             return 0, None
         '''Change vlan in server'''
         self.db_lock.acquire()
         result, content = self.db.get_table(
-                FROM='( resources_port as rp join resources_port as rp2 on rp.root_id=rp2.id join numas on rp.numa_id=numas.id) join hosts on numas.host_id=hosts.uuid', 
-                SELECT=('hosts.ip_name', 'hosts.user', 'hosts.password', 'rp.source_name', 'rp2.source_name as parent_source_name', 'rp.id'),
+                FROM='( resources_port as rp join resources_port as rp2 on rp.root_id=rp2.id join numas on '
+                     'rp.numa_id=numas.id) join hosts on numas.host_id=hosts.uuid',
+                SELECT=('hosts.ip_name', 'hosts.user', 'hosts.password', 'rp.source_name',
+                        'rp2.source_name as parent_source_name', 'rp.id'),
                 WHERE={'rp.port_id':uuid}
             )
         self.db_lock.release()
@@ -344,100 +273,88 @@ class openflow_thread(threading.Thread):
         return 0, None  #vlan was changed
         
     def install_netrules(self, net_id, ports):
-        error_text=""
         db_list = []
         nb_rules = len(ports)
 
-        #Insert rules so each point can reach other points using dest mac information
+        # Check switch_port information is right
+        if not self.test:
+            for port in ports:
+                if str(port['switch_port']) not in self.OF_connector.pp2ofi and not self.test:
+                    error_text= "switch port name '%s' is not valid for the openflow controller" % str(port['switch_port'])
+                    print self.name, ": ERROR " + error_text
+                    return -1, error_text
+            
+        # Insert rules so each point can reach other points using dest mac information
         pairs = itertools.product(ports, repeat=2)
         index = 0
         for pair in pairs:
-            if pair[0]['switch_port'] == pair[1]['switch_port']:
+            if pair[0]['switch_port'] == pair[1]['switch_port'] and pair[0]['vlan'] == pair[1]['vlan']:
                 continue
-            if str(pair[0]['switch_port']) not in self.pp2ofi and not self.test:
-                error_text= "switch port name '%s' is not valid" % str(pair[0]['switch_port'])
-                print self.name, ": ERROR " + error_text
-                return -1, error_text
-            if str(pair[1]['switch_port']) not in self.pp2ofi and not self.test:
-                error_text= "switch port name '%s' is not valid" % str(pair[1]['switch_port'])
-                print self.name, ": ERROR " + error_text
-                return -1, error_text
             flow = {
-                'switch':self.dpid,
                 "name": net_id+'_'+str(index),
-                "priority":"1000",
-                "ingress-port": self.pp2ofi[str(pair[0]['switch_port'])] if not self.test else str(pair[0]['switch_port']),
-                "active":"true",
-                'actions':''
+                "priority": "1000",
+                'net_id':  net_id,
+                "ingress_port": str(pair[0]['switch_port']),
+                'actions': []
             }
-            #allow that one port have no mac
-            if pair[1]['mac'] is None or nb_rules==2: #point to point or nets with 2 elements
-                flow['priority'] = "990" #less priority
+            # allow that one port have no mac
+            if pair[1]['mac'] is None or nb_rules==2:  # point to point or nets with 2 elements
+                flow['priority'] = "990"  # less priority
             else:
-                flow['dst-mac'] = str(pair[1]['mac'])
+                flow['dst_mac'] = str(pair[1]['mac'])
                 
-                
-            if pair[0]['vlan'] != None:
-                flow['vlan-id'] = str(pair[0]['vlan'])
+            if pair[0]['vlan'] is not None:
+                flow['vlan_id'] = str(pair[0]['vlan'])
 
-            if pair[1]['vlan'] == None:
-                if pair[0]['vlan'] != None:
-                    flow['actions'] = 'strip-vlan,'
+            if pair[1]['vlan'] is None:
+                if pair[0]['vlan'] is not None:
+                    flow['actions'].append( ('vlan',None) )
             else:
-                flow['actions'] = 'set-vlan-id='+str(pair[1]['vlan'])+','
-            flow['actions'] += 'output='+  ( self.pp2ofi[str(pair[1]['switch_port'])]  if not self.test else str(pair[1]['switch_port']) )
+                flow['actions'].append( ('vlan', pair[1]['vlan']) )
+            flow['actions'].append( ('out', str(pair[1]['switch_port'])) )
 
             index += 1
             
-            self.new_flow(flow)
+            self.OF_connector.new_flow(flow)
             
-            INSERT={'name':flow['name'], 'net_id':net_id, 'vlan_id':flow.get('vlan-id',None), 'ingress_port':str(pair[0]['switch_port']),
-                    'priority':flow['priority'], 'actions':flow['actions'], 'dst_mac': flow.get('dst-mac', None)}
-            db_list.append(INSERT)
+            db_list.append(flow)
         
-        #BROADCAST:
-        if nb_rules > 2: #point to multipoint or nets with more than 2 elements
+        # BROADCAST:
+        if nb_rules > 2:  # point to multipoint or nets with more than 2 elements
             for p1 in ports:
-                flow = {
-                        'switch':self.dpid,
-                        "priority":"1000",
-                        'dst-mac': 'ff:ff:ff:ff:ff:ff',
-                        "active":"true",
-                    }
-                actions=''
-                flow['ingress-port'] = self.pp2ofi[str(p1['switch_port'])] if not self.test else str(p1['switch_port'])
+                flow = {'priority': '1000',
+                    'net_id':  net_id,
+                    'dst_mac': 'ff:ff:ff:ff:ff:ff',
+                    'actions': []
+                }
+
+                flow['ingress_port'] = str(p1['switch_port'])
                 flow['name'] = net_id+'_'+str(index)
-                if p1['vlan'] != None:
-                    flow['vlan-id'] = str(p1['vlan'])
-                    last_vlan=0 #indicates that a packet contains a vlan, and the vlan
+                if p1['vlan'] is not None:
+                    flow['vlan_id'] = str(p1['vlan'])
+                    last_vlan = 0  # indicates that a packet contains a vlan, and the vlan
                 else:
-                    last_vlan=None
+                    last_vlan = None
                 
                 for p2 in ports:
                     if p1 == p2: continue
+                    if p1['switch_port']==p2['switch_port'] and p1['vlan']==p2['vlan']:
+                        continue #same physical port and same vlan, skip
                     if last_vlan != p2['vlan']:
-                        if p2['vlan'] != None:
-                            actions += 'set-vlan-id='+str(p2['vlan'])+','
-                            last_vlan = p2['vlan']
-                        else:
-                            actions += 'strip-vlan,'
-                            last_vlan = None
-                    actions += 'output=' + (self.pp2ofi[str(p2['switch_port'])] if not self.test else str(p2['switch_port']) )  +','
-
+                        flow['actions'].append( ('vlan', p2['vlan']) ) #p2["vlan"]==None means strip-vlan
+                        last_vlan = p2['vlan']
+                    out= ('out', str(p2['switch_port']))
+                    if out not in flow['actions']:
+                        flow['actions'].append( out )
+                
+                if len(flow['actions'])==0:
+                    continue #nothing to do, skip
                 index += 1
                 
-                #remove last coma
-                actions = actions[:-1]
+                #insert at openflow
+                self.OF_connector.new_flow(flow)
                 
-                flow['actions'] = actions
-
-                self.new_flow(flow)
-                INSERT={'name':flow['name'], 'net_id':net_id, 'vlan_id':flow.get('vlan-id',None), 'ingress_port':str(p1['switch_port']),
-                            'priority':flow['priority'], 'actions':flow['actions'], 'dst_mac': flow.get('dst-mac', None)}
-                db_list.append(INSERT)
+                db_list.append(flow)
             
         return 0, db_list
-            
 
-
-        

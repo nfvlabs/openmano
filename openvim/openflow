@@ -1,0 +1,187 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# PYTHON_ARGCOMPLETE_OK
+
+##
+# Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
+# This file is part of openmano
+# All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# For those usages not covered by the Apache License, Version 2.0 please
+# contact with: nfvlabs@tid.es
+##
+
+'''
+This program is useful to interact directly with Openflow Controllers
+to clear rules, add and delete rules, list rules, etc.
+'''
+
+__author__="ggdb"
+__date__ ="$09-oct-2014 09:09:48$"
+
+#import time
+import os
+import argparse
+import argcomplete
+import sys
+from floodlight_ofconnector import floodlight_ofconnector
+#import floodlight_ofconnector
+
+def of_switches(args):
+    ofconnector.print_of_switches(args.verbose)
+    return
+
+def of_list(args):
+    ofconnector.print_of_list(args.verbose)
+    return
+
+def of_clear(args):
+    if not args.force:
+        r = raw_input("Clear all Openflow rules (y/N)? ")
+        if  not (len(r)>0  and r[0].lower()=="y"):
+            return
+    ofconnector.of_clear()
+    return
+
+def of_dump(args):
+    ofconnector.print_of_dump()
+    return
+
+def of_reinstall(args):
+    URLrequest = "http://%s:%s/openvim/networks/all/openflow" %(vim_host, vim_admin_port)
+    openvim_response = requests.put(URLrequest)
+    print openvim_response
+    print openvim_response.text
+    return
+
+def of_install(args):
+    ofconnector.of_install(args.file)
+    return
+
+def of_add(args):
+    ofconnector.of_add(args.name, args.inport, args.outport, args.verbose, args.priority,
+                       args.matchmac, args.matchvlan, args.stripvlan, args.setvlan)
+    return
+
+def of_delete(args):
+    if not args.force:
+        r = raw_input("Clear rule %s (y/N)? " %(args.name))
+        if  not (len(r)>0  and r[0].lower()=="y"):
+            return
+    ofcontroller.of_delete(args.name,args.verbose)
+    return
+
+def config(args):
+    print "OPENVIM_HOST: %s" %(vim_host)
+    print "OPENVIM_ADMIN_PORT: %s" %(vim_admin_port)
+    print "OF_CONTROLLER_TYPE: %s" %(of_controller_type)
+    print "OF_CONTROLLER_VERSION: %s" %(of_controller_version)
+    print "OF_CONTROLLER_IP: %s" %(of_controller_ip)
+    print "OF_CONTROLLER_PORT: %s" %(of_controller_port)
+    print "OF_CONTROLLER_DPID: %s" %(of_controller_dpid)
+    return
+
+version="0.5"
+global vim_host
+global vim_admin_port
+global of_controller_type
+global of_controller_version
+global of_controller_ip
+global of_controller_port
+global of_controller_dpid
+global ofcontroller
+   
+if __name__=="__main__":
+    #print "test_ofconnector version", version, "Jul 2015"
+    #print "(c) Copyright Telefonica"
+    
+    vim_host = os.getenv('OPENVIM_HOST',"localhost")
+    vim_admin_port = os.getenv('OPENVIM_ADMIN_PORT',"8085")
+    of_controller_type = os.getenv('OF_CONTROLLER_TYPE',"floodlight")
+    of_controller_version = os.getenv('OF_CONTROLLER_VERSION',"0.90")
+    of_controller_ip = os.getenv('OF_CONTROLLER_IP',"localhost")
+    of_controller_port = os.getenv('OF_CONTROLLER_PORT',"7070")
+    of_controller_dpid = os.getenv('OF_CONTROLLER_DPID','00:01:02:03:e4:05:e6:07')
+    
+    main_parser = argparse.ArgumentParser(description='User program to interact with Openflow controller')
+    main_parser.add_argument('--version', action='version', version='%(prog)s ' + version )
+    
+    #main_parser = argparse.ArgumentParser()
+    subparsers = main_parser.add_subparsers(help='commands')
+    
+    config_parser = subparsers.add_parser('config', help="prints configuration values")
+    config_parser.set_defaults(func=config)
+    
+    add_parser = subparsers.add_parser('add', help="adds an openflow rule")
+    add_parser.add_argument('--verbose', '-v', action='count')
+    add_parser.add_argument("name", action="store", help="name of the rule")
+    add_parser.add_argument("inport", action="store", type=int, help="match rule: ingress-port")
+    add_parser.add_argument("outport", action="store", type=int, help="action: egress-port")
+    add_parser.add_argument("--priority", action="store", type=int, help="rule priority")
+    add_parser.add_argument("--matchmac", action="store", help="match rule: mac address")
+    add_parser.add_argument("--matchvlan", action="store", type=int, help="match rule: vlan id")
+    add_parser.add_argument("--stripvlan", action="store_true", help="action: strip vlan")
+    add_parser.add_argument("--setvlan", action="store", type=int, help="action: sets vlan id")
+    add_parser.set_defaults(func=of_add)
+    
+    delete_parser = subparsers.add_parser('delete', help="delete an openflow rule")
+    delete_parser.add_argument('--verbose', '-v', action='count')
+    delete_parser.add_argument("-f", "--force", action="store_true", help="force deletion without asking")
+    delete_parser.add_argument("name", action="store", help="name of the rule to be deleted")
+    delete_parser.set_defaults(func=of_delete)
+    
+    switches_parser = subparsers.add_parser('switches', help="list all switches controlled by the OFC")
+    switches_parser.add_argument('--verbose', '-v', action='count')
+    switches_parser.set_defaults(func=of_switches)
+
+    list_parser = subparsers.add_parser('list', help="list openflow rules")
+    list_parser.add_argument('--verbose', '-v', action='count')
+    list_parser.set_defaults(func=of_list)
+
+    dump_parser = subparsers.add_parser('dump', help="dump openflow rules")
+    dump_parser.set_defaults(func=of_dump)
+    
+    clear_parser = subparsers.add_parser('clear', help="clear all openflow rules")
+    clear_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
+    clear_parser.set_defaults(func=of_clear)
+
+    install_parser = subparsers.add_parser('install', help="install openflow rules from file")
+    install_parser.add_argument("file", action="store", help="file with rules")
+    install_parser.set_defaults(func=of_install)
+
+    reinstall_parser = subparsers.add_parser('reinstall', help="reinstall openflow rules from VIM rules")
+    reinstall_parser.set_defaults(func=of_reinstall)
+
+    argcomplete.autocomplete(main_parser)
+    
+    args = main_parser.parse_args()
+    
+    floodlight_versions = ("0.90", "1.0", "1.1")
+    if of_controller_type == "floodlight" and of_controller_version not in floodlight_versions:
+        print "Wrong Floodlight controller version. Supported versions: %" %str(floodlight_versions)
+        exit()
+    
+    if of_controller_type == "floodlight":
+        ofcontroller = floodlight_ofconnector(of_controller_version, of_controller_ip, of_controller_port, of_controller_dpid)
+        #ofcontroller=floodlight_ofconnector(version=of_controller_version, ip=of_controller_ip,
+        #                                    port=of_controller_port, dpid=of_controller_dpid)
+    else:
+        print "Wrong controller type"
+
+    args.func(args)
+    
+    exit()
+
+

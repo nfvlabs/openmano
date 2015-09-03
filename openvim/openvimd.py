@@ -45,6 +45,8 @@ import os
 from jsonschema import validate as js_v, exceptions as js_e
 import host_thread as ht
 import openflow_thread as oft
+import floodlight as fl_conn
+import ODL as odl_conn
 import threading
 from vim_schema import config_schema
 
@@ -181,14 +183,35 @@ if __name__=="__main__":
         config_dic['db'] = db_of
         config_dic['db_lock'] = db_lock
 
+        # create connector to the openflow controller
+        of_test_mode = False if config_dic['mode']=='normal' or config_dic['mode']=="OF only" else True
+
+        if config_dic['of_controller']=='floodlight':
+            OF_conn = fl_conn.FL_conn(of_url = "http://"+str(config_dic['of_controller_ip']) + ":" +
+                                            str(config_dic['of_controller_port']), of_test = of_test_mode,
+                                            of_dpid=config_dic['of_controller_dpid'])
+        elif config_dic['of_controller']=='opendaylight':
+            of_user = config_dic.get('of_user')
+            of_password = config_dic.get('of_password')
+            if of_user is None or of_password is None:
+                print 'ERROR. When using OpenDayLight as Openflow Controller is compulsory to specify in the ' \
+                      'configuration file the of_user and the of_password '
+                exit()
+
+            OF_conn = odl_conn.ODL_conn(of_url = "http://"+str(config_dic['of_controller_ip']) + ":" +
+                                            str(config_dic['of_controller_port']), of_test = of_test_mode,
+                                            of_dpid=config_dic['of_controller_dpid'], of_user = of_user,
+                                            of_password = of_password)
+        else:
+            print 'ERROR. The Openflow controller specified in the configuration file is not valid. Only valid options ' \
+                  'for OFC are \'floodlight\' and \'opendaylight\''
+            exit()
+
+
     #create openflow thread
-        of_test_mode = False if config_dic['mode']=='normal' else True
-        thread = oft.openflow_thread(of_url = "http://"+str(config_dic['of_controller_ip']) + ":"+ str(config_dic['of_controller_port']),
-                        of_test=of_test_mode,
-                        of_dpid=config_dic['of_controller_dpid'],
-                        db=db_of,  db_lock=db_lock,
+        thread = oft.openflow_thread(OF_conn, of_test=of_test_mode, db=db_of,  db_lock=db_lock,
                         pmp_with_same_vlan=config_dic['of_controller_nets_with_same_vlan'])
-        r,c = thread.get_of_controller_info()
+        r,c = thread.OF_connector.obtain_port_correspondence()
         if r<0:
             print "Error getting openflow information", c
             exit()
@@ -216,7 +239,7 @@ if __name__=="__main__":
     
         
     #Create one thread for each host
-        host_test_mode = True if config_dic['mode']=='test' else False
+        host_test_mode = True if config_dic['mode']=='test' or config_dic['mode']=="OF only" else False
         host_develop_mode = True if config_dic['mode']=='development' else False
         host_develop_bridge_iface = config_dic.get('development_bridge', None)
         config_dic['host_threads'] = {}

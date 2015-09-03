@@ -90,7 +90,7 @@ class host_thread(threading.Thread):
             self.ssh_conn.connect(self.host, username=self.user, timeout=10) #, None)
         except paramiko.ssh_exception.SSHException, e:
             text = e.args[0]
-            print self.name, "': ssh_connect ssh Exception:", text
+            print self.name, ": ssh_connect ssh Exception:", text
         
     def load_localinfo(self):
         if not self.test:
@@ -122,23 +122,23 @@ class host_thread(threading.Thread):
     
             except paramiko.ssh_exception.SSHException, e:
                 text = e.args[0]
-                print self.name, "': load_localinfo ssh Exception:", text
+                print self.name, ": load_localinfo ssh Exception:", text
             except libvirt.libvirtError, e:
                 text = e.get_error_message()
-                print self.name, "': load_localinfo libvirt Exception:", text
+                print self.name, ": load_localinfo libvirt Exception:", text
             except yaml.YAMLError, exc:
                 text = ""
                 if hasattr(exc, 'problem_mark'):
                     mark = exc.problem_mark
                     text = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
-                print self.name, "': load_localinfo yaml format Exception", text
+                print self.name, ": load_localinfo yaml format Exception", text
             except js_e.ValidationError, e:
                 text = ""
                 if len(e.path)>0: text=" at '" + ":".join(map(str, e.path))+"'"
-                print self.name, "': load_localinfo format Exception:", text, e.message 
+                print self.name, ": load_localinfo format Exception:", text, e.message 
             except Exception, e:
                 text = str(e)
-                print self.name, "': load_localinfo Exception:", text
+                print self.name, ": load_localinfo Exception:", text
         
         #not loaded, insert a default data and force saving by activating dirty flag
         self.localinfo = {'files':{}, 'server_files':{} } 
@@ -167,23 +167,23 @@ class host_thread(threading.Thread):
 
         except paramiko.ssh_exception.SSHException, e:
             text = e.args[0]
-            print self.name, "': load_hostinfo ssh Exception:", text
+            print self.name, ": load_hostinfo ssh Exception:", text
         except libvirt.libvirtError, e:
             text = e.get_error_message()
-            print self.name, "': load_hostinfo libvirt Exception:", text
+            print self.name, ": load_hostinfo libvirt Exception:", text
         except yaml.YAMLError, exc:
             text = ""
             if hasattr(exc, 'problem_mark'):
                 mark = exc.problem_mark
                 text = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
-            print self.name, "': load_hostinfo yaml format Exception", text
+            print self.name, ": load_hostinfo yaml format Exception", text
         except js_e.ValidationError, e:
             text = ""
             if len(e.path)>0: text=" at '" + ":".join(map(str, e.path))+"'"
-            print self.name, "': load_hostinfo format Exception:", text, e.message 
+            print self.name, ": load_hostinfo format Exception:", text, e.message 
         except Exception, e:
             text = str(e)
-            print self.name, "': load_hostinfo Exception:", text
+            print self.name, ": load_hostinfo Exception:", text
         
         #not loaded, insert a default data 
         self.hostinfo = None 
@@ -206,21 +206,21 @@ class host_thread(threading.Thread):
     
             except paramiko.ssh_exception.SSHException, e:
                 text = e.args[0]
-                print self.name, "': save_localinfo ssh Exception:", text
+                print self.name, ": save_localinfo ssh Exception:", text
                 if "SSH session not active" in text:
                     self.ssh_connect()
             except libvirt.libvirtError, e:
                 text = e.get_error_message()
-                print self.name, "': save_localinfo libvirt Exception:", text
+                print self.name, ": save_localinfo libvirt Exception:", text
             except yaml.YAMLError, exc:
                 text = ""
                 if hasattr(exc, 'problem_mark'):
                     mark = exc.problem_mark
                     text = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
-                print self.name, "': save_localinfo yaml format Exception", text
+                print self.name, ": save_localinfo yaml format Exception", text
             except Exception, e:
                 text = str(e)
-                print self.name, "': save_localinfo Exception:", text
+                print self.name, ": save_localinfo Exception:", text
 
     def load_servers_from_db(self):
         self.db_lock.acquire()
@@ -344,7 +344,7 @@ class host_thread(threading.Thread):
                 self.ssh_conn.close()
         except Exception, e:
             text = str(e)
-            print self.name, "': terminate Exception:", text
+            print self.name, ": terminate Exception:", text
         print self.name, ": exit from host_thread" 
 
     def get_local_iface_name(self, generic_name):
@@ -673,7 +673,7 @@ class host_thread(threading.Thread):
         content = stdout.read()
         if len(content) == 0:
             error = stderr.read()
-            print self.name, "': get_qemu_info error ", error
+            print self.name, ": get_qemu_info error ", error
             raise paramiko.ssh_exception.SSHException("Error getting qemu_info: " + error)
         else:
             try: 
@@ -683,7 +683,7 @@ class host_thread(threading.Thread):
                 if hasattr(exc, 'problem_mark'):
                     mark = exc.problem_mark
                     text = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
-                print self.name, "': get_qemu_info yaml format Exception", text
+                print self.name, ": get_qemu_info yaml format Exception", text
                 raise paramiko.ssh_exception.SSHException("Error getting qemu_info yaml format" + text)
 
     def qemu_change_backing(self, inc_file, new_backing_file):
@@ -868,15 +868,15 @@ class host_thread(threading.Thread):
 
         except paramiko.ssh_exception.SSHException, e:
             text = e.args[0]
-            print self.name, "': launch_server(",server_id,") ssh Exception:", text
+            print self.name, ": launch_server(%s) ssh Exception: %s" %(server_id, text)
             if "SSH session not active" in text:
                 self.ssh_connect()
         except libvirt.libvirtError, e:
             text = e.get_error_message()
-            print self.name, "': launch_server(",server_id,") libvirt Exception:", text
+            print self.name, ": launch_server(%s) libvirt Exception:"  %(server_id, text)
         except Exception, e:
             text = str(e)
-            print self.name, "': launch_server(",server_id,") Exception:", text
+            print self.name, ": launch_server(%s) Exception:"  %(server_id, text)
         return -1, text
     
     def update_servers_status(self):
