@@ -239,7 +239,9 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
             'ram':flavor_dict.get('ram'),
             'vcpus':flavor_dict.get('vcpus'),
         }
-    if 'extended' in flavor_dict and flavor_dict['extended']!=None:
+    if 'extended' in flavor_dict and flavor_dict['extended']==None:
+        del flavor_dict['extended']
+    if 'extended' in flavor_dict:
         temp_flavor_dict['extended']=json.dumps(flavor_dict['extended'])
 
     #look if flavor exist
@@ -283,6 +285,7 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
     #create flavor at every vim
     if 'uuid' in flavor_dict:
         del flavor_dict['uuid']
+    flavor_vim_id=None
     for vim_id,vim in vims.items():
         #look at database
         res_db,flavor_db = mydb.get_table(FROM="datacenters_flavors", WHERE={'datacenter_id':vim_id, 'flavor_id':flavor_mano_id})
@@ -327,9 +330,11 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
                 flavor_dict["extended"]["devices"][index]['imageRef']=image_vim_id
         if error:
             continue
-        if 'extended' in flavor_dict and flavor_dict['extended']!=None:
-            temp_flavor_dict['extended']=json.dumps(flavor_dict['extended'])       
-            
+        if res_db>0:
+            #TODO check that this vim_id exist in VIM, if not create
+            flavor_vim_id=flavor_db[0]["vim_id"]
+            continue
+        #create flavor at vim
         result, flavor_vim_id = vim.new_tenant_flavor(flavor_dict)
         
         if result < 0:

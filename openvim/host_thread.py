@@ -37,7 +37,7 @@ import Queue
 import paramiko
 from jsonschema import validate as js_v, exceptions as js_e
 import libvirt
-from vim_schema import path_schema, localinfo_schema, hostinfo_schema
+from vim_schema import localinfo_schema, hostinfo_schema
 #import math
 #from logging import Logger
 #import utils.auxiliary_functions as af
@@ -457,7 +457,10 @@ class host_thread(threading.Thread):
             self.tab()+'<apic/>' +\
             self.tab()+'<pae/>'+ \
             self.dec_tab() +'</features>'
-        text += self.tab() + "<cpu mode='host-model'> <topology sockets='1' cores='%d' threads='1' /> </cpu>"% vcpus
+        if windows_os:
+            text += self.tab() + "<cpu mode='host-model'> <topology sockets='1' cores='%d' threads='1' /> </cpu>"% vcpus
+        else:
+            text += self.tab() + "<cpu mode='host-model'></cpu>"
         text += self.tab() + "<clock offset='utc'/>" +\
             self.tab() + "<on_poweroff>preserve</on_poweroff>" + \
             self.tab() + "<on_reboot>restart</on_reboot>" + \
@@ -720,7 +723,7 @@ class host_thread(threading.Thread):
             raise paramiko.ssh_exception.SSHException("Error deleting file: " + error_msg)
 
     def copy_file(self, source, destination, perserve_time=True):
-        command = 'cp '
+        command = 'cp --no-preserve=mode '
         if perserve_time: command += '--preserve=timestamps '
         command +=  source + ' '  + destination
         print self.name, ': command:', command
@@ -1142,31 +1145,42 @@ class host_thread(threading.Thread):
         return 1 
         
     def create_image(self,dom, req):
-        server_id = req['uuid']
-        createImage=req['action']['createImage']
-        file_orig = self.localinfo['server_files'][server_id] [ createImage['source']['image_id'] ] ['source file']
-        if 'path' in req['action']['createImage']:
-            file_dst = req['action']['createImage']['path']
-        else:
-            img_name= createImage['source']['path']
-            index=img_name.rfind('/')
-            file_dst = self.get_notused_filename(img_name[:index+1] + createImage['name'] + '.qcow2')
-              
-        self.copy_file(file_orig, file_dst)
-        qemu_info = self.qemu_get_info(file_orig)
-        if 'backing file' in qemu_info:
-            for k,v in self.localinfo['files'].items():
-                if v==qemu_info['backing file']:
-                    self.qemu_change_backing(file_dst, k)
-                    break
+        for retry in (0,1):
+            try:
+                server_id = req['uuid']
+                createImage=req['action']['createImage']
+                file_orig = self.localinfo['server_files'][server_id] [ createImage['source']['image_id'] ] ['source file']
+                if 'path' in req['action']['createImage']:
+                    file_dst = req['action']['createImage']['path']
+                else:
+                    img_name= createImage['source']['path']
+                    index=img_name.rfind('/')
+                    file_dst = self.get_notused_filename(img_name[:index+1] + createImage['name'] + '.qcow2')
+                      
+                self.copy_file(file_orig, file_dst)
+                qemu_info = self.qemu_get_info(file_orig)
+                if 'backing file' in qemu_info:
+                    for k,v in self.localinfo['files'].items():
+                        if v==qemu_info['backing file']:
+                            self.qemu_change_backing(file_dst, k)
+                            break
+                image_status='ACTIVE'
+            except paramiko.ssh_exception.SSHException, e:
+                image_status='ERROR'
+                error_text = e.args[0]
+                print self.name, "': create_image(",server_id,") ssh Exception:", error_text
+                if "SSH session not active" in error_text and retry==0:
+                    self.ssh_connect()
+            except Exception, e:
+                image_status='ERROR'
+                error_text = str(e)
+                print self.name, "': create_image(",server_id,") Exception:", error_text
         
+                #TODO insert a last_error at database
         self.db_lock.acquire()
-        self.db.update_rows('images', {'status':'ACTIVE', 'progress': 100, 'path':file_dst}, 
+        self.db.update_rows('images', {'status':image_status, 'progress': 100, 'path':file_dst}, 
                 {'uuid':req['new_image']['uuid']}, log=True)
         self.db_lock.release()
-        #print "Haciendose, paciencia. Los clones no dan mas de si"  
-        #todo falta untry catch, y comprobar que esl servidor esta PARADO. Por ejemplo si dom!=None
-
   
 def create_server(server, db, db_lock, only_of_ports):
     #print "server"

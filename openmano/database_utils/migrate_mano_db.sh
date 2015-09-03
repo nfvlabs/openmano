@@ -208,9 +208,9 @@ function upgrade_to_2(){
         COLLATE='utf8_general_ci'
         ENGINE=InnoDB;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "      migrate data from table 'vms' into 'images'"
-    echo "INSERT INTO images (uuid, name, location) SELECT vim_image_id, vim_image_id, image_path FROM vms;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO images (uuid, name, location) SELECT DISTINCT vim_image_id, vim_image_id, image_path FROM vms;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "INSERT INTO datacenters_images (image_id, datacenter_id, vim_id)
-          SELECT vim_image_id, datacenters.uuid, vim_image_id FROM vms JOIN datacenters;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+          SELECT DISTINCT vim_image_id, datacenters.uuid, vim_image_id FROM vms JOIN datacenters;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "      Add table 'flavors' and 'datacenter_flavors'"
     echo "CREATE TABLE flavors (
 	uuid VARCHAR(36) NOT NULL,
@@ -234,9 +234,9 @@ function upgrade_to_2(){
         COLLATE='utf8_general_ci'
         ENGINE=InnoDB;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "      migrate data from table 'vms' into 'flavors'"
-    echo "INSERT INTO flavors (uuid, name) SELECT vim_flavor_id, vim_flavor_id FROM vms;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO flavors (uuid, name) SELECT DISTINCT vim_flavor_id, vim_flavor_id FROM vms;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "INSERT INTO datacenters_flavors (flavor_id, datacenter_id, vim_id)
-          SELECT vim_flavor_id, datacenters.uuid, vim_flavor_id FROM vms JOIN datacenters;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+          SELECT DISTINCT vim_flavor_id, datacenters.uuid, vim_flavor_id FROM vms JOIN datacenters;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "ALTER TABLE vms ALTER vim_flavor_id DROP DEFAULT, ALTER vim_image_id DROP DEFAULT;
           ALTER TABLE vms CHANGE COLUMN vim_flavor_id flavor_id VARCHAR(36) NOT NULL COMMENT 'Link to flavor table' AFTER vnf_id,
           CHANGE COLUMN vim_image_id image_id VARCHAR(36) NOT NULL COMMENT 'Link to image table' AFTER flavor_id, 
