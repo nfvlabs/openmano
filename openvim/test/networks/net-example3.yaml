@@ -1,6 +1,7 @@
 network:
     name:               data_net
     type:               data
-    provider:physical:  null
+    provider:physical:  openflow:port1/8:vlan
+    provider:vlan:      3001
     shared:             true
 

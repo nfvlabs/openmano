@@ -385,13 +385,11 @@ do
       index=${pname##*_}
       pmac=$(get_hash_value $childSRIOV "mac")
       ppci=$(get_hash_value $childSRIOV "pci")
-      vlan=$((j+99))
       [[ $sriov_nb -eq 0 ]] && echo "      sriovs:"
       sriov_nb=$((sriov_nb+1))
       echo "      - mac: \"$pmac\""
       echo "        pci: \"$ppci\""
       echo "        source_name: $index"
-      echo "        vlan: $vlan"
     done
   done
 

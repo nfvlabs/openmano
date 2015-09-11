@@ -42,7 +42,7 @@ function usage(){
     echo -e "     -p PASS  database password. 'No password' by default. Prompts if DB access fails"
     echo -e "     -P PORT  database port. '$DBPORT' by default"
     echo -e "     -h HOST  database host. '$DBHOST' by default"
-#    echo -e "     -d NAME  database name. '$DBNAME' by default.  Prompts if DB access fails"
+    echo -e "     -d NAME  database name. '$DBNAME' by default.  Prompts if DB access fails"
     echo -e "     --help   shows this help"
 }
 
@@ -57,9 +57,9 @@ while getopts ":u:p:P:h:-:" o; do
         P)
             DBPORT="$OPTARG"
             ;;
-#        d)
-#            DBNAME="$OPTARG"
-#            ;;
+        d)
+            DBNAME="$OPTARG"
+            ;;
         h)
             DBHOST="$OPTARG"
             ;;
@@ -90,12 +90,12 @@ DBPASS_=""
 [ -n "$DBPASS" ] && DBPASS_="-p$DBPASS"
 DBHOST_="-h$DBHOST"
 DBPORT_="-P$DBPORT"
-while !  echo ";" | mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ >/dev/null 2>&1
+while !  echo ";" | mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ $DBNAME >/dev/null 2>&1
 do
         [ -n "$logintry" ] &&  echo -e "\nInvalid database credentials!!!. Try again (Ctrl+c to abort)"
-        [ -z "$logintry" ] &&  echo -e "\nProvide database credentials"
-#        read -e -p "mysql database name($DBNAME): " KK
-#        [ -n "$KK" ] && DBNAME="$KK"
+        [ -z "$logintry" ] &&  echo -e "\nProvide database name and credentials"
+        read -e -p "mysql database name($DBNAME): " KK
+        [ -n "$KK" ] && DBNAME="$KK"
         read -e -p "mysql user($DBUSER): " KK
         [ -n "$KK" ] && DBUSER="$KK" && DBUSER_="-u$DBUSER"
         read -e -s -p "mysql password: " DBPASS
@@ -105,8 +105,8 @@ do
         echo
 done
 
-echo "    loading ${DIRNAME}/${DBNAME}_structure.sql"
-mysql  $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ < ${DIRNAME}/${DBNAME}_structure.sql
+echo "    loading ${DIRNAME}/vim_db_structure.sql"
+sed -e "s/vim_db/$DBNAME/" ${DIRNAME}/vim_db_structure.sql |  mysql  $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ 
 
 echo "    migrage database version"
 ${DIRNAME}/migrate_vim_db.sh $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ -d$DBNAME

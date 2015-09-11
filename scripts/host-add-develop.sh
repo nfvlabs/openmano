@@ -134,13 +134,11 @@ do
     for((nb_sriov=0;nb_sriov<8;nb_sriov++))
     do
       pci=`printf "0000:%02X:10.%i" $bus $nb_sriov`
-      vlan=$((nb_sriov+100))
       mac=`get_mac $seed`
       seed=$((seed+1))
       echo "      - mac: \"$mac\""
       echo "        pci: \"$pci\""
       echo "        source_name: $nb_sriov"
-      echo "        vlan: $vlan"
     done
   
   iface_counter=$((iface_counter+1))

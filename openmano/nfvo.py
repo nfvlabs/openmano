@@ -1097,7 +1097,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                     else:
                         return -HTTP_Internal_Server_Error, e_text
                 if netDict["use"]=="mgmt" or netDict["use"]=="bridge":
-                    netDict["type"]="virtio"
+                    netDict["type"]="virtual"
                 if "vpci" in iface and iface["vpci"] is not None:
                     netDict['vpci'] = iface['vpci']
                 netDict['name'] = iface['internal_name']

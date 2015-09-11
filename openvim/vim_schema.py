@@ -48,7 +48,7 @@ integer1_schema={"type":"integer","minimum":1}
 vlan_schema={"type":"integer","minimum":1,"maximun":4095}
 vlan1000_schema={"type":"integer","minimum":1000,"maximun":4095}
 mac_schema={"type":"string", "pattern":"^[0-9a-fA-F][02468aceACE](:[0-9a-fA-F]{2}){5}$"}  #must be unicast LSB bit of MSB byte ==0 
-net_bind_schema={"oneOf":[{"type":"null"},{"type":"string", "pattern":"^(default|((bridge|macvtap):[0-9a-zA-Z\.\-]{1,29}))$"}]}
+net_bind_schema={"oneOf":[{"type":"null"},{"type":"string", "pattern":"^(default|((bridge|macvtap):[0-9a-zA-Z\.\-]{1,29})|openflow:[/0-9a-zA-Z\.\-]{1,25}(:vlan)?)$"}]}
 yes_no_schema={"type":"string", "enum":["yes", "no"]}
 
 config_schema = {
@@ -76,6 +76,8 @@ config_schema = {
         "development_bridge": {"type":"string"},
         "tenant_id": {"type" : "string"},
         "image_path": path_schema,
+        "network_vlan_range_start": vlan_schema,
+        "network_vlan_range_end": vlan_schema,
         "bridge_ifaces": {
             "type": "object",
             "patternProperties": {
@@ -277,7 +279,7 @@ host_data_schema={
                                             "pci":pci_schema,
                                         },
                                         "additionalProperties": False,
-                                        "required": ["source_name","mac","vlan","pci"]
+                                        "required": ["source_name","mac","pci"]
                                     }
                                 },
                                 "switch_port": nameshort_schema,
@@ -461,7 +463,8 @@ networks_schema={
             "vpci":pci_schema,
             "uuid":id_schema,
             "mac_address": mac_schema,
-            "model": {"type":"string", "enum":["virtio","e1000","ne2k_pci","pcnet","rtl8139"]}
+            "model": {"type":"string", "enum":["virtio","e1000","ne2k_pci","pcnet","rtl8139"]},
+            "type": {"type":"string", "enum":["virtual","PF","VF","VF not shared"]}
         },
         "additionalProperties": False,
         "required": ["uuid"]
@@ -569,7 +572,7 @@ network_update_schema = {
                 "shared":{"type":"boolean"},
                 "tenant_id":id_schema,
                 "admin_state_up":{"type":"boolean"},
-                #"provider:vlan":vlan1000_schema
+                "provider:vlan":vlan1000_schema, 
                 "bind":net_bind_schema
             },
             "minProperties": 1,

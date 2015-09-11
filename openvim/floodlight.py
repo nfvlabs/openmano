@@ -42,7 +42,7 @@ class FL_conn():
     '''Floodlight connector. No MAC learning is used'''
     def __init__(self, of_url, of_dpid, of_test):
 
-        self.name = "Floodlight_v0.9_connector"
+        self.name = "Floodlightv0.9"
         self.dpid = str(of_dpid)
         self.url = of_url
         self.test = of_test
@@ -110,7 +110,7 @@ class FL_conn():
             return 0, None
         try:
             #We have to build the data for the floodlight call from the generic data
-            sdata = {'active': "true", "priority":data["priority"], "name":data["name"]}
+            sdata = {'active': "true", "priority":str(data["priority"]), "name":data["name"]}
             if data.get("vlan_id"):
                 sdata["vlan-id"] = data["vlan_id"]
             if data.get("dst_mac"):

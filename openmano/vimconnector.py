@@ -24,8 +24,7 @@
 '''
 vimconnector implements all the methods to interact with openvim using the openvim API.
 
-Other connectors will be implemented in the future for interacting with other VIM
-such as Openstack.
+For interacting with Openstack refer to osconnector.
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$26-aug-2014 11:09:29$"
@@ -572,7 +571,7 @@ class vimconnector():
         '''Adds a VM instance to VIM
         Params:
             start: indicates if VM must start or boot in pause mode. Ignored
-            image_id,flavor_id: iamge and flavor uuid
+            image_id,flavor_id: image and flavor uuid
             net_list: list of interfaces, each one is a dictionary with:
                 name:
                 net_id: network uuid to connect
@@ -580,7 +579,7 @@ class vimconnector():
                 model: interface model, virtio, e2000, ...
                 mac_address: 
                 use: 'data', 'bridge',  'mgmt'
-                type: 'virtio', 'PF', 'VF', 'VF not shared'
+                type: 'virtual', 'PF', 'VF', 'VF not shared'
                 vim_id: filled/added by this function
                 #TODO ip, security groups
         Returns >=0, the instance identifier
@@ -596,19 +595,24 @@ class vimconnector():
 #         net_list_string = ', '.join(net_list) 
         virtio_net_list=[]
         for net in net_list:
-            if net["type"]!="virtio" or not net.get("net_id"):
+            if not net.get("net_id"):
                 continue
             net_dict={'uuid': net["net_id"]}
+            if net.get("type"):        net_dict["type"] = net["type"]
             if net.get("name"):        net_dict["name"] = net["name"]
             if net.get("vpci"):        net_dict["vpci"] = net["vpci"]
             if net.get("model"):       net_dict["model"] = net["model"]
             if net.get("mac_address"): net_dict["mac_address"] = net["mac_address"]
             virtio_net_list.append(net_dict)
-        payload_req = '{"server":{"networks": ' + json.dumps(virtio_net_list) + ',"name":"' + name + '","description":"' + description + \
-        '","imageRef":"' + image_id + '","flavorRef":"' + flavor_id + '"'
+        payload_dict={  "name":        name,
+                        "description": description,
+                        "imageRef":    image_id,
+                        "flavorRef":   flavor_id,
+                        "networks": virtio_net_list
+                    }
         if start != None:
-            payload_req += ',"start": "' + start+ '"'
-        payload_req += '}}'
+            payload_dict["start"] = start
+        payload_req = json.dumps({"server": payload_dict})
         print self.url+'/'+self.tenant+'/servers'+payload_req
         try:
             vim_response = requests.post(self.url+'/'+self.tenant+'/servers', headers = headers_req, data=payload_req)
@@ -636,7 +640,7 @@ class vimconnector():
         print json.dumps(http_content, indent=4)
         #connect data plane interfaces to network
         for net in net_list:
-            if net["type"]=="virtio":
+            if net["type"]=="virtual":
                 if not net.get("net_id"):
                     continue
                 for iface in http_content['server']['networks']:

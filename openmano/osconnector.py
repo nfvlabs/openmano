@@ -621,7 +621,7 @@ class osconnector():
                 model: interface model, ignored #TODO
                 mac_address: used for  SR-IOV ifaces #TODO for other types
                 use: 'data', 'bridge',  'mgmt'
-                type: 'virtio', 'PF', 'VF', 'VF not shared'
+                type: 'virtual', 'PF', 'VF', 'VF not shared'
                 vim_id: filled/added by this function
                 #TODO ip, security groups
         Returns >=0, the instance identifier
@@ -636,7 +636,7 @@ class osconnector():
             for net in net_list:
                 if not net.get("net_id"): #skip non connected iface
                     continue
-                if net["type"]=="virtio":
+                if net["type"]=="virtual":
                     net_list_vim.append({'net-id': net["net_id"]})
                 elif net["type"]=="PF":
                     print "new_tenant_vminstance: Warning, can not connect a passthrough interface "

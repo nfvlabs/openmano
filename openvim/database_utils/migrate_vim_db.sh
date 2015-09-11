@@ -157,6 +157,7 @@ DATABASE_TARGET_VER_NUM=0
 [ $OPENVIM_VER_NUM -gt 1091 ] && DATABASE_TARGET_VER_NUM=1   #>0.1.91 =>  1
 [ $OPENVIM_VER_NUM -ge 2003 ] && DATABASE_TARGET_VER_NUM=2   #0.2.03  =>  2
 [ $OPENVIM_VER_NUM -ge 2005 ] && DATABASE_TARGET_VER_NUM=3   #0.2.5   =>  3
+[ $OPENVIM_VER_NUM -ge 3001 ] && DATABASE_TARGET_VER_NUM=4   #0.3.1   =>  4
 #TODO ... put next versions here
 
 
@@ -194,11 +195,9 @@ function upgrade_to_2(){
     do
         echo "ALTER TABLE \`${table}\`
             ADD COLUMN \`switch_dpid\` CHAR(23) NULL DEFAULT NULL AFTER \`switch_port\`; " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
-        echo "ALTER TABLE ${table} CHANGE COLUMN switch_port switch_port VARCHAR(24) NULL DEFAULT NULL;" | $DBCMD || 
-            ! echo "ERROR. Aborted!" || exit -1
+        echo "ALTER TABLE ${table} CHANGE COLUMN switch_port switch_port VARCHAR(24) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
         [ $table == of_ports_pci_correspondence ] ||
-            echo "ALTER TABLE ${table} DROP INDEX vlan_switch_port, ADD UNIQUE INDEX vlan_switch_port (vlan, switch_port, switch_dpid);" | $DBCMD ||
-            ! echo "ERROR. Aborted!" || exit -1
+            echo "ALTER TABLE ${table} DROP INDEX vlan_switch_port, ADD UNIQUE INDEX vlan_switch_port (vlan, switch_port, switch_dpid);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     done
     echo "      UPDATE procedure UpdateSwitchPort"
     echo "DROP PROCEDURE IF EXISTS UpdateSwitchPort;
@@ -230,7 +229,7 @@ function upgrade_to_2(){
 function upgrade_to_3(){
     echo "    upgrade database from version 0.2 to version 0.3"
     echo "     change size of source_name at table resources_port"
-    echo "ALTER TABLE resources_port CHANGE COLUMN source_name source_name VARCHAR(24) NULL DEFAULT NULL AFTER port_id;"| $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE resources_port CHANGE COLUMN source_name source_name VARCHAR(24) NULL DEFAULT NULL AFTER port_id;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "     CREATE PROCEDURE GetAllAvailablePorts"
     echo "delimiter //
     CREATE PROCEDURE GetAllAvailablePorts(IN Numa INT) CONTAINS SQL SQL SECURITY INVOKER
@@ -262,16 +261,29 @@ function upgrade_to_3(){
 	ORDER BY Mbps_free, availableSRIOV, pci;
     END//
     delimiter ;"| $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1
-    echo "INSERT INTO schema_version (version_int, version, openvim_ver, comments, date) VALUES (3, '0.3', '0.2.5', 'New Procedure GetAllAvailablePorts', '2015-07-09');"| $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openvim_ver, comments, date) VALUES (3, '0.3', '0.2.5', 'New Procedure GetAllAvailablePorts', '2015-07-09');"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
+
 function upgrade_to_4(){
-    #TODO, this change of foreign key does not work
     echo "    upgrade database from version 0.3 to version 0.4"
+    echo "     remove unique VLAN index at 'resources_port', 'ports'"
+    echo "ALTER TABLE resources_port DROP INDEX vlan_switch_port;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE ports          DROP INDEX vlan_switch_port;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "     change table 'ports'"
+    echo "ALTER TABLE ports CHANGE COLUMN model model VARCHAR(12) NULL DEFAULT NULL COMMENT 'driver model for bridge ifaces; PF,VF,VFnotShared for data ifaces' AFTER mac;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE ports DROP COLUMN vlan_changed;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE resources_port DROP COLUMN vlan;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openvim_ver, comments, date) VALUES (4, '0.4', '0.3.1', 'Remove unique index VLAN at resources_port', '2015-09-04');"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+
+function upgrade_to_X(){
+    #TODO, this change of foreign key does not work
+    echo "    upgrade database from version 0.X to version 0.X"
     echo "ALTER TABLE instances DROP FOREIGN KEY FK_instances_flavors, DROP INDEX FK_instances_flavors,
-          DROP FOREIGN KEY FK_instances_images, DROP INDEX FK_instances_flavors,;"| $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1 
+          DROP FOREIGN KEY FK_instances_images, DROP INDEX FK_instances_flavors,;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1 
     echo "ALTER TABLE instances
 	ADD CONSTRAINT FK_instances_flavors FOREIGN KEY (flavor_id, tenant_id) REFERENCES tenants_flavors (flavor_id, tenant_id),
-	ADD CONSTRAINT FK_instances_images FOREIGN KEY (image_id, tenant_id) REFERENCES tenants_images (image_id, tenant_id);" | $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1
+	ADD CONSTRAINT FK_instances_images FOREIGN KEY (image_id, tenant_id) REFERENCES tenants_images (image_id, tenant_id);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 
 function downgrade_from_2(){
@@ -292,28 +304,38 @@ function downgrade_from_2(){
     SET resources_port.switch_port=TABLA.switch_port
     WHERE resources_port.root_id=TABLA.id;
     END//
-    delimiter ;" | $DBCMD || ! ! echo "ERROR. Aborted!" || exit -1
+    delimiter ;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "      ALTER TABLE \`of_ports_pci_correspondence\` \`resources_port\` \`ports\` DROP COLUMN \`switch_dpid\`"
     for table in of_ports_pci_correspondence resources_port ports
     do
         [ $table == of_ports_pci_correspondence ] ||
-            echo "ALTER TABLE ${table} DROP INDEX vlan_switch_port, ADD UNIQUE INDEX vlan_switch_port (vlan, switch_port);" | $DBCMD ||
-            ! echo "ERROR. Aborted!" || exit -1
+            echo "ALTER TABLE ${table} DROP INDEX vlan_switch_port, ADD UNIQUE INDEX vlan_switch_port (vlan, switch_port);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
         echo "ALTER TABLE \`${table}\` DROP COLUMN \`switch_dpid\`;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
         switch_port_size=12
         [ $table == of_ports_pci_correspondence ] && switch_port_size=50
-        echo "ALTER TABLE ${table} CHANGE COLUMN switch_port switch_port VARCHAR(${switch_port_size}) NULL DEFAULT NULL;" | $DBCMD || 
-            ! echo "ERROR. Aborted!" || exit -1
+        echo "ALTER TABLE ${table} CHANGE COLUMN switch_port switch_port VARCHAR(${switch_port_size}) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     done
-    echo "DELETE FROM \`schema_version\` WHERE \`version_int\` = '2'" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM \`schema_version\` WHERE \`version_int\` = '2';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 function downgrade_from_3(){
     echo "    downgrade database from version 0.3 to version 0.2"
     echo "     change back size of source_name at table resources_port"
-    echo "ALTER TABLE resources_port CHANGE COLUMN source_name source_name VARCHAR(20) NULL DEFAULT NULL AFTER port_id;"| $DBCMD || !  ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE resources_port CHANGE COLUMN source_name source_name VARCHAR(20) NULL DEFAULT NULL AFTER port_id;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "      DROP PROCEDURE GetAllAvailablePorts"
-    echo "DROP PROCEDURE GetAllAvailablePorts;" | $DBCMD || ! ! echo "ERROR. Aborted!" || exit -1
-    echo "DELETE FROM schema_version WHERE version_int = '3'" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DROP PROCEDURE GetAllAvailablePorts;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int = '3';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+function downgrade_from_4(){
+    echo "    downgrade database from version 0.4 to version 0.3"
+    echo "     adding back unique index VLAN at 'resources_port','ports'"
+    echo "ALTER TABLE resources_port ADD COLUMN vlan SMALLINT(5) UNSIGNED NULL DEFAULT NULL  AFTER Mbps_used;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "UPDATE resources_port SET vlan= 99+id-root_id WHERE id != root_id;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE resources_port ADD UNIQUE INDEX vlan_switch_port (vlan, switch_port, switch_dpid);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE    ports ADD UNIQUE INDEX vlan_switch_port (vlan, switch_port, switch_dpid);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "     change back table 'ports'"
+    echo "ALTER TABLE ports CHANGE COLUMN model model VARCHAR(12) NULL DEFAULT NULL AFTER mac;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE ports ADD COLUMN vlan_changed SMALLINT(5) NULL DEFAULT NULL COMMENT '!=NULL when original vlan have been changed to match a pmp net with all ports in the same vlan' AFTER switch_port;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int = '4';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 #TODO ... put funtions here
 

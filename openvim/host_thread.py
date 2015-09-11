@@ -316,6 +316,10 @@ class host_thread(threading.Thread):
                 elif task[0] == 'reload':
                     print self.name, ": processing task reload"
                     break
+                elif task[0] == 'edit-iface':
+                    print self.name, ": processing task edit-iface port=%s, old_net=%s, new_net=%s" % (task[1], task[2], task[3])
+                    self.edit_iface(task[1], task[2], task[3])
+                    break
                 else:
                     print self.name, ": unknown task", task
                 
@@ -611,6 +615,9 @@ class host_thread(threading.Thread):
                 text += self.dec_tab()+'</hostdev>'
                 net_nb += 1
             else:        #sriov_interfaces
+                #skip not connected interfaces
+                if v.get("net_id") == None:
+                    continue
                 text += self.tab() + "<interface type='hostdev' managed='yes'>" + \
                     self.inc_tab()
                 if v.get('mac_address', None) != None:
@@ -1182,6 +1189,60 @@ class host_thread(threading.Thread):
                 {'uuid':req['new_image']['uuid']}, log=True)
         self.db_lock.release()
   
+    def edit_iface(self, port_id, old_net, new_net):
+        #This action imply remove and insert interface to put proper parameters
+        if self.test:
+            pass
+        else:
+        #get iface details
+            self.db_lock.acquire()
+            r,c = self.db.get_table(FROM='ports as p join resources_port as rp on p.uuid=rp.port_id',
+                                    WHERE={'port_id': port_id})
+            self.db_lock.release()
+            if r<0:
+                print self.name, ": edit_iface(",port_id,") DDBB error:", c
+                return
+            elif r==0:
+                print self.name, ": edit_iface(",port_id,") por not found"
+                return
+            port=c[0]
+            if port["model"]!="VF":
+                print self.name, ": edit_iface(",port_id,") ERROR model must be VF"
+                return
+            #create xml detach file
+            xml=[]
+            self.xml_level = 2
+            xml.append("<interface type='hostdev' managed='yes'>")
+            xml.append("  <mac address='" +port['mac']+ "'/>")
+            xml.append("  <source>"+ self.pci2xml(port['pci'])+"\n  </source>")
+            xml.apped('</interface>')                
+
+            
+            try:
+                conn=None
+                conn = libvirt.open("qemu+ssh://"+self.user+"@"+self.host+"/system")
+                dom = conn.lookupByUUIDString(port["p.instance_id"])
+                if old_net:
+                    text="\n".join(xml)
+                    print self.name, ": edit_iface detaching SRIOV interface", text
+                    dom.detachDeviceFlags(text, flags=libvirt.VIR_DOMAIN_AFFECT_LIVE)
+                if new_net:
+                    xml[-1] ="  <vlan>   <tag id='" + str(port['p.vlan']) + "'/>   </vlan>"
+                    self.xml_level = 1
+                    xml.append(self.pci2xml(port.get('vpci',None)) )
+                    xml.apped('</interface>')                
+                    text="\n".join(xml)
+                    print self.name, ": edit_iface attaching SRIOV interface", text
+                    dom.attachDeviceFlags(text, flags=libvirt.VIR_DOMAIN_AFFECT_LIVE)
+                    
+            except libvirt.libvirtError, e:
+                text = e.get_error_message()
+                print self.name, ": edit_iface(",port["p.instance_id"],") libvirt exception:", text 
+                
+            finally:
+                if conn is not None: conn.close
+                            
+                              
 def create_server(server, db, db_lock, only_of_ports):
     #print "server"
     #print "server"
@@ -1206,25 +1267,12 @@ def create_server(server, db, db_lock, only_of_ports):
     #If extended is not defined get requirements from flavor
     if extended is None:
         #If extended is defined in flavor convert to dictionary and use it
-        print 1
         if 'extended' in server['flavor'] and  server['flavor']['extended'] != None:
-            print 2
             json_acceptable_string = server['flavor']['extended'].replace("'", "\"")
-            print 3
             extended = json.loads(json_acceptable_string)
         else:
             extended = None
-#             print 4
-#             extended = {'numas':[]}
-#             print 5
-#             numa = {}
-#             numa['memory'] = int(math.ceil(server['flavor']['ram']/1024.0))
-#             print 6
-#             numa['threads'] = server['flavor']['vcpus']
-#             print 7
-#             extended['numas'].append(numa)
-            
-    print json.dumps(extended, indent=4)
+    #print json.dumps(extended, indent=4)
     
     #For simplicity only one numa VM are supported in the initial implementation
     if extended != None:
@@ -1395,7 +1443,7 @@ def create_server(server, db, db_lock, only_of_ports):
         used_sriov_ports = []
         for port in requirements['numa']['sriov_list']:
             db_lock.acquire()
-            result, content = db.get_table(FROM='resources_port', SELECT=('id', 'pci', 'vlan', 'mac'),WHERE={'numa_id':numa_id,'root_id': port['port_id'], 'port_id': None, 'Mbps_used': 0} )
+            result, content = db.get_table(FROM='resources_port', SELECT=('id', 'pci', 'mac'),WHERE={'numa_id':numa_id,'root_id': port['port_id'], 'port_id': None, 'Mbps_used': 0} )
             db_lock.release()
             if result <= 0:
                 print content
@@ -1404,7 +1452,6 @@ def create_server(server, db, db_lock, only_of_ports):
                 if row['id'] in used_sriov_ports or row['id']==port['port_id']:
                     continue
                 port['pci'] = row['pci']
-                port['vlan'] = row['vlan']
                 if 'mac_address' not in port: 
                     port['mac_address'] = row['mac']
                 del port['mac']
@@ -1420,7 +1467,7 @@ def create_server(server, db, db_lock, only_of_ports):
                 del port['mac']
                 continue
             db_lock.acquire()
-            result, content = db.get_table(FROM='resources_port', SELECT=('id', 'pci', 'vlan', 'mac', 'Mbps'),WHERE={'numa_id':numa_id,'root_id': port['port_id'], 'port_id': None, 'Mbps_used': 0} )
+            result, content = db.get_table(FROM='resources_port', SELECT=('id', 'pci', 'mac', 'Mbps'),WHERE={'numa_id':numa_id,'root_id': port['port_id'], 'port_id': None, 'Mbps_used': 0} )
             db_lock.release()
             if result <= 0:
                 print content
@@ -1430,7 +1477,6 @@ def create_server(server, db, db_lock, only_of_ports):
                 if row['id'] in used_sriov_ports or row['id']==port['port_id']:
                     continue
                 port['pci'] = row['pci']
-                port['vlan'] = None    # sriov passed without VLAN
                 if 'mac_address' not in port: 
                     port['mac_address'] = row['mac']  # mac cannot be set to passthrough ports 
                 del port['mac']
@@ -1443,31 +1489,56 @@ def create_server(server, db, db_lock, only_of_ports):
         
     server['host_id'] = host_id
         
+
+    #Generate dictionary for saving in db the instance resources
+    resources = {}
+    resources['bridged-ifaces'] = []
+    
+    numa_dict = {}
+    numa_dict['interfaces'] = []
+    
+    numa_dict['interfaces'] += requirements['numa']['port_list']
+    numa_dict['interfaces'] += requirements['numa']['sriov_list']
   
     #Check bridge information
-    bridges = server.get('networks', [])
-    for bridge in bridges:
-        bridge['net_id']=bridge.pop('uuid')
+    unified_dataplane_iface=[]
+    unified_dataplane_iface += requirements['numa']['port_list']
+    unified_dataplane_iface += requirements['numa']['sriov_list']
+    
+    for control_iface in server.get('networks', []):
+        control_iface['net_id']=control_iface.pop('uuid')
         #Get the brifge name
         db_lock.acquire()
-        result, content = db.get_table(FROM='nets', SELECT=('name','type'),WHERE={'uuid':bridge['net_id']} )
+        result, content = db.get_table(FROM='nets', SELECT=('name','type', 'vlan'),WHERE={'uuid':control_iface['net_id']} )
         db_lock.release()
         if result < 0: 
             pass
         elif result==0:
-            content="network uuid %s not found" % bridge['net_id']
-            result=-1
-        elif content[0]['type']!='bridge_data' and content[0]['type']!='bridge_man':
-            result =-1
-            content="network uuid %s is not of type bridge_man or bridge_data" % bridge['net_id']
-        if result < 0:
-            print "create_server error getting net information for bridge ifaces:", content
-            return -1, content
+            return -1, "Error at field netwoks: Not found any network wit uuid %s" % control_iface['net_id']
+        else:
+            network=content[0]
+            if control_iface.get("type", 'virtual') == 'virtual':
+                if network['type']!='bridge_data' and network['type']!='bridge_man':
+                    return -1, "Error at field netwoks: network uuid %s for control interface is not of type bridge_man or bridge_data" % control_iface['net_id']
+                resources['bridged-ifaces'].append(control_iface)
+            else:
+                if network['type']!='data' and network['type']!='ptp':
+                    return -1, "Error at field netwoks: network uuid %s for dataplane interface is not of type data or ptp" % control_iface['net_id']
+                #dataplane interface, look for it in the numa tree and asign this network
+                for dataplane_iface in numa_dict['interfaces']:
+                    if dataplane_iface['name'] == control_iface.get("name"):
+                        if (dataplane_iface['dedicated'] == "yes" and control_iface["type"] != "PF") or \
+                            (dataplane_iface['dedicated'] == "no" and control_iface["type"] != "VF") or \
+                            (dataplane_iface['dedicated'] == "yes:sriov" and control_iface["type"] != "VF not shared") :
+                                return -1, "Error at field netwoks: mismatch at interface '%s' from flavor 'dedicated=%s' and networks 'type=%s'" % \
+                                    (control_iface.get("name"), dataplane_iface['dedicated'], control_iface["type"])
+                        dataplane_iface['uuid'] = control_iface['net_id']
+                        if dataplane_iface['dedicated'] == "no":
+                            dataplane_iface['vlan'] = network['vlan']
+                        break
+                if dataplane_iface['uuid'] == None:
+                    return -1, "Error at field netwoks: interface name %s from network not found at flavor" % control_iface.get("name")
         
-
-    #Generate dictionary for saving in db the instance resources
-    resources = {}
-    
     resources['host_id'] = host_id
     resources['image_id'] = server['image_id']
     resources['flavor_id'] = server['flavor_id']
@@ -1478,14 +1549,9 @@ def create_server(server, db, db_lock, only_of_ports):
     
     if 'description' in server: resources['description'] = server['description']
     if 'name' in server: resources['name'] = server['name']
-    resources['bridged-ifaces'] = []
-    
-    
-    resources['bridged-ifaces'] += bridges
     
     resources['extended'] = {}                          #optional
     resources['extended']['numas'] = []
-    numa_dict = {}
     numa_dict['numa_id'] = numa_id
     numa_dict['memory'] = requirements['numa']['memory']
     numa_dict['cores'] = []
@@ -1494,10 +1560,6 @@ def create_server(server, db, db_lock, only_of_ports):
         numa_dict['cores'].append({'id': core[2], 'vthread': core[0], 'paired': paired})
     for core in reserved_threads:
         numa_dict['cores'].append({'id': core})
-    numa_dict['interfaces'] = []
-    
-    numa_dict['interfaces'] += requirements['numa']['port_list']
-    numa_dict['interfaces'] += requirements['numa']['sriov_list']
     resources['extended']['numas'].append(numa_dict)
     if extended!=None and 'devices' in extended:   #TODO allow extra devices without numa
         resources['extended']['devices'] = extended['devices']

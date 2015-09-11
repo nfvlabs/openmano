@@ -43,7 +43,7 @@ class ODL_conn():
     '''OpenDayLight connector. No MAC learning is used'''
     def __init__(self, of_url, of_dpid, of_test, of_user, of_password):
 
-        self.name = "OpenDayLight_connector"
+        self.name = "OpenDayLight"
         self.dpid = str(of_dpid)
         self.id = 'openflow:'+str(int(self.dpid.replace(':', ''), 16))
         self.url = of_url
@@ -148,7 +148,7 @@ class ODL_conn():
             flow['idle-timeout'] = 0
             flow['hard-timeout'] = 0
             flow['table_id'] = 0
-            flow['priority'] = int(data['priority'])
+            flow['priority'] = data['priority']
             flow['match'] = dict()
             flow['match']['in-port'] = self.pp2ofi[data['ingress_port']]
             if 'dst-mac' in data:

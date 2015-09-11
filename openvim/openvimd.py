@@ -30,9 +30,9 @@ and host controllers
 
 __author__="Alfonso Tierno"
 __date__ ="$10-jul-2014 12:07:15$"
-__version__="0.3.0-r390"
-version_date="Jul 2015"
-database_version="0.3"      #expected database schema version
+__version__="0.3.1-r402"
+version_date="Sep 2015"
+database_version="0.4"      #expected database schema version
 
 import httpserver
 from utils import auxiliary_functions as af
@@ -55,7 +55,9 @@ global config_dic
 def load_configuration(configuration_file):
     default_tokens ={'http_port':9080, 'http_host':'localhost', 
                      'of_controller_nets_with_same_vlan':True,
-                     'image_path':'/opt/VNF/images'
+                     'image_path':'/opt/VNF/images',
+                     'network_vlan_range_start':1000,
+                     'network_vlan_range_end': 4096
             }
     try:
         #First load configuration from configuration file
@@ -88,13 +90,16 @@ def load_configuration(configuration_file):
         #Check default values tokens
         for k,v in default_tokens.items():
             if k not in config: config[k]=v
+        #Check vlan ranges
+        if config["network_vlan_range_start"]+10 >= config["network_vlan_range_end"]:
+            return False, "Error invalid network_vlan_range less than 10 elements"
     
     except Exception,e:
         return (False, "Error loading configuration file '"+configuration_file+"': "+str(e))
     return (True, config)
 
 def create_database_connection(config_dic):
-    db = vim_db.vim_db();
+    db = vim_db.vim_db( (config_dic["network_vlan_range_start"],config_dic["network_vlan_range_end"]) );
     if db.connect(config_dic['db_host'], config_dic['db_user'], config_dic['db_passwd'], config_dic['db_name']) == -1:
         print "Error connecting to database", config_dic['db_name'], "at", config_dic['db_user'], "@", config_dic['db_host']
         exit(-1)

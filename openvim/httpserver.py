@@ -563,11 +563,9 @@ def http_post_hosts():
                         continue
                     else:
                         sriovs = []
-                        vlan_counter = 100
                         for port_k2, port_v2 in node['nics']['nic 0']['ports'].iteritems():
                             if port_v2['virtual'] and port_v2['PF_pci_id']==port_k:
-                                sriovs.append({'pci':port_k2,'vlan':vlan_counter, 'mac':port_v2['mac'], 'source_name':port_v2['source_name']})
-                                vlan_counter += 1
+                                sriovs.append({'pci':port_k2, 'mac':port_v2['mac'], 'source_name':port_v2['source_name']})
                         if len(sriovs)>0:
                             #sort sriov according to pci and rename them to the vf number
                             new_sriovs = sorted(sriovs, key=lambda k: k['pci'])
@@ -1589,44 +1587,71 @@ def http_post_networks():
             bottle.abort(HTTP_Not_Found, 'tenant %s not found or not enabled' % tenant_id)
             return
     bridge_net = None
-    if 'bind' in network and network['bind']!=None:
-        if network['bind'][:7]=='bridge:':
+    #check valid params
+    net_bind = network.get('bind')
+    net_type = network.get('type')
+    net_vlan = network.get("vlan")
+    
+    if net_bind!=None:
+        if net_bind[:9]=="openflow:":
+            if net_type!=None:
+                if net_type!="ptp" and net_type!="data":
+                    bottle.abort(HTTP_Bad_Request, "Only 'ptp' or 'data' net types can be bound to 'openflow'")
+            else:
+                net_type='data'
+        else:
+            if net_type!=None:
+                if net_type!="bridge_man" and net_type!="bridge_data":
+                    bottle.abort(HTTP_Bad_Request, "Only 'bridge_man' or 'bridge_data' net types can be bound to 'bridge', 'macvtap' or 'default")
+            else:
+                net_type='bridge_man'
+    
+    if net_type==None:
+        net_type='bridge_man' 
+        
+    if net_bind != None:
+        if net_bind[:7]=='bridge:':
             #check it is one of the pre-provisioned bridges
-            bridge_net_name = network['bind'][7:]
+            bridge_net_name = net_bind[7:]
             for brnet in config_dic['bridge_nets']:
                 if brnet[0]==bridge_net_name: # free
                     if brnet[3] != None:
                         bottle.abort(HTTP_Conflict, "invalid binding at 'provider:physical', bridge '%s' is already used" % bridge_net_name)
                         return
                     bridge_net=brnet
+                    net_vlan = brnet[1]
                     break
 #            if bridge_net==None:     
 #                bottle.abort(HTTP_Bad_Request, "invalid binding at 'provider:physical', bridge '%s' is not one of the provisioned 'bridge_ifaces' in the configuration file" % bridge_net_name)
 #                return
-    elif 'type' not in network or network['type']=='bridge_data' or network['type']=='bridge_man':
+    elif net_type=='bridge_data' or net_type=='bridge_man':
         #look for a free precreated nets
         for brnet in config_dic['bridge_nets']:
             if brnet[3]==None: # free
                 if bridge_net != None:
-                    if 'type' in network and network['type']=='bridge_man': #look for the smaller speed
+                    if net_type=='bridge_man': #look for the smaller speed
                         if brnet[2] < bridge_net[2]:   bridge_net = brnet
                     else: #look for the larger speed
                         if brnet[2] > bridge_net[2]:   bridge_net = brnet
                 else:
                     bridge_net = brnet
+                    net_vlan = brnet[1]
         if bridge_net==None:
             bottle.abort(HTTP_Bad_Request, "Max limits of bridge networks reached. Future versions of VIM will overcome this limit")
             return
         else:
             print "using net", bridge_net
-            network['bind'] = "bridge:"+bridge_net[0]
-            network['vlan'] = bridge_net[1]
-    elif 'vlan' not in network:
-        network['vlan'] = my.db.get_free_net_vlan()
-        if network['vlan'] < 0:
+            net_bind = "bridge:"+bridge_net[0]
+            net_vlan = bridge_net[1]
+    if net_vlan==None and (net_type=="data" or net_type=="ptp"):
+        net_vlan = my.db.get_free_net_vlan()
+        if net_vlan < 0:
             bottle.abort(HTTP_Internal_Server_Error, "Error getting an available vlan")
             return
     
+    network['bind'] = net_bind
+    network['type'] = net_type
+    network['vlan'] = net_vlan
     result, content = my.db.new_row('nets', network, True, True)
     
     if result >= 0:
@@ -1670,6 +1695,19 @@ def http_put_network_id(network_id):
     if nbports>0:
         if 'type' in network and network['type'] != network_old[0]['type']:
             bottle.abort(HTTP_Method_Not_Allowed, "Can not change type of network while having ports attached")
+        if 'vlan' in network and network['vlan'] != network_old[0]['vlan']:
+            bottle.abort(HTTP_Method_Not_Allowed, "Can not change vlan of network while having ports attached")
+
+    #check valid params
+    net_bind = network.get('bind', network_old[0]['bind'])
+    net_type = network.get('type', network_old[0]['type'])
+    if net_bind!=None:
+        if net_bind[:9]=="openflow:":
+            if net_type!="ptp" and net_type!="data":
+                bottle.abort(HTTP_Bad_Request, "Only 'ptp' or 'data' net types can be bound to 'openflow'")
+        else:
+            if net_type!="bridge_man" and net_type!="bridge_data":
+                    bottle.abort(HTTP_Bad_Request, "Only 'bridge_man' or 'bridge_data' net types can be bound to 'bridge', 'macvtap' or 'default")
 
     #insert in data base
     result, content = my.db.update_rows('nets', network, WHERE={'uuid': network_id}, log=True )
@@ -1820,7 +1858,6 @@ def http_get_port_id(port_id):
         print "http_get_ports port '%s' not found" % str(port_id)
         bottle.abort(HTTP_Not_Found, 'port %s not found' % port_id)
     else:
-        del content[0]['vlan_changed']
         convert_boolean(content, ('admin_state_up',) )
         delete_nulls(content)      
         change_keys_http2db(content, http2db_port, reverse=True)
@@ -1847,9 +1884,9 @@ def http_post_ports():
 
     if 'net_id' in port:
         #check that new net has the correct type
-        result, content = my.db.check_target_net(port['net_id'], None, 'external' )
+        result, new_net = my.db.check_target_net(port['net_id'], None, 'external' )
         if result < 0:
-            bottle.abort(HTTP_Bad_Request, content)
+            bottle.abort(HTTP_Bad_Request, new_net)
             return
     #insert in data base
     result, uuid = my.db.new_row('ports', port, True, True)
@@ -1876,7 +1913,7 @@ def http_put_port_id(port_id):
 
     #Look for the previous port data
     where_ = {'uuid': port_id}
-    result, content = my.db.get_ports(where_)
+    result, content = my.db.get_table(FROM="ports",WHERE=where_)
     if result < 0:
         print "http_put_port_id error", result, content
         bottle.abort(-result, content)
@@ -1894,6 +1931,8 @@ def http_put_port_id(port_id):
     port=content[0]
     #change_keys_http2db(port, http2db_port, reverse=True)
     nets = []
+    host_id = None
+    result=1
     if 'net_id' in port_dict:
         #change of net. 
         old_net = port.get('net_id', None)
@@ -1909,20 +1948,36 @@ def http_put_port_id(port_id):
                 if not my.admin:
                     bottle.abort(HTTP_Unauthorized, "Needed admin privileges")
                     return
-            elif new_net is not None:
-                #check that new net has the correct type
-                result, content = my.db.check_target_net(new_net, None, port['type'] )
-                #print "http_put_port_id  not valid changing net id !!!!!!!!!!!!!checqueando   ", result, content 
+            else:
+                if new_net != None:
+                    #check that new net has the correct type
+                    result, new_net_dict = my.db.check_target_net(new_net, None, port['type'] )
+                
+                #change VLAN for SR-IOV ports
+                if result>0 and port["type"]=="instance:data" and port["model"]=="VF": #TODO consider also VFnotShared
+                    if new_net == None:
+                        port_dict["vlan"] = None
+                    else:
+                        port_dict["vlan"] = new_net_dict["vlan"]
+                    #get host where this VM is allocated
+                    result, content = my.db.get_table(FROM="instances",WHERE={"uuid":port["instance_id"]})
+                    if result<0:
+                        print "http_put_port_id database error", content
+                    elif result>0:
+                        host_id = content[0]["host_id"]
+    
     #insert in data base
     if result >= 0:
         result, content = my.db.update_rows('ports', port_dict, WHERE={'uuid': port_id}, log=False )
         
-    #
-    if result > 0 and len(nets) > 0:
+    #Insert task to complete actions
+    if result > 0: 
         for net_id in nets:
             r,v = config_dic['of_thread'].insert_task("update-net", net_id)
             if r<0: print "Error *********   http_put_port_id  update_of_flows: ", v
-            #TODO hacer algo si falla
+            #TODO Do something if fails
+        if host_id != None:
+            config_dic['host_threads'][host_id].insert_task("edit-iface", port_id, old_net, new_net)
     
     if result >= 0:
         return http_get_port_id(port_id)

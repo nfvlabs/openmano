@@ -107,7 +107,7 @@ do
     then
         #calculates log file name
         logfile=""
-        mkdir -p $DIR_OM/logs && logfile=$DIR_OM/logs/open${om_component}.0 || echo "can not create logs directory  $DIR_OM/logs"
+        mkdir -p $DIR_OM/logs && logfile=$DIR_OM/logs/open${om_component} || echo "can not create logs directory  $DIR_OM/logs"
         #check already running
         [ -n "$component_id" ] && echo "    $om_name is already running. Skipping" && continue
         #create screen if not created
@@ -124,11 +124,14 @@ do
             screen -S ${om_component} -p 0 -X stuff "cd ${om_dir}\n"
             sleep 1
         fi
-        #deletes old log file and command screen to log again
+        #move old log file index one number up and log again in index 0
         if [[ -n $logfile ]]
         then
-            rm -f $logfile
-            screen -S ${om_component} -p 0 -X logfile ${logfile}
+            for index in 8 7 6 5 4 3 2 1 0
+            do
+                [[ -f ${logfile}.${index} ]] && mv ${logfile}.${index} ${logfile}.$((index+1))
+            done
+            screen -S ${om_component} -p 0 -X logfile ${logfile}.0
             screen -S ${om_component} -p 0 -X log on
         fi
         #launch command to screen
@@ -149,8 +152,8 @@ do
                echo -n "ERROR, it has exited."
                break
            fi
-           [[ -n $logfile ]] && [[ ${om_component} == flow ]] && grep -q "Listening for switch connections" $logfile && sleep 1 && break
-           [[ -n $logfile ]] && [[ ${om_component} != flow ]] && grep -q "open${om_component}d ready" $logfile && break
+           [[ -n $logfile ]] && [[ ${om_component} == flow ]] && grep -q "Listening for switch connections" ${logfile}.0 && sleep 1 && break
+           [[ -n $logfile ]] && [[ ${om_component} != flow ]] && grep -q "open${om_component}d ready" ${logfile}.0 && break
            sleep 1
            timeout=$((timeout -1))
         done
@@ -160,7 +163,7 @@ do
         else
            echo -n "running on 'screen -x ${om_component}'."
         fi
-        [[ -n $logfile ]] && echo "  Logging at '${logfile}'" || echo
+        [[ -n $logfile ]] && echo "  Logging at '${logfile}.0'" || echo
     fi
 done
 

@@ -47,9 +47,12 @@ HTTP_Internal_Server_Error = 500
 
 
 class vim_db():
-    def __init__(self, debug=False):
+    def __init__(self, vlan_range, debug=False):
+        '''vlan_range must be a tuple (vlan_ini, vlan_end) with available vlan values for networks
+        every dataplane network contain a unique value, regardless of it is used or not 
+        ''' 
         #initialization
-        self.net_vlan_range = (1000,4096)
+        self.net_vlan_range = vlan_range
         self.net_vlan_usedlist = None
         self.net_vlan_lastused = self.net_vlan_range[0] -1
         self.debug=debug
@@ -621,6 +624,8 @@ class vim_db():
                                 sriov_dict['Mbps'] = port_dict['Mbps']
                                 sriov_dict['root_id'] = port_dict['id']
                                 sriov_dict['id'] = next_ids['resources_port']
+                                if "vlan" in sriov_dict:
+                                    del sriov_dict["vlan"]
                                 next_ids['resources_port'] += 1
                                 keys    = ",".join(sriov_dict.keys())
                                 values  = ",".join( map(lambda x:  "Null" if x is None else "'"+str(x)+"'", sriov_dict.values() ) )
@@ -1043,9 +1048,9 @@ class vim_db():
                                 numa_dict['threads-source'] = thread_source
 
                         #get dedicated ports and SRIOV
-                        cmd = "SELECT port_id as iface_id, p.vlan as vlan, p.mac as mac_address, net_id, if(id=root_id,'yes',if(p.vlan is null,'yes:sriov','no')) as dedicated,\
+                        cmd = "SELECT port_id as iface_id, p.vlan as vlan, p.mac as mac_address, net_id, if(model='PF','yes',if(model='VF','no','yes:sriov')) as dedicated,\
                             rp.Mbps as bandwidth, name, vpci, pci as source \
-                            FROM resources_port as rp join ports as p on port_id=uuid  WHERE p.instance_id = '%s' AND numa_id = '%s'" % (instance_id, numa_id) 
+                            FROM resources_port as rp join ports as p on port_id=uuid  WHERE p.instance_id = '%s' AND numa_id = '%s' and p.type='instance:data'" % (instance_id, numa_id) 
                         if self.debug: print cmd
                         self.cur.execute(cmd)
                         if self.cur.rowcount > 0: 
@@ -1377,11 +1382,17 @@ class vim_db():
                                 if self.debug: print cmd
                                 self.cur.execute(cmd)
                                 nb_ifaces += 1
-                                mbps_=("'"+str(iface['Mbps_used'])+"'") if 'Mbps_used' in iface and iface['Mbps_used'] is not None else "Mbps" 
-                                
+                                mbps_=("'"+str(iface['Mbps_used'])+"'") if 'Mbps_used' in iface and iface['Mbps_used'] is not None else "Mbps"
+                                if iface["dedicated"]=="yes": 
+                                    iface_model="PF"
+                                elif iface["dedicated"]=="yes:sriov": 
+                                    iface_model="VFnotShared"
+                                elif iface["dedicated"]=="no": 
+                                    iface_model="VF"
+                                #else error
                                 INSERT=(iface['mac_address'], iface['switch_port'], iface.get('vlan',None), 'instance:data', iface['Mbps_used'], iface['id'],
-                                        uuid, instance_dict['tenant_id'], iface.get('name',None), iface.get('vpci',None), iface.get('uuid',None) )
-                                cmd = "INSERT INTO ports (mac,switch_port,vlan,type,Mbps,uuid,instance_id,tenant_id,name,vpci,net_id) " + \
+                                        uuid, instance_dict['tenant_id'], iface.get('name',None), iface.get('vpci',None), iface.get('uuid',None), iface_model )
+                                cmd = "INSERT INTO ports (mac,switch_port,vlan,type,Mbps,uuid,instance_id,tenant_id,name,vpci,net_id, model) " + \
                                        " VALUES (" + ",".join(map(lambda x: 'Null' if x is None else "'"+str(x)+"'", INSERT )) + ")"
                                 if self.debug: print cmd
                                 self.cur.execute(cmd)
@@ -1440,7 +1451,7 @@ class vim_db():
                     #delete bridged ifaces, instace_devices, resources_mem; done by database: FOREIGN KEY DELTETE CASCADE
 
                     #update resources port, first get nets afected
-                    cmd = "SELECT DISTINCT net_id from ports WHERE instance_id = '%s' AND net_id is not Null AND type = 'instance:data' " % instance_id
+                    cmd = "SELECT DISTINCT net_id from ports WHERE instance_id = '%s' AND net_id is not Null AND type='instance:data'" % instance_id
                     if self.debug: print cmd
                     self.cur.execute(cmd)
                     net_list__ = self.cur.fetchall()
@@ -1517,7 +1528,7 @@ class vim_db():
             tenant_id: client where tenant belongs. Not used in this version
             port_type: string with the option 'instance:bridge', 'instance:data', 'external'
         Return: 
-            (0,None) if ok,
+            (0,net_dict) if ok,   where net_dict contain 'uuid','type','vlan', ...
             (negative,string-error) if error
         '''
         for retry_ in range(0,2):
@@ -1550,7 +1561,7 @@ class vim_db():
             if nb_ports<0: return -1, data
             elif nb_ports >=2: return -1, "net of type p2p already contain two ports attached. No room for another"
             
-        return 0, None
+        return 0, net
 
 if __name__ == "__main__":
     print "Hello World"
