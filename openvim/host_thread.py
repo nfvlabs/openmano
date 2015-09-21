@@ -705,11 +705,15 @@ class host_thread(threading.Thread):
             return -1
     
     def get_notused_filename(self, proposed_name, suffix=''):
+        '''Look for a non existing file_name in the host
+            proposed_name: proposed file name, includes path
+            suffix: suffix to be added to the name, before the extention
+        '''
         extension = proposed_name.rfind(".")
-        if extension < 0:
+        slash = proposed_name.rfind("/")
+        if extension < 0 or extension < slash: # no extension
             extension = len(proposed_name)
-        if suffix != None:
-            target_name = proposed_name[:extension] + suffix + proposed_name[extension:]
+        target_name = proposed_name[:extension] + suffix + proposed_name[extension:]
         info = self.get_file_info(target_name)
         if info is None:
             return target_name
@@ -720,6 +724,25 @@ class host_thread(threading.Thread):
             index+=1
             info = self.get_file_info(target_name) 
         return target_name
+    
+    def get_notused_path(self, proposed_path, suffix=''):
+        '''Look for a non existing path at database for images
+            proposed_path: proposed file name, includes path
+            suffix: suffix to be added to the name, before the extention
+        '''
+        extension = proposed_path.rfind(".")
+        if extension < 0:
+            extension = len(proposed_path)
+        if suffix != None:
+            target_path = proposed_path[:extension] + suffix + proposed_path[extension:]
+        index=0
+        while True:
+            r,_=self.db.get_table(FROM="images",WHERE={"path":target_path})
+            if r<=0:
+                return target_path
+            target_path = proposed_path[:extension] + suffix +  "-" + str(index) + proposed_path[extension:]
+            index+=1
+
     
     def delete_file(self, file_name):
         command = 'rm -f '+file_name
@@ -772,6 +795,7 @@ class host_thread(threading.Thread):
             
     def launch_server(self, conn, server, rebuild=False, domain=None):
         if self.test:
+            time.sleep(5) #sleep 5 seconds to be make it a bit more real
             return 0, 'Success'
 
         server_id = server['uuid']
@@ -969,16 +993,22 @@ class host_thread(threading.Thread):
         last_error = None
         
         if self.test:
-            if 'terminate' in req['action']:    new_status = 'deleted'
-            elif 'shutoff' in req['action'] and req['status']!='ERROR':    new_status = 'INACTIVE'
-            elif 'shutdown' in req['action'] and req['status']!='ERROR':    new_status = 'INACTIVE'
-            elif 'forceOff' in req['action'] and req['status']!='ERROR':    new_status = 'INACTIVE'
+            if 'terminate' in req['action']:
+                new_status = 'deleted'
+            elif 'shutoff' in req['action'] or 'shutdown' in req['action'] or 'forceOff' in req['action']:
+                if req['status']!='ERROR':
+                    time.sleep(1)
+                    new_status = 'INACTIVE'
             elif 'start' in req['action']  and req['status']!='ERROR':      new_status = 'ACTIVE'
             elif 'resume' in req['action'] and req['status']!='ERROR' and req['status']!='INACTIVE' :     new_status = 'ACTIVE'
             elif 'pause' in req['action']  and req['status']!='ERROR':      new_status = 'PAUSED'
             elif 'reboot' in req['action'] and req['status']!='ERROR':     new_status = 'ACTIVE'
-            elif 'rebuild' in req['action']:     new_status = 'ACTIVE'
-            elif 'createImage' in req['action']:     pass
+            elif 'rebuild' in req['action']:
+                time.sleep(5)
+                new_status = 'ACTIVE'
+            elif 'createImage' in req['action']:
+                time.sleep(5)
+                self.create_image(None, req)
         else:
             try:
                 conn = libvirt.open("qemu+ssh://"+self.user+"@"+self.host+"/system")
@@ -1152,36 +1182,46 @@ class host_thread(threading.Thread):
         return 1 
         
     def create_image(self,dom, req):
-        for retry in (0,1):
-            try:
-                server_id = req['uuid']
+        if self.test:
+            if 'path' in req['action']['createImage']:
+                file_dst = req['action']['createImage']['path']
+            else:
                 createImage=req['action']['createImage']
-                file_orig = self.localinfo['server_files'][server_id] [ createImage['source']['image_id'] ] ['source file']
-                if 'path' in req['action']['createImage']:
-                    file_dst = req['action']['createImage']['path']
-                else:
-                    img_name= createImage['source']['path']
-                    index=img_name.rfind('/')
-                    file_dst = self.get_notused_filename(img_name[:index+1] + createImage['name'] + '.qcow2')
-                      
-                self.copy_file(file_orig, file_dst)
-                qemu_info = self.qemu_get_info(file_orig)
-                if 'backing file' in qemu_info:
-                    for k,v in self.localinfo['files'].items():
-                        if v==qemu_info['backing file']:
-                            self.qemu_change_backing(file_dst, k)
-                            break
-                image_status='ACTIVE'
-            except paramiko.ssh_exception.SSHException, e:
-                image_status='ERROR'
-                error_text = e.args[0]
-                print self.name, "': create_image(",server_id,") ssh Exception:", error_text
-                if "SSH session not active" in error_text and retry==0:
-                    self.ssh_connect()
-            except Exception, e:
-                image_status='ERROR'
-                error_text = str(e)
-                print self.name, "': create_image(",server_id,") Exception:", error_text
+                img_name= createImage['source']['path']
+                index=img_name.rfind('/')
+                file_dst = self.get_notused_path(img_name[:index+1] + createImage['name'] + '.qcow2')
+            image_status='ACTIVE'
+        else:
+            for retry in (0,1):
+                try:
+                    server_id = req['uuid']
+                    createImage=req['action']['createImage']
+                    file_orig = self.localinfo['server_files'][server_id] [ createImage['source']['image_id'] ] ['source file']
+                    if 'path' in req['action']['createImage']:
+                        file_dst = req['action']['createImage']['path']
+                    else:
+                        img_name= createImage['source']['path']
+                        index=img_name.rfind('/')
+                        file_dst = self.get_notused_filename(img_name[:index+1] + createImage['name'] + '.qcow2')
+                          
+                    self.copy_file(file_orig, file_dst)
+                    qemu_info = self.qemu_get_info(file_orig)
+                    if 'backing file' in qemu_info:
+                        for k,v in self.localinfo['files'].items():
+                            if v==qemu_info['backing file']:
+                                self.qemu_change_backing(file_dst, k)
+                                break
+                    image_status='ACTIVE'
+                except paramiko.ssh_exception.SSHException, e:
+                    image_status='ERROR'
+                    error_text = e.args[0]
+                    print self.name, "': create_image(",server_id,") ssh Exception:", error_text
+                    if "SSH session not active" in error_text and retry==0:
+                        self.ssh_connect()
+                except Exception, e:
+                    image_status='ERROR'
+                    error_text = str(e)
+                    print self.name, "': create_image(",server_id,") Exception:", error_text
         
                 #TODO insert a last_error at database
         self.db_lock.acquire()
@@ -1192,7 +1232,7 @@ class host_thread(threading.Thread):
     def edit_iface(self, port_id, old_net, new_net):
         #This action imply remove and insert interface to put proper parameters
         if self.test:
-            pass
+            time.sleep(1)
         else:
         #get iface details
             self.db_lock.acquire()

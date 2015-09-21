@@ -191,25 +191,28 @@ if __name__=="__main__":
         # create connector to the openflow controller
         of_test_mode = False if config_dic['mode']=='normal' or config_dic['mode']=="OF only" else True
 
-        if config_dic['of_controller']=='floodlight':
-            OF_conn = fl_conn.FL_conn(of_url = "http://"+str(config_dic['of_controller_ip']) + ":" +
-                                            str(config_dic['of_controller_port']), of_test = of_test_mode,
-                                            of_dpid=config_dic['of_controller_dpid'])
+        if of_test_mode:
+            OF_conn = oft.of_test_connector()
+        elif config_dic['of_controller']=='floodlight':
+            OF_conn = fl_conn.FL_conn(of_ip = config_dic['of_controller_ip'],
+                                      of_port = config_dic['of_controller_port'], 
+                                      of_dpid=config_dic['of_controller_dpid'])
         elif config_dic['of_controller']=='opendaylight':
             of_user = config_dic.get('of_user')
             of_password = config_dic.get('of_password')
             if of_user is None or of_password is None:
                 print 'ERROR. When using OpenDayLight as Openflow Controller is compulsory to specify in the ' \
-                      'configuration file the of_user and the of_password '
+                      'configuration file the of_user and the of_password'
                 exit()
 
-            OF_conn = odl_conn.ODL_conn(of_url = "http://"+str(config_dic['of_controller_ip']) + ":" +
-                                            str(config_dic['of_controller_port']), of_test = of_test_mode,
-                                            of_dpid=config_dic['of_controller_dpid'], of_user = of_user,
-                                            of_password = of_password)
+            OF_conn = odl_conn.ODL_conn(of_ip = config_dic['of_controller_ip'],
+                                        of_port = config_dic['of_controller_port'],
+                                        of_dpid=config_dic['of_controller_dpid'],
+                                        of_user = of_user,
+                                        of_password = of_password)
         else:
-            print 'ERROR. The Openflow controller specified in the configuration file is not valid. Only valid options ' \
-                  'for OFC are \'floodlight\' and \'opendaylight\''
+            print "ERROR. The Openflow controller specified in the configuration file is not valid. Only valid options " \
+                  "for OFC are 'floodlight' and 'opendaylight'"
             exit()
 
 

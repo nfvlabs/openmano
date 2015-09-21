@@ -1,6 +1,15 @@
 network:
     name:               data_net
     type:               data
+
+    #if you want to connect this network to a concrete switch port for outside connectivity
+    #indicate it at provider_physical with openflow:<switch_port>[:vlan]
+    #<switch_port> must be a valid openflow port (one of the listed with openvim openflow-port-list)
+    #add [:vlan] without spaces if this port must be vlan tagged. If missing it is not tagged
+
+    #provider:vlan  contains the vlan used by the SRIOV interfaces connected to this network
+    #it always contain a value regardless used or not. If missing openvim will assign a value
+    
     provider:physical:  openflow:port1/8:vlan
     provider:vlan:      3001
     shared:             true

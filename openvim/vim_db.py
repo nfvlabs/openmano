@@ -35,6 +35,7 @@ __date__ ="$10-jul-2014 12:07:15$"
 import MySQLdb as mdb
 import uuid as myUuid
 from utils import auxiliary_functions as af
+import json
 
 HTTP_Bad_Request = 400
 HTTP_Unauthorized = 401 
@@ -140,6 +141,19 @@ class vim_db():
             if fl>=0:
                 return -HTTP_Bad_Request, "Field %s does not exist" % e.args[1][uk+14:wc]
         return -HTTP_Internal_Server_Error, "Database internal Error %d: %s" % (e.args[0], e.args[1])
+
+    def __data2db_format(self, data):
+        '''convert data to database format. If data is None it return the 'Null' text,
+        otherwise it return the text surrounded by quotes ensuring internal quotes are escaped'''
+        if data==None:
+            return 'Null'
+        out=str(data)
+        if "'" not in out:
+            return "'" + out + "'"
+        elif '"' not in out:
+            return '"' + out + '"'
+        else:
+            return json.dumps(out)
     
     def __get_used_net_vlan(self):
         #get used from database if needed
@@ -363,27 +377,29 @@ class vim_db():
             if type(v) == str:
                 if "'" in v: 
                     data[k] = data[k].replace("'","_")
+    
 
-    def update_rows(self, table, UPDATE, WHERE, log=False):
+    def update_rows(self, table, UPDATE, WHERE={}, log=False):
         ''' Update one or several rows into a table.
         Atributes
-            UPDATE: dictionary with the key: value to change
-            table: table where to update
-            WHERE: dictionary of elements to update
+            UPDATE: dictionary with the key-new_value pairs to change
+            table: table to be modified
+            WHERE: dictionary to filter target rows, key-value
+            log:   if true, a log entry is added at logs table
         Return: (result, None) where result indicates the number of updated files
         '''
-        self.__remove_quotes(UPDATE)
         for retry_ in range(0,2):
             cmd=""
             try:
                 #gettting uuid 
-                uuid = WHERE['uuid'] if 'uuid' in WHERE else None
+                uuid = WHERE.get('uuid')
 
                 with self.con:
                     self.cur = self.con.cursor()
                     cmd= "UPDATE " + table +" SET " + \
-                        ",".join(map(lambda x: str(x)+ ('=Null' if UPDATE[x] is None else "='"+ str(UPDATE[x]) +"'"  ),   UPDATE.keys() )) + \
-                        " WHERE " + " and ".join(map(lambda x: str(x)+ (' is Null' if WHERE[x] is None else"='"+str(WHERE[x])+"'" ),  WHERE.keys() ))
+                        ",".join(map(lambda x: str(x)+'='+ self.__data2db_format(UPDATE[x]),   UPDATE.keys() ));
+                    if WHERE:
+                        cmd += " WHERE " + " and ".join(map(lambda x: str(x)+ (' is Null' if WHERE[x] is None else"='"+str(WHERE[x])+"'" ),  WHERE.keys() ))
                     if self.debug: print cmd
                     self.cur.execute(cmd) 
                     nb_rows = self.cur.rowcount

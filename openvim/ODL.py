@@ -31,23 +31,17 @@ __date__ ="$28-oct-2014 12:07:15$"
 
 
 import json
-import utils.auxiliary_functions as af
-import threading
-import time
-import Queue
 import requests
-import itertools
 import base64
 
 class ODL_conn():
     '''OpenDayLight connector. No MAC learning is used'''
-    def __init__(self, of_url, of_dpid, of_test, of_user, of_password):
+    def __init__(self, of_ip ,of_port, of_dpid, of_user, of_password):
 
         self.name = "OpenDayLight"
         self.dpid = str(of_dpid)
         self.id = 'openflow:'+str(int(self.dpid.replace(':', ''), 16))
-        self.url = of_url
-        self.test = of_test
+        self.url = "http://%s:%s" %( str(of_ip), str(of_port) )
         self.auth = base64.b64encode(of_user+":"+of_password)
 
         self.pp2ofi={}  # Physical Port 2 OpenFlow Index
@@ -56,8 +50,6 @@ class ODL_conn():
 
 
     def obtain_port_correspondence(self):
-        if self.test:
-            return 0, None
         try:
             of_response = requests.get(self.url+"/restconf/operational/opendaylight-inventory:nodes",
                                        headers=self.headers)
@@ -114,9 +106,6 @@ class ODL_conn():
             return -1, str(e)
             
     def del_flow(self, flow_name):
-        if self.test:
-            print self.name, ": FAKE del_flow", flow_name
-            return 0, None
         try:
             of_response = requests.delete(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
                                           "/table/0/flow/"+flow_name, headers=self.headers)
@@ -134,9 +123,6 @@ class ODL_conn():
             return -1, str(e)
 
     def new_flow(self, data):
-        if self.test:
-            print self.name, ": FAKE new_flow", data
-            return 0, None
         try:
             #We have to build the data for the opendaylight call from the generic data
             sdata = dict()
@@ -209,12 +195,11 @@ class ODL_conn():
 
     def clear_all_flows(self):
         try:
-            if not self.test:
-                of_response = requests.delete(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
-                                          "/table/0", headers=self.headers)
-                print self.name, ": clear_all_flows:", of_response
-                if of_response.status_code != 200:
-                    raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+            of_response = requests.delete(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
+                                      "/table/0", headers=self.headers)
+            print self.name, ": clear_all_flows:", of_response
+            if of_response.status_code != 200:
+                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
             return 0, None
         except requests.exceptions.RequestException, e:
             print self.name, ": clear_all_flows Exception:", str(e)

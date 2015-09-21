@@ -36,6 +36,27 @@ import time
 import Queue
 import requests
 
+class of_test_connector():
+    '''This is a fake openflow connector that does nothing for running openvim without an openflow controller 
+    '''
+    def __init__(self):
+        self.name = "ofc_test"
+    def get_of_switches(self):
+        return 0, ()
+    def obtain_port_correspondence(self):
+        return 0, ()
+    def del_flow(self, flow_name):
+        print self.name, ": del_flow", flow_name, "Ok"
+        return 0, None
+    def new_flow(self, data):
+        print self.name, ": new_flow():", data, "Ok"
+        return 0, None
+    def clear_all_flows(self):
+        print self.name, ": clear_all_flows:", "Ok"
+        return 0, None
+
+
+
 class openflow_thread(threading.Thread):
     def __init__(self, OF_connector, db, db_lock, of_test, pmp_with_same_vlan):
         threading.Thread.__init__(self)
@@ -80,7 +101,7 @@ class openflow_thread(threading.Thread):
                 if r<0:
                     UPDATE={'status':'ERROR', 'last_error': str(c)}
                 else:
-                    UPDATE={'status':'ACTIVE'}
+                    UPDATE={'status':'ACTIVE', 'last_error': None}
                 self.db.update_rows('nets', UPDATE, WHERE={'uuid':task[1]})
                 self.db_lock.release()
 
@@ -150,8 +171,7 @@ class openflow_thread(threading.Thread):
             if ifaces_nb > 2:
                 print self.name, 'Error, network '+str(net_id)+' has been defined as ptp but it has '+\
                                  str(ifaces_nb)+' interfaces.'
-                return -1, 'Error, network '+str(net_id)+' has been defined as ptp but it has '+\
-                       str(ifaces_nb)+' interfaces.'
+                return -1, 'Error, ptp type network cannot connect %d interfaces, only 2' % ifaces_nb
         elif net['type'] == 'data':
             if ifaces_nb > 2 and self.pmp_with_same_vlan:
                 # check all ports are VLAN (tagged) or none

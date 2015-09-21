@@ -28,23 +28,44 @@ This program is useful to interact directly with Openflow Controllers
 to clear rules, add and delete rules, list rules, etc.
 '''
 
-__author__="ggdb"
+__author__="Gerardo Garcia, Alfonso Tierno"
 __date__ ="$09-oct-2014 09:09:48$"
 
 #import time
 import os
 import argparse
 import argcomplete
-import sys
-from floodlight_ofconnector import floodlight_ofconnector
-#import floodlight_ofconnector
+import floodlight as FL
+import ODL
+import yaml
+import requests
+
 
 def of_switches(args):
-    ofconnector.print_of_switches(args.verbose)
+    r,c = ofconnector.get_of_switches()
+    if r<0:
+        print c
+    else: 
+        for s in c:
+            print " %s %s" % (s[0], s[1])
     return
 
 def of_list(args):
-    ofconnector.print_of_list(args.verbose)
+    r,c = ofconnector.get_of_rules(dpid=of_controller_dpid)
+    if r<0:
+        print c
+        return
+    if args.verbose > 0:
+        print yaml.safe_dump(c, indent=4, default_flow_style=False)
+        return
+    for rule in c:
+        action_list=[]
+        for action in rule["actions"]:
+            action_list.apped(action[0]+"="+action[1])
+            
+        print "%s  %s  %s  input=%s  dst_mac=%s  vlan_id=%s  actions=%s" % \
+            (rule["switch"], rule["priority"].ljust(6), rule["name"].ljust(20), rule["ingress_port"].ljust(3), \
+            rule.get("dst_mac","any").ljust(18), rule.get("vlan_id","any").ljust(4), ",".join(action_list) )
     return
 
 def of_clear(args):
@@ -52,27 +73,72 @@ def of_clear(args):
         r = raw_input("Clear all Openflow rules (y/N)? ")
         if  not (len(r)>0  and r[0].lower()=="y"):
             return
-    ofconnector.of_clear()
+    r,c = ofconnector.clear_all_flows()
+    if r<0:
+        print c
     return
 
 def of_dump(args):
-    ofconnector.print_of_dump()
+    args.verbose = 3
+    of_list(args)
     return
 
 def of_reinstall(args):
-    URLrequest = "http://%s:%s/openvim/networks/all/openflow" %(vim_host, vim_admin_port)
-    openvim_response = requests.put(URLrequest)
-    print openvim_response
-    print openvim_response.text
-    return
+    try:
+        URLrequest = "http://%s:%s/openvim/networks/all/openflow" %(vim_host, vim_admin_port)
+        openvim_response = requests.put(URLrequest)
+        print openvim_response
+        print openvim_response.text
+        return
+    except requests.exceptions.RequestException, e:
+        return -1, " Exception GET at '"+URLrequest+"' " + str(e.message)
 
 def of_install(args):
-    ofconnector.of_install(args.file)
-    return
+    try:
+        f = open(args.file, "r")
+        text = f.read_data()
+        f.close()
+        ofrules = yaml.load(text)
+        for rule in ofrules:
+            r,c = ofconnector.new_flow(rule)
+            if r<0:
+                print "%s  %s  %s  input=%s  dst_mac=%s  vlan_id=%s ERROR: %s" % \
+                    (rule["switch"], rule["priority"].ljust(6), rule["name"].ljust(20), rule["ingress_port"].ljust(3), \
+                     rule.get("dst_mac","any").ljust(18), rule.get("vlan_id","any").ljust(4), c )
+            elif args.verbose>0:
+                print "%s  %s  %s  input=%s  dst_mac=%s  vlan_id=%s OK" % \
+                    (rule["switch"], rule["priority"].ljust(6), rule["name"].ljust(20), rule["ingress_port"].ljust(3), \
+                     rule.get("dst_mac","any").ljust(18), rule.get("vlan_id","any").ljust(4) )
+        return
+    except IOError, e:
+        print " Error opening file '" + args.file + "': " + e.args[1]
+    except yaml.YAMLError, exc:
+        error_pos = ""
+        if hasattr(exc, 'problem_mark'):
+            mark = exc.problem_mark
+            error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
+        print " Error yaml/json format error at " + error_pos
+
 
 def of_add(args):
-    ofconnector.of_add(args.name, args.inport, args.outport, args.verbose, args.priority,
-                       args.matchmac, args.matchvlan, args.stripvlan, args.setvlan)
+    rule={"name":args.name, "priority":args.priority,
+          "ingress_port": args.inport
+        }
+    if args.matchvlan:
+        rule["vlan_id"] = args.matchvlan
+    if args.matchmac:
+        rule["dst_mac"] = args.matchmac
+    actions=[]
+    if args.stripvlan:
+        actions.append( ("vlan", None) )
+    elif args.setvlan != None:
+        actions.append( ("vlan", args.setvlan) )
+    if args.outport:
+        actions.append( ("out", args.outport) )
+    rule["actions"] = actions
+    r,c = ofconnector.new_flow(rule)
+    if r<0:
+        print c
     return
 
 def of_delete(args):
@@ -80,7 +146,9 @@ def of_delete(args):
         r = raw_input("Clear rule %s (y/N)? " %(args.name))
         if  not (len(r)>0  and r[0].lower()=="y"):
             return
-    ofcontroller.of_delete(args.name,args.verbose)
+    r,c = ofconnector.del_flow(args.name)
+    if r<0:
+        print c
     return
 
 def config(args):
@@ -101,7 +169,7 @@ global of_controller_version
 global of_controller_ip
 global of_controller_port
 global of_controller_dpid
-global ofcontroller
+global ofconnector
    
 if __name__=="__main__":
     #print "test_ofconnector version", version, "Jul 2015"
@@ -174,7 +242,7 @@ if __name__=="__main__":
         exit()
     
     if of_controller_type == "floodlight":
-        ofcontroller = floodlight_ofconnector(of_controller_version, of_controller_ip, of_controller_port, of_controller_dpid)
+        ofconnector = FL.FL_conn(of_controller_ip, of_controller_port, of_controller_dpid, of_controller_version)
         #ofcontroller=floodlight_ofconnector(version=of_controller_version, ip=of_controller_ip,
         #                                    port=of_controller_port, dpid=of_controller_dpid)
     else:
