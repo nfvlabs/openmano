@@ -1084,12 +1084,14 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                                 netDict['type']="PF"    #passthrough
                             elif flavor_iface['dedicated'] == 'no':
                                 netDict['type']="VF"    #siov
-                            elif flavor_iface['dedicated'] == 'yes-sriov':
+                            elif flavor_iface['dedicated'] == 'yes:sriov':
                                 netDict['type']="VF not shared"   #sriov but only one sriov on the PF
                             netDict["mac_address"] = flavor_iface.get("mac_address")
                             break;
                 netDict["use"]=iface['type']
                 if netDict["use"]=="data" and not "type" in netDict:
+                    #print "netDict", netDict
+                    #print "iface", iface
                     e_text = "Cannot determine the interface type PF or VF of VNF '%s' VM '%s' iface '%s'" %(sce_vnf['name'], vm['name'], iface['internal_name'])
                     if flavor_dict.get('extended')==None:
                         return -HTTP_Conflict, e_text + "After database migration some information is not available. \

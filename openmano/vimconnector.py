@@ -37,7 +37,7 @@ from nfvo_db import HTTP_Bad_Request, HTTP_Internal_Server_Error, HTTP_Not_Found
 
 #TODO: Decide if it makes sense to have the methods outside the class as static generic methods
 class vimconnector():
-    def __init__(self, uuid, name, tenant, url, url_admin=None, user=None, passwd=None,config={}):
+    def __init__(self, uuid, name, tenant, url, url_admin=None, user=None, passwd=None,debug=True,config={}):
         self.id        = uuid
         self.name      = name
         self.url       = url
@@ -46,6 +46,7 @@ class vimconnector():
         self.user      = user
         self.passwd    = passwd
         self.config    = config
+        self.debug     = debug
     
     def __getitem__(self,index):
         if index=='tenant':
