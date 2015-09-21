@@ -278,7 +278,7 @@ class FL_conn():
 
             for action in data['actions']:
                 if len(sdata['actions']) > 0:
-                    sdata['actions'] +=  ', '
+                    sdata['actions'] +=  ','
                 if action[0] == "vlan":
                     if action[1]==None:
                         sdata['actions'] += self.ver_names["stripvlan"]

@@ -117,6 +117,7 @@ class openflow_thread(threading.Thread):
         print self.name, ": exit from openflow_thread"
 
     def update_of_flows(self, net_id):
+        ports=()
         self.db_lock.acquire()
         result, content = self.db.get_table(FROM='nets', SELECT=('type','admin_state_up', 'vlan', 'bind'),
                                             WHERE={'uuid':net_id} )
