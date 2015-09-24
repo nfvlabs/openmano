@@ -1574,8 +1574,13 @@ class vim_db():
         if net['type'] == 'p2p':
             #look how many 
             nb_ports, data = self.get_ports( {'net_id':net_id} )
-            if nb_ports<0: return -1, data
-            elif nb_ports >=2: return -1, "net of type p2p already contain two ports attached. No room for another"
+            if nb_ports<0:
+                return -1, data
+            else:
+                if net['bind'][:9]=="openflow:":
+                    nb_ports +=1
+                if nb_ports >=2:
+                    return -1, "net of type p2p already contain two ports attached. No room for another"
             
         return 0, net
 

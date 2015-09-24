@@ -763,35 +763,67 @@ class host_thread(threading.Thread):
             raise paramiko.ssh_exception.SSHException("Error copying image to local host: " + error_msg)
 
     def copy_remote_file(self, remote_file, use_incremental):
-        remote_file_info = self.get_file_info( remote_file )
-        #Connect SSH
+        ''' Copy a file from the repository to local folder and recursively 
+            copy the backing files in case the remote file is incremental
+            Read and/or modified self.localinfo['files'] that contain the
+            unmodified copies of images in the local path
+            params:
+                remote_file: path of remote file
+                use_incremental: None (leave the decision to this function), True, False
+            return:
+                local_file: name of local file
+                qemu_info: dict with quemu information of local file
+                use_incremental_out: True, False; same as use_incremental, but if None a decision is taken
+        '''
+        
+        use_incremental_out = use_incremental
+        new_backing_file = None
         local_file = None
-        if use_incremental and remote_file in self.localinfo['files']:
+
+        #in case incremental use is not decided, take the decision depending on the image
+        #avoid the use of incremental if this image is already incremental
+        qemu_remote_info = self.qemu_get_info(remote_file)
+        if use_incremental_out==None:
+            use_incremental_out = not 'backing file' in qemu_remote_info
+        #copy recursivelly the backing files
+        if 'backing file' in qemu_remote_info:
+            new_backing_file, _, _ = self.copy_remote_file(qemu_remote_info['backing file'], True)
+        
+        #check if remote file is present locally
+        if use_incremental_out and remote_file in self.localinfo['files']:
             local_file = self.localinfo['files'][remote_file]
             local_file_info =  self.get_file_info(local_file)
-            #print "ALF to delete local_file_info:", local_file_info, "local_file:", local_file
+            remote_file_info = self.get_file_info(remote_file)
             if local_file_info == None:
                 local_file = None
             elif local_file_info[4]!=remote_file_info[4] or local_file_info[5]!=remote_file_info[5]:
-                #local copy of file not valid because date or size are different. DELETE local file
-                self.delete_file(local_file)
-                del self.localinfo['files'][remote_file]
+                #local copy of file not valid because date or size are different. 
+                #TODO DELETE local file if this file is not used by any active virtual machine
+                try:
+                    self.delete_file(local_file)
+                    del self.localinfo['files'][remote_file]
+                except Exception:
+                    pass
                 local_file = None
+            else: #check that the local file has the same backing file, or there are not backing at all
+                qemu_info = self.qemu_get_info(local_file)
+                if new_backing_file != qemu_info.get('backing file'):
+                    local_file = None
+                
 
-        if local_file == None:
+        if local_file == None: #copy the file 
             img_name= remote_file.split('/') [-1]
             img_local = self.image_path + '/' + img_name
             local_file = self.get_notused_filename(img_local)
-            self.copy_file(remote_file, local_file, use_incremental)
+            self.copy_file(remote_file, local_file, use_incremental_out)
 
-            if use_incremental:
+            if use_incremental_out:
                 self.localinfo['files'][remote_file] = local_file
-        
-        qemu_info = self.qemu_get_info(local_file)
-        if 'backing file' in qemu_info:
-            new_backing_file = self.copy_remote_file(qemu_info['backing file'], True) [0]
-            self.qemu_change_backing(local_file, new_backing_file)
-        return local_file, qemu_info
+            if new_backing_file:
+                self.qemu_change_backing(local_file, new_backing_file)
+            qemu_info = self.qemu_get_info(local_file)
+            
+        return local_file, qemu_info, use_incremental_out
             
     def launch_server(self, conn, server, rebuild=False, domain=None):
         if self.test:
@@ -815,10 +847,10 @@ class host_thread(threading.Thread):
     
         #0: get image metadata
             server_metadata = server.get('metadata', {})
-            use_incremental = True
+            use_incremental = None
              
-            if "use_incremental" in server_metadata and server_metadata["use_incremental"] == "no":
-                use_incremental = False
+            if "use_incremental" in server_metadata:
+                use_incremental = False if server_metadata["use_incremental"]=="no" else True
 
             server_host_files = self.localinfo['server_files'].get( server['uuid'], {})
             if rebuild:
@@ -857,9 +889,9 @@ class host_thread(threading.Thread):
             #2: copy image to host
                 remote_file = content[0]['path']
                 use_incremental_image = use_incremental
-                if use_incremental_image and "use_incremental" in dev['metadata'] and dev['metadata']["use_incremental"] == "no":
+                if dev['metadata'].get("use_incremental") == "no":
                     use_incremental_image = False
-                local_file, qemu_info = self.copy_remote_file(remote_file, use_incremental_image)
+                local_file, qemu_info, use_incremental_image = self.copy_remote_file(remote_file, use_incremental_image)
                 
                 #create incremental image
                 if use_incremental_image:
@@ -904,10 +936,10 @@ class host_thread(threading.Thread):
                 self.ssh_connect()
         except libvirt.libvirtError, e:
             text = e.get_error_message()
-            print self.name, ": launch_server(%s) libvirt Exception:"  %(server_id, text)
+            print self.name, ": launch_server(%s) libvirt Exception: %s"  %(server_id, text)
         except Exception, e:
             text = str(e)
-            print self.name, ": launch_server(%s) Exception:"  %(server_id, text)
+            print self.name, ": launch_server(%s) Exception: %s"  %(server_id, text)
         return -1, text
     
     def update_servers_status(self):
@@ -1212,6 +1244,7 @@ class host_thread(threading.Thread):
                                 self.qemu_change_backing(file_dst, k)
                                 break
                     image_status='ACTIVE'
+                    break
                 except paramiko.ssh_exception.SSHException, e:
                     image_status='ERROR'
                     error_text = e.args[0]
@@ -1255,29 +1288,29 @@ class host_thread(threading.Thread):
             xml.append("<interface type='hostdev' managed='yes'>")
             xml.append("  <mac address='" +port['mac']+ "'/>")
             xml.append("  <source>"+ self.pci2xml(port['pci'])+"\n  </source>")
-            xml.apped('</interface>')                
+            xml.append('</interface>')                
 
             
             try:
                 conn=None
                 conn = libvirt.open("qemu+ssh://"+self.user+"@"+self.host+"/system")
-                dom = conn.lookupByUUIDString(port["p.instance_id"])
+                dom = conn.lookupByUUIDString(port["instance_id"])
                 if old_net:
                     text="\n".join(xml)
                     print self.name, ": edit_iface detaching SRIOV interface", text
                     dom.detachDeviceFlags(text, flags=libvirt.VIR_DOMAIN_AFFECT_LIVE)
                 if new_net:
-                    xml[-1] ="  <vlan>   <tag id='" + str(port['p.vlan']) + "'/>   </vlan>"
+                    xml[-1] ="  <vlan>   <tag id='" + str(port['vlan']) + "'/>   </vlan>"
                     self.xml_level = 1
                     xml.append(self.pci2xml(port.get('vpci',None)) )
-                    xml.apped('</interface>')                
+                    xml.append('</interface>')                
                     text="\n".join(xml)
                     print self.name, ": edit_iface attaching SRIOV interface", text
                     dom.attachDeviceFlags(text, flags=libvirt.VIR_DOMAIN_AFFECT_LIVE)
                     
             except libvirt.libvirtError, e:
                 text = e.get_error_message()
-                print self.name, ": edit_iface(",port["p.instance_id"],") libvirt exception:", text 
+                print self.name, ": edit_iface(",port["instance_id"],") libvirt exception:", text 
                 
             finally:
                 if conn is not None: conn.close
@@ -1575,6 +1608,10 @@ def create_server(server, db, db_lock, only_of_ports):
                         dataplane_iface['uuid'] = control_iface['net_id']
                         if dataplane_iface['dedicated'] == "no":
                             dataplane_iface['vlan'] = network['vlan']
+                        if dataplane_iface['dedicated'] != "yes" and control_iface.get("mac_address"):
+                            dataplane_iface['mac_address'] = control_iface.get("mac_address")
+                        if control_iface.get("vpci"):
+                            dataplane_iface['vpci'] = control_iface.get("vpci")
                         break
                 if dataplane_iface['uuid'] == None:
                     return -1, "Error at field netwoks: interface name %s from network not found at flavor" % control_iface.get("name")

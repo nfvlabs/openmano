@@ -1333,7 +1333,8 @@ def http_post_server_id(tenant_id):
         new_instance_result, new_instance = my.db.new_instance(content, nets)
         if new_instance_result < 0:
             print "Error http_post_servers() :", new_instance_result, new_instance
-            return new_instance_result, new_instance
+            bottle.abort(-new_instance_result, new_instance)
+            return
         print
         print "inserted at DB"
         print
@@ -1954,7 +1955,7 @@ def http_put_port_id(port_id):
                     result, new_net_dict = my.db.check_target_net(new_net, None, port['type'] )
                 
                 #change VLAN for SR-IOV ports
-                if result>0 and port["type"]=="instance:data" and port["model"]=="VF": #TODO consider also VFnotShared
+                if result>=0 and port["type"]=="instance:data" and port["model"]=="VF": #TODO consider also VFnotShared
                     if new_net == None:
                         port_dict["vlan"] = None
                     else:

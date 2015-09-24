@@ -447,7 +447,7 @@ def load_file_or_yaml(content):
             #try to parse directly
             r,payload = parse_yaml_json(content)
             if r<0:
-                #print payload
+                print payload
                 exit (-1)
         else:
             print payload

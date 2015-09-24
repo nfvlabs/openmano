@@ -36,6 +36,35 @@ import time
 import Queue
 import requests
 
+
+def change_of2db(flow):
+    '''Change 'flow' dictionary from openflow format to database format
+    Basically the change consist of changing 'flow[actions] from a list of
+    double tuple to a string
+    from [(A,B),(C,D),..] to "A=B,C=D" '''
+    action_str_list=[]
+    for action in flow['actions']:
+        action_str_list.append( action[0] + "=" + str(action[1]) )
+    flow['actions'] = ",".join(action_str_list)
+        
+def change_db2of(flow):
+    '''Change 'flow' dictionary from database format to openflow format
+    Basically the change consist of changing 'flow[actions]' from a string to 
+    a double tuple list
+    from "A=B,C=D,..." to [(A,B),(C,D),..] '''
+    actions=[]
+    action_list = flow['actions'].split(",")
+    for action_item in action_list:
+        action_tuple = action_item.split("=")
+        if action_tuple[1]=="None":
+            action_tuple[1] = None
+        elif action_tuple[0]=="vlan":
+            action_tuple[1] = int(action_tuple[1])
+        actions.append( (action_tuple[0],action_tuple[1]) )
+    flow['actions'] = actions
+
+
+
 class of_test_connector():
     '''This is a fake openflow connector that does nothing for running openvim without an openflow controller 
     '''
@@ -159,12 +188,17 @@ class openflow_thread(threading.Thread):
         # Get the name of flows that will be affected by this NET or net_id==NULL that means
         # net deleted (At DB foreign key: On delete set null)
         self.db_lock.acquire()
-        result, old_flows = self.db.get_table(FROM='of_flows', WHERE={'net_id':net_id},
+        result, database_flows = self.db.get_table(FROM='of_flows', WHERE={'net_id':net_id},
                                           WHERE_OR={'net_id':None} )
         self.db_lock.release()
         if result < 0:
-            print self.name, ": update_of_flows() ERROR getting flows", old_flows
-            return -1, "ERROR getting flows " + old_flows
+            print self.name, ": update_of_flows() ERROR getting flows from database", database_flows
+            return -1, "ERROR getting flows " + database_flows
+        #Get the existing flows at openflow controller
+        result, of_flows = self.OF_connector.get_of_rules() 
+        if result < 0:
+            print self.name, ": update_of_flows() ERROR getting flows from controller", of_flows
+            return -1, "ERROR getting flows " + of_flows
 
         if ifaces_nb < 2:
             pass
@@ -221,21 +255,21 @@ class openflow_thread(threading.Thread):
 
         #modify database flows format and get the used names
         used_names=[]
-        for flow in old_flows:
-            self._change_db2of(flow)
+        for flow in database_flows:
+            change_db2of(flow)
             used_names.append(flow['name'])
         name_index=0
         #insert at database the new flows, change actions to human text
         for flow in new_flows:
             #1 check if an equal flow is already present
-            index = self._check_flow_already_present(flow, old_flows)
+            index = self._check_flow_already_present(flow, database_flows)
             if index>=0:
-                old_flows[index]["not delete"]=True
+                database_flows[index]["not delete"]=True
                 print self.name, ": skipping already present flow", flow
                 continue
             #2 look for a non used name
             flow_name=flow["net_id"]+"_"+str(name_index)
-            while flow_name in used_names:         
+            while flow_name in used_names or flow_name in of_flows:         
                 name_index += 1   
                 flow_name=flow["net_id"]+"_"+str(name_index)
             used_names.append(flow_name)
@@ -246,7 +280,7 @@ class openflow_thread(threading.Thread):
                 print self.name, ": Error '%s' at flow insertion" % c, flow
                 return -1, content
             #4 insert at database
-            self._change_of2db(flow)
+            change_of2db(flow)
             self.db_lock.acquire()
             result, content = self.db.new_row('of_flows', flow)
             self.db_lock.release()
@@ -254,12 +288,22 @@ class openflow_thread(threading.Thread):
                 print self.name, ": Error '%s' at database insertion" % content, flow
                 return -1, content
 
-        #delete not needed old flows from openflow and from DDBB
-        for flow in old_flows:
+        #delete not needed old flows from openflow and from DDBB, 
+        #check that the needed flows at DDBB are present in controller or insert them otherwise
+        for flow in database_flows:
             if "not delete" in flow:
+                if flow["name"] not in of_flows:
+                    #not in controller, insert it
+                    r,c = self.OF_connector.new_flow(flow)
+                    if r < 0:
+                        print self.name, ": Error '%s' at flow insertion" % c, flow
+                        return -1, content
                 continue
-            #print self.name, ": update_of_flows() Deleting", flow['name']
-            r,c= self.OF_connector.del_flow(flow['name'])
+            #Delete flow
+            if flow["name"] in of_flows:
+                r,c= self.OF_connector.del_flow(flow['name'])
+            else:
+                r=0
             self.db_lock.acquire()
             if r>=0:
                 self.db.delete_row_by_key('of_flows', 'id', flow['id'])
@@ -301,32 +345,6 @@ class openflow_thread(threading.Thread):
             index += 1
         return -1
         
-    def _change_of2db(self, flow):
-        '''Change 'flow' dictionary from openflow format to database format
-        Basically the change consist of changing 'flow[actions] from a list of
-        double tuple to a string
-        from [(A,B),(C,D),..] to "A=B,C=D" '''
-        action_str_list=[]
-        for action in flow['actions']:
-            action_str_list.append( action[0] + "=" + str(action[1]) )
-        flow['actions'] = ",".join(action_str_list)
-            
-    def _change_db2of(self, flow):
-        '''Change 'flow' dictionary from database format to openflow format
-        Basically the change consist of changing 'flow[actions] from a string to 
-        a double tuple list
-        from "A=B,C=D,..." to [(A,B),(C,D),..] '''
-        actions=[]
-        action_list = flow['actions'].split(",")
-        for action_item in action_list:
-            action_tuple = action_item.split("=")
-            if action_tuple[1]=="None":
-                action_tuple[1] = None
-            elif action_tuple[0]=="vlan":
-                action_tuple[1] = int(action_tuple[1])
-            actions.append( (action_tuple[0],action_tuple[1]) )
-        flow['actions'] = actions
-
     def _compute_net_flows(self, net_id, ports):
         new_flows=[]
         nb_rules = len(ports)

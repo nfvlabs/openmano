@@ -39,7 +39,7 @@ import floodlight as FL
 import ODL
 import yaml
 import requests
-
+from openflow_thread import change_db2of
 
 def of_switches(args):
     r,c = ofconnector.get_of_switches()
@@ -51,21 +51,25 @@ def of_switches(args):
     return
 
 def of_list(args):
-    r,c = ofconnector.get_of_rules(dpid=of_controller_dpid)
+    r,c = ofconnector.get_of_rules(not args.no_translate)
     if r<0:
         print c
         return
     if args.verbose > 0:
         print yaml.safe_dump(c, indent=4, default_flow_style=False)
         return
-    for rule in c:
+    print "       switch           priority        name                             ingress_port    dst_mac       vlan_id  actions"
+    for name,rule in c.iteritems():
         action_list=[]
         for action in rule["actions"]:
-            action_list.apped(action[0]+"="+action[1])
-            
-        print "%s  %s  %s  input=%s  dst_mac=%s  vlan_id=%s  actions=%s" % \
-            (rule["switch"], rule["priority"].ljust(6), rule["name"].ljust(20), rule["ingress_port"].ljust(3), \
-            rule.get("dst_mac","any").ljust(18), rule.get("vlan_id","any").ljust(4), ",".join(action_list) )
+            action_list.append(action[0]+"="+str(action[1]))
+        if "vlan_id" in rule:
+            vlan=str(rule["vlan_id"])
+        else:
+            vlan="any"
+        print "%s  %s  %s  %s  %s  %s  %s" % \
+            (rule["switch"], str(rule["priority"]).ljust(6), name.ljust(40), rule["ingress_port"].ljust(8), \
+            rule.get("dst_mac","any").ljust(18), vlan.ljust(4), ",".join(action_list) )
     return
 
 def of_clear(args):
@@ -80,6 +84,7 @@ def of_clear(args):
 
 def of_dump(args):
     args.verbose = 3
+    args.no_translate=False
     of_list(args)
     return
 
@@ -96,19 +101,32 @@ def of_reinstall(args):
 def of_install(args):
     try:
         f = open(args.file, "r")
-        text = f.read_data()
+        text = f.read()
         f.close()
-        ofrules = yaml.load(text)
-        for rule in ofrules:
+        lines=text.split("\n")
+        heads=lines[0].split()
+
+        for line in lines[1:]:
+            rule={}
+            items= line.split()
+            if len(items)==0 or items[0][0]=="#": #empty line or commented
+                continue
+            for i in range(0,len(items)):
+                rule[ heads[i] ] = items[i]
+            #TODO change to openflow format
+            if rule["vlan_id"] == "any":
+                del rule["vlan_id"]
+            if rule["dst_mac"] == "any":
+                del rule["dst_mac"]
+            change_db2of(rule)
             r,c = ofconnector.new_flow(rule)
             if r<0:
-                print "%s  %s  %s  input=%s  dst_mac=%s  vlan_id=%s ERROR: %s" % \
+                error="ERROR: "+c
+            else:
+                error="OK"
+            print "%s  %s  %s  input=%s  dst_mac=%s  vlan_id=%s  %s" % \
                     (rule["switch"], rule["priority"].ljust(6), rule["name"].ljust(20), rule["ingress_port"].ljust(3), \
-                     rule.get("dst_mac","any").ljust(18), rule.get("vlan_id","any").ljust(4), c )
-            elif args.verbose>0:
-                print "%s  %s  %s  input=%s  dst_mac=%s  vlan_id=%s OK" % \
-                    (rule["switch"], rule["priority"].ljust(6), rule["name"].ljust(20), rule["ingress_port"].ljust(3), \
-                     rule.get("dst_mac","any").ljust(18), rule.get("vlan_id","any").ljust(4) )
+                     rule.get("dst_mac","any").ljust(18), rule.get("vlan_id","any").ljust(4), error )
         return
     except IOError, e:
         print " Error opening file '" + args.file + "': " + e.args[1]
@@ -155,17 +173,17 @@ def config(args):
     print "OPENVIM_HOST: %s" %(vim_host)
     print "OPENVIM_ADMIN_PORT: %s" %(vim_admin_port)
     print "OF_CONTROLLER_TYPE: %s" %(of_controller_type)
-    print "OF_CONTROLLER_VERSION: %s" %(of_controller_version)
+    #print "OF_CONTROLLER_VERSION: %s" %(of_controller_version)
     print "OF_CONTROLLER_IP: %s" %(of_controller_ip)
     print "OF_CONTROLLER_PORT: %s" %(of_controller_port)
     print "OF_CONTROLLER_DPID: %s" %(of_controller_dpid)
     return
 
-version="0.5"
+version="0.6"
 global vim_host
 global vim_admin_port
 global of_controller_type
-global of_controller_version
+#global of_controller_version
 global of_controller_ip
 global of_controller_port
 global of_controller_dpid
@@ -178,7 +196,7 @@ if __name__=="__main__":
     vim_host = os.getenv('OPENVIM_HOST',"localhost")
     vim_admin_port = os.getenv('OPENVIM_ADMIN_PORT',"8085")
     of_controller_type = os.getenv('OF_CONTROLLER_TYPE',"floodlight")
-    of_controller_version = os.getenv('OF_CONTROLLER_VERSION',"0.90")
+    #of_controller_version = os.getenv('OF_CONTROLLER_VERSION',"0.90")
     of_controller_ip = os.getenv('OF_CONTROLLER_IP',"localhost")
     of_controller_port = os.getenv('OF_CONTROLLER_PORT',"7070")
     of_controller_dpid = os.getenv('OF_CONTROLLER_DPID','00:01:02:03:e4:05:e6:07')
@@ -216,6 +234,7 @@ if __name__=="__main__":
 
     list_parser = subparsers.add_parser('list', help="list openflow rules")
     list_parser.add_argument('--verbose', '-v', action='count')
+    list_parser.add_argument("--no-translate", "-n", action="store_true", help="Skip translation from openflow index to switch port name")
     list_parser.set_defaults(func=of_list)
 
     dump_parser = subparsers.add_parser('dump', help="dump openflow rules")
@@ -236,15 +255,15 @@ if __name__=="__main__":
     
     args = main_parser.parse_args()
     
-    floodlight_versions = ("0.90", "1.0", "1.1")
-    if of_controller_type == "floodlight" and of_controller_version not in floodlight_versions:
-        print "Wrong Floodlight controller version. Supported versions: %" %str(floodlight_versions)
-        exit()
+    #floodlight_versions = ("0.90", "1.0", "1.1")
+    #if of_controller_type == "floodlight" and of_controller_version not in floodlight_versions:
+    #    print "Wrong Floodlight controller version. Supported versions: %" %str(floodlight_versions)
+    #    exit()
     
     if of_controller_type == "floodlight":
-        ofconnector = FL.FL_conn(of_controller_ip, of_controller_port, of_controller_dpid, of_controller_version)
-        #ofcontroller=floodlight_ofconnector(version=of_controller_version, ip=of_controller_ip,
-        #                                    port=of_controller_port, dpid=of_controller_dpid)
+        ofconnector = FL.FL_conn(of_controller_ip, of_controller_port, of_controller_dpid)
+    elif  of_controller_type == "opendaylight":
+        ofconnector = ODL.ODL_conn(of_controller_ip, of_controller_port, of_controller_dpid)
     else:
         print "Wrong controller type"
 

@@ -41,7 +41,8 @@ class FL_conn():
         self.dpid = str(of_dpid)
         self.url = "http://%s:%s" %( str(of_ip), str(of_port) )
 
-        self.pp2ofi={}  # Physical Port 2 OpenFlow Index
+        self.pp2ofi={}  # From Physical Port to OpenFlow Index
+        self.ofi2pp={}  # From OpenFlow Index to Physical Port
         self.headers = {'content-type':'application/json', 'Accept':'application/json'}
         self.version= None
         if of_version!=None:
@@ -60,8 +61,6 @@ class FL_conn():
                 "inport":       "ingress-port",
                 "setvlan":      "set-vlan-id",
                 "stripvlan":    "strip-vlan",
-                "rule_inport":  "inputPort",
-                "rule_dstmac":  "dataLayerDestination",
             }
         elif version[0]=="1" : #version 1.X
             self.version= version
@@ -74,8 +73,6 @@ class FL_conn():
                 "inport":       "in_port",
                 "setvlan":      "set_vlan_vid",
                 "stripvlan":    "strip_vlan",
-                "rule_inport":  "in_port",
-                "rule_dstmac":  "eth_dst",
             }
         else:
             self.version= None
@@ -104,7 +101,7 @@ class FL_conn():
             switch_list=[]
             for switch in info:
                 switch_list.append( (switch[ self.ver_names["dpid"] ], switch['inetAddress']) )
-            return 0, switch_list
+            return len(switch_list), switch_list
         except requests.exceptions.RequestException, e:
             print self.name, ": get_of_switches Exception:", str(e)
             return -1, str(e)
@@ -112,49 +109,53 @@ class FL_conn():
             print self.name, ": get_of_switches Exception:", str(e)
             return -1, str(e)
 
-    def get_of_rules(self, dpid=None):
-        if dpid==None:
-            if self.dpid==None:
-                return -1, "You must provide a dpid"
-            else:
-                dpid=self.dpid
+    def get_of_rules(self, translate_of_ports=True):
+        '''obtain the rules inserted at openflow controller
+           if translate_of_ports==True it translate ports from openflow index to switch name
+           return 0, the list of rules if ok
+                  -1, text error on fail
+        '''   
         
-        #autodiscover version
-        if self.version == None:
-            r,c = self.get_of_switches()
+        #get translation, autodiscover version
+        if len(self.ofi2pp) == 0:
+            r,c = self.obtain_port_correspondence()
             if r<0:
                 return r,c
-            elif r==0:
-                return -1, "No dpid found "
         #get rules
         try:
-            of_response = requests.get(self.url+"/wm/%s/list/%s/json" %(self.ver_names["URLmodifier"], dpid),
+            of_response = requests.get(self.url+"/wm/%s/list/%s/json" %(self.ver_names["URLmodifier"], self.dpid),
                                         headers=self.headers)
             #print vim_response.status_code
             if of_response.status_code != 200:
                 print self.name, ": get_of_rules:", self.url, of_response
                 raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
             info = of_response.json()
-            rule_list=[]
+            rule_dict={}
             for switch,switch_info in info.iteritems():
                 for name,details in switch_info.iteritems():
                     rule = {}
                     rule["switch"] = str(switch)
-                    rule["active"] = "true"
-                    rule["name"] = str(name)
-                    rule["priority"] = str(int(details["priority"]))
+                    #rule["active"] = "true"
+                    rule["priority"] = int(details["priority"])
                     if self.version[0]=="0":
-                        rule["inport"] = str(details["match"]["inputPort"]) 
+                        if translate_of_ports:
+                            rule["ingress_port"] = self.ofi2pp[ details["match"]["inputPort"] ] 
+                        else:
+                            rule["ingress_port"] = str(details["match"]["inputPort"])
                         dst_mac = details["match"]["dataLayerDestination"]
                         if dst_mac != "00:00:00:00:00:00":
                             rule["dst_mac"] = dst_mac
                         vlan = details["match"]["dataLayerVirtualLan"]
                         if vlan != -1:
-                            rule["vlan_id"] = str(vlan)
+                            rule["vlan_id"] = vlan
                         actionlist=[]
                         for action in details["actions"]:
                             if action["type"]=="OUTPUT":
-                                actionlist.append( ("out",action["port"]) )
+                                if translate_of_ports:
+                                    port = self.ofi2pp[ action["port"] ]
+                                else:
+                                    port = action["port"]
+                                actionlist.append( ("out", port) )
                             elif action["type"]=="STRIP_VLAN":
                                 actionlist.append( ("vlan",None) )
                             elif action["type"]=="SET_VLAN_ID":
@@ -163,9 +164,11 @@ class FL_conn():
                                 actionlist.append( (action["type"], str(action) ))
                                 print "Unknown action in rule %s: %s" % (rule["name"], str(action))
                             rule["actions"] = actionlist
-                        rule_list.append(rule)
                     elif self.version[0]=="1":
-                        rule["inport"] = details["match"]["in_port"]
+                        if translate_of_ports:
+                            rule["ingress_port"] = self.ofi2pp[ details["match"]["in_port"] ]
+                        else:
+                            rule["ingress_port"] = details["match"]["in_port"]
                         if "eth_dst" in details["match"]:
                             dst_mac = details["match"]["eth_dst"]
                             if dst_mac != "00:00:00:00:00:00":
@@ -176,7 +179,11 @@ class FL_conn():
                         actionlist=[]
                         for action in details["instructions"]["instruction_apply_actions"]:
                             if action=="output":
-                                actionlist.append( ("out",details["instructions"]["instruction_apply_actions"]["output"]) )
+                                if translate_of_ports:
+                                    port = self.ofi2pp[ details["instructions"]["instruction_apply_actions"]["output"] ]
+                                else:
+                                    port = details["instructions"]["instruction_apply_actions"]["output"]
+                                actionlist.append( ("out",port) )
                             elif action=="strip_vlan":
                                 actionlist.append( ("vlan",None) )
                             elif action=="set_vlan_vid":
@@ -184,7 +191,8 @@ class FL_conn():
                             else:
                                 actionlist.append( (action, str(details["instructions"]["instruction_apply_actions"]) ))
                                 print "Unknown action in rule %s: %s" % (rule["name"], str(action))
-            return 0, rule_list
+                    rule_dict[str(name)] = rule
+            return 0, rule_dict
         except requests.exceptions.RequestException, e:
             print self.name, ": get_of_rules Exception:", str(e)
             return -1, str(e)
@@ -226,7 +234,8 @@ class FL_conn():
             else:
                 for port in info[index]["ports"]:
                     self.pp2ofi[ str(port["name"]) ] = str(port["portNumber"] )
-            print self.name, ": get_of_controller_info ports:", self.pp2ofi
+                    self.ofi2pp[ port["portNumber"]] = str(port["name"]) 
+            #print self.name, ": get_of_controller_info ports:", self.pp2ofi
             return 0, self.pp2ofi
         except requests.exceptions.RequestException, e:
             print self.name, ": get_of_controller_info Exception:", str(e)
@@ -258,20 +267,18 @@ class FL_conn():
             return -1, str(e)
 
     def new_flow(self, data):
-        #autodiscover version
-        if self.version == None:
-            r,c = self.get_of_switches()
+        #get translation, autodiscover version
+        if len(self.pp2ofi) == 0:
+            r,c = self.obtain_port_correspondence()
             if r<0:
                 return r,c
-            elif r==0:
-                return -1, "No dpid found "
         try:
             #We have to build the data for the floodlight call from the generic data
             sdata = {'active': "true", "priority":str(data["priority"]), "name":data["name"]}
             if data.get("vlan_id"):
                 sdata[ self.ver_names["vlanid"]  ] = data["vlan_id"]
             if data.get("dst_mac"):
-                sdata[  self.ver_names["dstmac"]  ] = data["dst_mac"]
+                sdata[  self.ver_names["destmac"]  ] = data["dst_mac"]
             sdata['switch'] = self.dpid
             sdata[  self.ver_names["inport"]  ] = self.pp2ofi[data['ingress_port']]
             sdata['actions'] = ""
@@ -290,7 +297,7 @@ class FL_conn():
 
             of_response = requests.post(self.url+"/wm/%s/json" % self.ver_names["URLmodifier"],
                                 headers=self.headers, data=json.dumps(sdata) )
-            print self.name, ": new_flow():", sdata, of_response
+            print self.name, ": new_flow():", sdata, of_response.text
             #print vim_response.status_code
             if of_response.status_code != 200:
                 raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
@@ -309,10 +316,11 @@ class FL_conn():
             elif r==0: #empty
                 return 0, None
         try:
-            of_response = requests.get(self.url+"/wm/%s/clear/%s/json" % (self.ver_names["URLmodifier"], self.dpid) )
-            print self.name, ": clear_all_flows:", of_response
-            if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+            url = self.url+"/wm/%s/clear/%s/json" % (self.ver_names["URLmodifier"], self.dpid)
+            of_response = requests.get(url )
+            if of_response.status_code < 200 or of_response.status_code >= 300:
+                print self.name, ": clear_all_flows:", url, of_response, of_response.text
+                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
             return 0, None
         except requests.exceptions.RequestException, e:
             print self.name, ": clear_all_flows Exception:", str(e)
