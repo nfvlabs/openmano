@@ -32,6 +32,8 @@ function usage(){
     echo -e "usage: ${BASH_SOURCE[0]} [OPTIONS] \n  test openvim "
     echo -e "  OPTIONS:"
     echo -e "    -f --force       does not prompt for confirmation"
+    echo -e "    -v --same-vlan   use this if the parameter 'of_controller_nets_with_same_vlan'"
+    echo -e "                     is not false at openvimd.cfg to avoid test unrealizable openflow nets"
     echo -e "    -h --help        shows this help"
 }
 
@@ -47,12 +49,16 @@ fail=""
 
 #check correct arguments
 force=n
+same_vlan=n
 for param in $*
 do
    if [[ $param == -h ]] || [[ $param == --help ]]
    then
        usage
        $_exit 0
+   elif [[ $param == -v ]] || [[ $param == --same-vlan ]]
+   then
+       same_vlan=y
    elif [[ $param == -f ]] || [[ $param == --force ]]
    then
        force=y
@@ -107,8 +113,22 @@ function process_cmd(){
 
 }
 
+function test_of_rules(){
+  #test the number of rules of a network, wait until 10 seconds
+  timeout_=10
+  while true 
+  do #it can take some seconds to get it ready
+    result=`openvim openflow-net-list $1`
+    nb_rules=`echo $result | grep actions -o | wc -l`
+    [[ $nb_rules == $2 ]] && echo "OK" && break
+    [[ $timeout_ == 0 ]] && echo "FAIL $result" >&2 && $_exit 1  
+    sleep 1
+    timeout_=$((timeout_ - 1))
+  done
+}
 
-echo " Test VIM with some VM deployments. It delete the created items at the end"
+echo " Test VIM with 3 VM deployments. It delete the created items at the end"
+echo " "
 [[ $force != y ]] && read -e -p "Press enter to continue, CTRL+C to abort " kk
 
 
@@ -167,25 +187,25 @@ flavor:
 process_cmd uuid flavor1 $result 
 TODELETE="flavor:$flavor1 $TODELETE"
 
-printf "%-50s" "insert ptp net0: "
+printf "%-50s" "insert net-ptp: "
 result=`openvim net-create '
 ---
 network:
-  name: test_ptp_net0
+  name: test_ptp_net
   type: ptp
 '`
-process_cmd uuid network0  $result
-TODELETE="net:$network0 $TODELETE"
+process_cmd uuid net_ptp  $result
+TODELETE="net:$net_ptp $TODELETE"
 
-printf "%-50s" "insert data net2: "
+printf "%-50s" "insert net-data: "
 result=`openvim net-create '
 ---
 network:
-  name: test_data_net1
+  name: test_data_net
   type: data
 '`
-process_cmd uuid network1 $result
-TODELETE="net:$network1 $TODELETE"
+process_cmd uuid net_data $result
+TODELETE="net:$net_data $TODELETE"
 
 printf "%-50s" "insert bridge network net2: "
 result=`openvim net-create '
@@ -246,7 +266,7 @@ server:
          bandwidth: '10 Gbps'
          vpci: '0000:00:11.0'
          mac_address: '10:10:10:10:11:12'
-         uuid: '$network0'
+         uuid: '$net_ptp'
     devices:
     - type: disk
       imageRef: '$image2'
@@ -297,7 +317,7 @@ server:
   networks:
   - name: missing
     type: PF
-    uuid: '$network0'
+    uuid: '$net_ptp'
 "`
 process_cmd fail "wrong iface name at networks" $result
 
@@ -313,7 +333,7 @@ server:
   networks:
   - name: xe0
     type: VF
-    uuid: '$network0'
+    uuid: '$net_ptp'
 "`
 process_cmd fail "wrong iface type at networks" $result
 
@@ -338,37 +358,79 @@ server:
     mac_address: '10:10:10:10:12:11'
   - name: xe0
     type: PF
-    uuid: '$network0'
+    uuid: '$net_data'
   - name: xe1
     type: VF
-    uuid: '$network1'
+    uuid: '$net_ptp'
     mac_address: '10:10:10:10:12:13'
 "`
 process_cmd uuid server3 $result
 TODELETE="vm:$server3 $TODELETE"
 
+printf "%-50s" "check openflow 2 ptp rules for net_ptp: "
+test_of_rules $net_ptp 2
+
+printf "%-50s" "check openflow 0 ptp rules for net_data: "
+test_of_rules $net_data 0
+
+[[ $force != y ]] && read -e -p "  Test control plane, and server2:xe0 to server3:xe1 connectivity. Press enter to continue " kk
 
 printf "%-50s" "get xe0 iface uuid from server1: "
 result=`openvim port-list -F"device_id=${server1}&name=xe0"`
-process_cmd uuid iface_xe0 $result
+process_cmd uuid server1_xe0 $result
 
 printf "%-50s" "get xe1 iface uuid from server1: "
-result=`openvim port-list -F"device_id=${server1}&name=xe0"`
-process_cmd uuid iface_xe1 $result
+result=`openvim port-list -F"device_id=${server1}&name=xe1"`
+process_cmd uuid server1_xe1 $result
 
-printf "%-50s" "attach xe0 from server1 to network: "
-result=`openvim port-edit $iface_xe0 "network_id: $network0" -f`
+printf "%-50s" "get xe0 iface uuid from server3: "
+result=`openvim port-list -F"device_id=${server3}&name=xe0"`
+process_cmd uuid server3_xe0 $result
+
+printf "%-50s" "get xe1 iface uuid from server3: "
+result=`openvim port-list -F"device_id=${server3}&name=xe1"`
+process_cmd uuid server3_xe1 $result
+
+printf "%-50s" "test ptp 3connex server1:xe0 -> net_ptp: "
+result=`openvim port-edit $server1_xe0 "network_id: $net_ptp" -f`
 process_cmd fail "Can not connect 3 interfaces to ptp network"
 
-
-printf "%-50s" "attach xe1 from server1 to network: "
-result=`openvim port-edit $iface_xe1 "network_id: $network1" -f | gawk '{print $1}'`
+printf "%-50s" "attach server1:xe0 to net_data: "
+result=`openvim port-edit $server1_xe0 "network_id: $net_data" -f | gawk '{print $1}'`
 process_cmd ok $result
 
+printf "%-50s" "check openflow 2 ptp rules for net_data: "
+test_of_rules $net_data 2
+
+[[ $force != y ]] && read -e -p "  Test server1:xe0 to server3:xe0 connectivity. Press enter to continue " kk
+
+if [[ $same_vlan == n ]]
+then
+
+  printf "%-50s" "attach server1:xe1 to net-data: "
+  result=`openvim port-edit $server1_xe1 "network_id: $net_data" -f | gawk '{print $1}'`
+  process_cmd ok $result
+
+  printf "%-50s" "check openflow 9 ptp rules for net_data: "
+  test_of_rules $net_data 9
+
+  [[ $force != y ]] && read -e -p "  Test server1:xe0,server1:xe1,server3:xe0 connectivity. Press enter to continue " kk
+
+  printf "%-50s" "re-attach server3:xe1 to net-data: "
+  result=`openvim port-edit $server3_xe1 "network_id: $net_data" -f | gawk '{print $1}'`
+  process_cmd ok $result
+
+  printf "%-50s" "check openflow 16 ptp rules for net_data: "
+  test_of_rules $net_data 16
+
+  printf "%-50s" "check openflow 0 ptp rules for net_ptp: "
+  test_of_rules $net_ptp 0
+
+  [[ $force != y ]] && read -e -p "  Test server1:xe0,server1:xe1,server3:xe0,server3:xe1 connectivity. Press enter to continue " kk
+fi
 
 echo 
 echo DONE
-echo "  Check connections"
 
 $_exit 0
 

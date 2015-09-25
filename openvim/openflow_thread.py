@@ -70,18 +70,29 @@ class of_test_connector():
     '''
     def __init__(self):
         self.name = "ofc_test"
+        self.rules={}
     def get_of_switches(self):
         return 0, ()
     def obtain_port_correspondence(self):
         return 0, ()
     def del_flow(self, flow_name):
-        print self.name, ": del_flow", flow_name, "Ok"
-        return 0, None
+        if flow_name in self.rules:
+            print self.name, ": del_flow", flow_name, "Ok"
+            del self.rules[flow_name]
+            return 0, None
+        else:
+            print self.name, ": del_flow", flow_name, "Ok"
+            return -1, "flow %s not found"
     def new_flow(self, data):
+        self.rules[ data["name"] ] = data
         print self.name, ": new_flow():", data, "Ok"
         return 0, None
+    def get_of_rules(self, translate_of_ports=True):
+        return 0, self.rules
+
     def clear_all_flows(self):
         print self.name, ": clear_all_flows:", "Ok"
+        self.rules={}
         return 0, None
 
 

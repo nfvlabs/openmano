@@ -1557,6 +1557,7 @@ class vim_db():
                     self.cur.execute(cmd)
                     if self.cur.rowcount == 0 : return -1, "network_id %s does not match any net" % net_id
                     net = self.cur.fetchone()
+                    break
 
             except (mdb.Error, AttributeError), e:
                 if not self.debug: print cmd

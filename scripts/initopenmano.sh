@@ -122,14 +122,18 @@ echo "Adding particular configuration - VNFs"
 openmano vnf-create $DIRmano/vnfs/examples/linux.yaml         || ! echo "fail" >&2 || $_exit 1
 openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF1.yaml || ! echo "fail" >&2 || $_exit 1
 openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF2.yaml || ! echo "fail" >&2 || $_exit 1
+openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF_2VMs.yaml || ! echo "fail" >&2 || $_exit 1
+openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF3.yaml || ! echo "fail" >&2 || $_exit 1
 
 echo "Adding particular configuration - Scenarios"
 openmano scenario-create $DIRmano/scenarios/examples/simple.yaml  || ! echo "fail" >&2 || $_exit 1
 openmano scenario-create $DIRmano/scenarios/examples/complex.yaml || ! echo "fail" >&2 || $_exit 1
+openmano scenario-create $DIRmano/scenarios/examples/complex2.yaml || ! echo "fail" >&2 || $_exit 1
 
 echo "Adding particular configuration - Scenario instances"
 openmano scenario-deploy simple simple-instance   || ! echo "fail" >&2 || $_exit 1
 openmano scenario-deploy complex complex-instance || ! echo "fail" >&2 || $_exit 1
+openmano scenario-deploy complex2 complex2-instance || ! echo "fail" >&2 || $_exit 1
 
 echo
 echo DONE
