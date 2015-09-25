@@ -1571,13 +1571,13 @@ class vim_db():
         if (net['type'] in ('p2p','data') and 'port_type' == 'instance:bridge') or \
             (net['type'] in ('bridge_data','bridge_man') and 'port_type' != 'instance:bridge') :
             return -1, "can not attach a port of type %s into a net of type %s" % (port_type, net['type'])
-        if net['type'] == 'p2p':
+        if net['type'] == 'ptp':
             #look how many 
             nb_ports, data = self.get_ports( {'net_id':net_id} )
             if nb_ports<0:
                 return -1, data
             else:
-                if net['bind'][:9]=="openflow:":
+                if net['bind']:
                     nb_ports +=1
                 if nb_ports >=2:
                     return -1, "net of type p2p already contain two ports attached. No room for another"

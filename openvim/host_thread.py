@@ -1598,6 +1598,7 @@ def create_server(server, db, db_lock, only_of_ports):
                 if network['type']!='data' and network['type']!='ptp':
                     return -1, "Error at field netwoks: network uuid %s for dataplane interface is not of type data or ptp" % control_iface['net_id']
                 #dataplane interface, look for it in the numa tree and asign this network
+                iface_found=False
                 for dataplane_iface in numa_dict['interfaces']:
                     if dataplane_iface['name'] == control_iface.get("name"):
                         if (dataplane_iface['dedicated'] == "yes" and control_iface["type"] != "PF") or \
@@ -1612,8 +1613,9 @@ def create_server(server, db, db_lock, only_of_ports):
                             dataplane_iface['mac_address'] = control_iface.get("mac_address")
                         if control_iface.get("vpci"):
                             dataplane_iface['vpci'] = control_iface.get("vpci")
+                        iface_found=True
                         break
-                if dataplane_iface['uuid'] == None:
+                if not iface_found:
                     return -1, "Error at field netwoks: interface name %s from network not found at flavor" % control_iface.get("name")
         
     resources['host_id'] = host_id
