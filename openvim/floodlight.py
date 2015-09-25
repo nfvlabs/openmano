@@ -34,7 +34,9 @@ import json
 import requests
 
 class FL_conn():
-    '''Floodlight connector. No MAC learning is used'''
+    ''' Floodlight connector. No MAC learning is used
+        version 0.9 or 1.X is autodetected
+    '''
     def __init__(self, of_ip, of_port, of_dpid, of_version=None):
 
         self.name = "Floodlight"
@@ -78,6 +80,11 @@ class FL_conn():
             self.version= None
             
     def get_of_switches(self):
+        ''' Obtain a a list of switches or DPID detected by this controller
+            Return
+                <number>, <list>: where each element of the list is a tuple pair (DPID, ip address)
+                <0, text_error: uppon error
+        '''  
         try:
             of_response = requests.get(self.url+"/wm/core/controller/switches/json", headers=self.headers)
             #print vim_response.status_code
@@ -110,10 +117,12 @@ class FL_conn():
             return -1, str(e)
 
     def get_of_rules(self, translate_of_ports=True):
-        '''obtain the rules inserted at openflow controller
-           if translate_of_ports==True it translate ports from openflow index to switch name
-           return 0, the list of rules if ok
-                  -1, text error on fail
+        ''' Obtain the rules inserted at openflow controller
+            Params:
+                translate_of_ports: if True it translates ports from openflow index to switch name
+            Return:
+                0, dict if ok: with the rule name as key, description at value 
+                -1, text_error on fail
         '''   
         
         #get translation, autodiscover version

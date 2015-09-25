@@ -44,11 +44,71 @@ class ODL_conn():
         self.url = "http://%s:%s" %( str(of_ip), str(of_port) )
         self.auth = base64.b64encode(of_user+":"+of_password)
 
-        self.pp2ofi={}  # Physical Port 2 OpenFlow Index
+        self.pp2ofi={}  # From Physical Port to OpenFlow Index
+        self.ofi2pp={}  # From OpenFlow Index to Physical Port
         self.headers = {'content-type':'application/json', 'Accept':'application/json',
                         'Authorization': 'Basic '+self.auth}
 
+    def get_of_switches(self):
+        ''' Obtain a a list of switches or DPID detected by this controller
+            Return
+                <number>, <list>: where each element of the list is a tuple pair (DPID, ip address)
+                <0, text_error: uppon error
+        '''  
+        try:
+            of_response = requests.get(self.url+"/restconf/operational/opendaylight-inventory:nodes",
+                                       headers=self.headers)
+            #print vim_response.status_code
+            if of_response.status_code != 200:
+                print self.name, ": obtain_port_correspondence:", self.url, of_response
+                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+            info = of_response.json()
+            
+            if type(info) != dict:
+                return -1, "unexpected openflow response, not a dict. Wrong version?"
 
+            nodes = info.get('nodes')
+            if nodes is None:
+                return -1, "unexpected openflow response, 'nodes' element not found. Wrong version?"
+
+            node_list = nodes.get('node')
+            if node_list is None or type(node_list) is not list:
+                return -1, "unexpected openflow response, 'node' element not found or is not a list. Wrong version?"
+
+            switch_list=[]
+            for node in node_list:
+                node_id = node.get('id')
+                if node_id is None:
+                    return -1, "unexpected openflow response, 'id' element not found in one of the nodes. " \
+                               "Wrong version?"
+
+                if node_id == 'controller-config':
+                    continue
+
+                switch_list.append( (node_id, "#TODO put here the ip address"))
+                if self.id != node_id:
+                    continue
+
+                node_connector_list = node.get('node-connector')
+                if node_connector_list is None or type(node_connector_list) is not list:
+                    return -1, "unexpected openflow response, 'node-connector' element not found in the node" \
+                               "or is not a list. Wrong version?"
+
+                for node_connector in node_connector_list:
+                    self.pp2ofi[ str(node_connector['flow-node-inventory:name']) ] = str(node_connector['id'] )
+
+                #If we found the appropriate dpid no need to continue in the for loop
+                break
+
+                switch_list.append( (node_id, "#TODO put here the ip address"))
+            return len(switch_list), switch_list
+        except requests.exceptions.RequestException, e:
+            print self.name, ": obtain_port_correspondence Exception:", str(e)
+            return -1, str(e)
+        except ValueError, e: # the case that JSON can not be decoded
+            print self.name, ": obtain_port_correspondence Exception:", str(e)
+            return -1, str(e)
+        
     def obtain_port_correspondence(self):
         try:
             of_response = requests.get(self.url+"/restconf/operational/opendaylight-inventory:nodes",
@@ -92,6 +152,7 @@ class ODL_conn():
 
                 for node_connector in node_connector_list:
                     self.pp2ofi[ str(node_connector['flow-node-inventory:name']) ] = str(node_connector['id'] )
+                    self.ofi2pp[ node_connector['id'] ] =  str(node_connector['flow-node-inventory:name'])
 
                 #If we found the appropriate dpid no need to continue in the for loop
                 break
@@ -104,6 +165,41 @@ class ODL_conn():
         except ValueError, e: # the case that JSON can not be decoded
             print self.name, ": obtain_port_correspondence Exception:", str(e)
             return -1, str(e)
+        
+    def get_of_rules(self, translate_of_ports=True):
+        ''' Obtain the rules inserted at openflow controller
+            Params:
+                translate_of_ports: if True it translates ports from openflow index to switch name
+            Return:
+                0, dict if ok: with the rule name as key, description at value 
+                -1, text_error on fail
+        '''   
+        
+        if len(self.ofi2pp) == 0:
+            r,c = self.obtain_port_correspondence()
+            if r<0:
+                return r,c
+        #get rules
+        try:
+            of_response = requests.delete(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
+                                          "/table/0/#TODO", headers=self.headers)
+            if of_response.status_code != 200:
+                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+            
+            rule_dict={}
+            #info = of_response.json()
+            #TODO
+            return 0, rule_dict
+
+        except requests.exceptions.RequestException, e:
+            print self.name, ": get_of_rules Exception:", str(e)
+            return -1, str(e)
+        except ValueError, e: # the case that JSON can not be decoded
+            print self.name, ": get_of_rules Exception:", str(e)
+            return -1, str(e)
+
+
+
             
     def del_flow(self, flow_name):
         try:
@@ -123,6 +219,10 @@ class ODL_conn():
             return -1, str(e)
 
     def new_flow(self, data):
+        if len(self.pp2ofi) == 0:
+            r,c = self.obtain_port_correspondence()
+            if r<0:
+                return r,c
         try:
             #We have to build the data for the opendaylight call from the generic data
             sdata = dict()
