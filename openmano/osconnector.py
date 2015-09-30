@@ -27,11 +27,8 @@ osconnector implements all the methods to interact with openstack using the pyth
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$22-jun-2014 11:19:29$"
 
-import requests
-#import json
-from utils import auxiliary_functions as af
-import openmano_schemas
-from nfvo_db import HTTP_Bad_Request, HTTP_Not_Found, HTTP_Unauthorized, HTTP_Conflict, HTTP_Internal_Server_Error
+import json
+from nfvo_db import HTTP_Bad_Request, HTTP_Not_Found, HTTP_Conflict, HTTP_Internal_Server_Error #HTTP_Unauthorized
 
 from novaclient import client as nClient, exceptions as nvExceptions
 import keystoneclient.v2_0.client as ksClient
@@ -406,6 +403,28 @@ class osconnector():
             print "delete_tenant_network " + error_text
         return error_value, error_text
 
+    def get_tenant_flavor(self, flavor_id):
+        '''Obtain flavor details from the  VIM
+            Returns the flavor dict details
+        '''
+        print "VIMConnector: Getting flavor from VIM"
+        try:
+            self.reload_connection()
+            flavor = self.nova.flavors.find(id=flavor_id)
+            #TODO parse input and translate to VIM format (openmano_schemas.new_vminstance_response_schema)
+            return 1, {"flavor": flavor.to_dict()}
+        except nvExceptions.NotFound, e:
+            error_value=-HTTP_Not_Found
+            error_text= "flavor instance %s not found" % flavor_id
+        except (ksExceptions.ClientException, nvExceptions.ClientException), e:
+            error_value=-HTTP_Bad_Request
+            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+        #TODO insert exception HTTP_Unauthorized
+        #if reaching here is because an exception
+        if self.debug:
+            print "get_tenant_flavor " + error_text
+        return error_value, error_text        
+
     def new_tenant_flavor(self, flavor_dict, change_name_if_used=True):
         '''Adds a tenant flavor to openstack VIM
         if change_name_if_used is True, it will change name in case of conflict
@@ -559,7 +578,7 @@ class osconnector():
                 new_image_nova.metadata.setdefault('location',image_dict['location'])
                 metadata_to_load = image_dict.get('metadata')
                 if metadata_to_load:
-                    for k,v in metadata_to_load.iteritems():
+                    for k,v in json.loads(metadata_to_load).iteritems():
                         new_image_nova.metadata.setdefault(k,v)
                 return 1, new_image.id
             except nvExceptions.Conflict, e:

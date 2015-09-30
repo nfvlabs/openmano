@@ -36,7 +36,8 @@ import threading
 import datetime
 
 from jsonschema import validate as js_v, exceptions as js_e
-from openmano_schemas import vnfd_schema, scenario_new_schema, scenario_edit_schema, \
+from openmano_schemas import vnfd_schema_v01, vnfd_schema_v02, \
+                            scenario_new_schema, scenario_edit_schema, \
                             scenario_action_schema, instance_scenario_action_schema, \
                             tenant_schema, tenant_edit_schema,\
                             datacenter_schema, datacenter_edit_schema, datacenter_action_schema, datacenter_associate_schema
@@ -155,7 +156,17 @@ def format_out(data):
         #return data #json no style
         return json.dumps(data, indent=4) + "\n"
 
-def format_in(schema):
+def format_in(default_schema, version_fields=None, version_dict_schema=None):
+    ''' Parse the content of HTTP request against a json_schema
+        Parameters
+            default_schema: The schema to be parsed by default if no version field is found in the client data
+            version_fields: If provided it contains a tuple or list with the fields to iterate across the client data to obtain the version
+            version_dict_schema: It contains a dictionary with the version as key, and json schema to apply as value
+                It can contain a None as key, and this is apply if the client data version does not match any key 
+        Return:
+            user_data, used_schema: if the data is successfully decoded and matches the schema
+            launch a bottle abort if fails
+    '''
     #print "HEADERS :" + str(bottle.request.headers.items())
     try:
         format_type = bottle.request.headers.get('Content-Type', 'application/json')
@@ -173,12 +184,29 @@ def format_in(schema):
         #if client_data == None:
         #    bottle.abort(HTTP_Bad_Request, "Content error, empty")
         #    return
-        #check needed_items
 
-        js_v(client_data, schema)
-
-        #print "input data: ", str(client_data)
-        return client_data
+        #look for the client provider version
+        client_version = None
+        used_schema = None
+        if version_fields != None:
+            client_version = client_data
+            for field in version_fields:
+                if field in client_version:
+                    client_version = client_version[field]
+                else:
+                    break
+        if client_version==None:
+            used_schema=default_schema
+        elif version_dict_schema!=None:
+            if client_version in version_dict_schema:
+                used_schema = version_dict_schema[client_version]
+            elif None in version_dict_schema:
+                used_schema = version_dict_schema[None]
+        if used_schema==None:
+            bottle.abort(HTTP_Bad_Request, "Invalid schema version or missing version field")
+            
+        js_v(client_data, used_schema)
+        return client_data, used_schema
     except yaml.YAMLError, exc:
         print "validate_in error, yaml exception ", exc
         error_pos = ""
@@ -192,8 +220,8 @@ def format_in(schema):
     except js_e.ValidationError, exc:
         print "validate_in error, jsonschema exception ", exc.message, "at", exc.path
         error_pos = ""
-        if len(exc.path)>0: error_pos=" at " + ":".join(map(str, exc.path))
-        bottle.abort(HTTP_Bad_Request, "invalid format '"+exc.message+"'"+error_pos)
+        if len(exc.path)>0: error_pos=" at " + ":".join(map(json.dumps, exc.path))
+        bottle.abort(HTTP_Bad_Request, "invalid format " + exc.message + error_pos)
     #except:
     #    bottle.abort(HTTP_Bad_Request, "Content error: Failed to parse Content-Type",  error_pos)
     #    raise
@@ -286,7 +314,7 @@ def http_get_tenant_id(tenant_id):
 def http_post_tenants():
     '''insert a tenant into the catalogue. '''
     #parse input data
-    http_content = format_in( tenant_schema )
+    http_content,_ = format_in( tenant_schema )
     r = af.remove_extra_items(http_content, tenant_schema)
     if r is not None: print "http_post_tenants: Warning: remove extra items ", r
     result, data = nfvo.new_tenant(mydb, http_content['tenant'])
@@ -300,7 +328,7 @@ def http_post_tenants():
 def http_edit_tenant_id(tenant_id):
     '''edit tenant details, can use both uuid or name'''
     #parse input data
-    http_content = format_in( tenant_edit_schema )
+    http_content,_ = format_in( tenant_edit_schema )
     r = af.remove_extra_items(http_content, tenant_edit_schema)
     if r is not None: print "http_edit_tenant_id: Warning: remove extra items ", r
     
@@ -412,7 +440,7 @@ def http_get_datacenter_id(tenant_id, datacenter_id):
 def http_post_datacenters():
     '''insert a tenant into the catalogue. '''
     #parse input data
-    http_content = format_in( datacenter_schema )
+    http_content,_ = format_in( datacenter_schema )
     r = af.remove_extra_items(http_content, datacenter_schema)
     if r is not None: print "http_post_tenants: Warning: remove extra items ", r
     result, data = nfvo.new_datacenter(mydb, http_content['datacenter'])
@@ -426,7 +454,7 @@ def http_post_datacenters():
 def http_edit_datacenter_id(datacenter_id):
     '''edit datacenter details, can use both uuid or name'''
     #parse input data
-    http_content = format_in( datacenter_edit_schema )
+    http_content,_ = format_in( datacenter_edit_schema )
     r = af.remove_extra_items(http_content, datacenter_edit_schema)
     if r is not None: print "http_edit_datacenter_id: Warning: remove extra items ", r
     
@@ -464,7 +492,7 @@ def http_getnetwork_datacenter_id(datacenter_id):
 def http_action_datacenter_id(tenant_id, datacenter_id):
     '''perform an action over datacenter, can use both uuid or name'''
     #parse input data
-    http_content = format_in( datacenter_action_schema )
+    http_content,_ = format_in( datacenter_action_schema )
     r = af.remove_extra_items(http_content, datacenter_action_schema)
     if r is not None: print "http_action_datacenter_id: Warning: remove extra items ", r
     
@@ -495,7 +523,7 @@ def http_delete_datacenter_id( datacenter_id):
 def http_associate_datacenters(tenant_id, datacenter_id):
     '''associate an existing datacenter to a this tenant. '''
     #parse input data
-    http_content = format_in( datacenter_associate_schema )
+    http_content,_ = format_in( datacenter_associate_schema )
     r = af.remove_extra_items(http_content, datacenter_associate_schema)
     if r != None: print "http_associate_datacenters: Warning: remove extra items ", r
     result, data = nfvo.associate_datacenter_to_tenant(mydb, tenant_id, datacenter_id, 
@@ -611,9 +639,9 @@ def http_post_vnfs(tenant_id):
     '''insert a vnf into the catalogue. Creates the flavor and images in the VIM, and creates the VNF and its internal structure in the OPENMANO DB'''
     print "Parsing the YAML file of the VNF"
     #parse input data
-    http_content = format_in( vnfd_schema )
-    #r = af.remove_extra_items(http_content, vnfd_schema)
-    #if r is not None: print "http_post_vnfs: Warning: remove extra items ", r
+    http_content, used_schema = format_in( vnfd_schema_v01, ("version",), {"v0.2": vnfd_schema_v02})
+    r = af.remove_extra_items(http_content, used_schema)
+    if r is not None: print "http_post_vnfs: Warning: remove extra items ", r
     result, data = nfvo.new_vnf(mydb,tenant_id,http_content)
     if result < 0:
         print "http_post_vnfs error %d %s" % (-result, data)
@@ -670,7 +698,7 @@ def http_options_deploy(path):
 def http_post_deploy(tenant_id):
     '''post topology deploy.'''
     print "http_post_deploy by tenant " + tenant_id 
-    http_content = format_in( scenario_new_schema )
+    http_content,_ = format_in( scenario_new_schema )
     #r = af.remove_extra_items(http_content, scenario_new_schema)
     #if r is not None: print "http_post_deploy: Warning: remove extra items ", r
     print "http_post_deploy input: ",  http_content
@@ -703,7 +731,7 @@ def http_post_verify(tenant_id):
 def http_post_scenarios(tenant_id):
     '''add a scenario into the catalogue. Creates the scenario and its internal structure in the OPENMANO DB'''
     print "http_post_scenarios by tenant " + tenant_id 
-    http_content = format_in( scenario_new_schema )
+    http_content,_ = format_in( scenario_new_schema )
     #r = af.remove_extra_items(http_content, scenario_new_schema)
     #if r is not None: print "http_post_deploy: Warning: remove extra items ", r
     print "http_post_scenarios input: ",  http_content
@@ -726,7 +754,7 @@ def http_post_scenario_action(tenant_id, scenario_id):
         bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
         return
     #parse input data
-    http_content = format_in( scenario_action_schema )
+    http_content,_ = format_in( scenario_action_schema )
     r = af.remove_extra_items(http_content, scenario_action_schema)
     if r is not None: print "http_post_scenario_action: Warning: remove extra items ", r
     
@@ -835,7 +863,7 @@ def http_delete_scenario_id(tenant_id, scenario_id):
 def http_put_scenario_id(tenant_id, scenario_id):
     '''edit an existing scenario id'''
     print "http_put_scenarios by tenant " + tenant_id 
-    http_content = format_in( scenario_edit_schema )
+    http_content,_ = format_in( scenario_edit_schema )
     #r = af.remove_extra_items(http_content, scenario_edit_schema)
     #if r is not None: print "http_put_scenario_id: Warning: remove extra items ", r
     print "http_put_scenario_id input: ",  http_content
@@ -939,7 +967,7 @@ def http_post_instance_scenario_action(tenant_id, instance_id):
         bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
         return
     #parse input data
-    http_content = format_in( instance_scenario_action_schema )
+    http_content,_ = format_in( instance_scenario_action_schema )
     r = af.remove_extra_items(http_content, instance_scenario_action_schema)
     if r is not None: print "http_post_instance_scenario_action: Warning: remove extra items ", r
     print "http_post_instance_scenario_action input: ", http_content

@@ -386,6 +386,25 @@ new_port_response_schema = {
     "additionalProperties": False
 }
 
+get_flavor_response_schema = {
+    "title":"openvim flavors response information schema",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type":"object",
+    "properties":{
+        "flavor":{
+            "type":"object",
+            "properties":{
+                "id":   id_schema,
+                "name": name_schema,
+                "extended": {"type":"object"},
+            },
+            "required": ["id", "name"],
+        }
+    },
+    "required": ["flavor"],
+    "additionalProperties": False
+}
+
 new_flavor_response_schema = {
     "title":"flavor response information schema",
     "$schema": "http://json-schema.org/draft-04/schema#",
@@ -617,12 +636,12 @@ vnfd_schema_v02 = {
     "additionalProperties": False
 }
 
-vnfd_schema = {
-    "title":"vnfd information schema v0.2",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    #"oneOf": [vnfd_schema_v01, vnfd_schema_v02]
-    "oneOf": [vnfd_schema_v01]
-}
+vnfd_schema = vnfd_schema_v01
+#{
+#    "title":"vnfd information schema v0.2",
+#    "$schema": "http://json-schema.org/draft-04/schema#",
+#    "oneOf": [vnfd_schema_v01, vnfd_schema_v02]
+#}
 
 get_processor_rankings_response_schema = {
     "title":"processor rankings information schema",

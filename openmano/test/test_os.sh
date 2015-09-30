@@ -56,13 +56,15 @@ function is_valid_uuid(){
 [[ ${BASH_SOURCE[0]} != $0 ]] && _exit="return" || _exit="exit"
 
 #detect if environment variables are set
-[[ -z $OS_USERNAME ]] && echo "OS_USERNAME variable not defined" >&2 && $_exit 1
-[[ -z $OS_PASSWORD ]] && echo "OS_PASSWORD variable not defined" >&2 && $_exit 1
-[[ -z $OS_AUTH_URL ]] && echo "OS_AUTH_URL variable not defined" >&2 && $_exit 1
-[[ -z $OS_TENANT_NAME ]] && echo "OS_TENANT_NAME variable not defined" >&2 && $_exit 1
-[[ -z $OS_CONFIG ]] && echo "OS_CONFIG variable not defined" >&2 && $_exit 1
-[[ -z $OS_TEST_IMAGE_PATH_LINUX ]] && echo "OS_TEST_IMAGE_PATH_LINUX variable not defined" >&2 && $_exit 1
-[[ -z $OS_TEST_IMAGE_PATH_LINUXDATA ]] && echo "OS_TEST_IMAGE_PATH_LINUXDATA variable not defined" >&2 && $_exit 1
+fail=""
+[[ -z $OS_USERNAME ]] && echo "OS_USERNAME variable not defined" >&2 && fail=1
+[[ -z $OS_PASSWORD ]] && echo "OS_PASSWORD variable not defined" >&2 && fail=1
+[[ -z $OS_AUTH_URL ]] && echo "OS_AUTH_URL variable not defined" >&2 && fail=1
+[[ -z $OS_TENANT_NAME ]] && echo "OS_TENANT_NAME variable not defined" >&2 && fail=1
+[[ -z $OS_CONFIG ]] && echo "OS_CONFIG variable not defined" >&2 && fail=1
+[[ -z $OS_TEST_IMAGE_PATH_LINUX ]] && echo "OS_TEST_IMAGE_PATH_LINUX variable not defined" >&2 && fail=1
+[[ -z $OS_TEST_IMAGE_PATH_LINUXDATA ]] && echo "OS_TEST_IMAGE_PATH_LINUXDATA variable not defined" >&2 && fail=1
+[[ -n $fail ]] && $_exit 1
 
 #check correct arguments
 action_list=""

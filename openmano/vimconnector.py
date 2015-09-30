@@ -402,7 +402,44 @@ class vimconnector():
         '''Returns: 0 if no error,
                     <0 if error'''
         return 0
-    
+
+    def get_tenant_flavor(self, flavor_id):
+        '''Obtain flavor details from the  VIM
+            Returns the flavor dict details
+        '''
+        print "VIMConnector: Getting flavor from VIM"
+        #print "VIM URL:",self.url
+        #print "Tenant id:",self.tenant
+        #print "Flavor:",flavor_data
+        headers_req = {'content-type': 'application/json'}
+        try:
+            vim_response = requests.get(self.url+'/'+self.tenant+'/flavors/'+flavor_id, headers = headers_req)
+        except requests.exceptions.RequestException, e:
+            print "get_tenant_flavor Exception: ", e.args
+            return -HTTP_Not_Found, str(e.args[0])
+        print vim_response
+        #print vim_response.status_code
+        if vim_response.status_code == 200:
+            #print vim_response.json()
+            #print json.dumps(vim_response.json(), indent=4)
+            res,http_content = af.format_in(vim_response, openmano_schemas.get_flavor_response_schema)
+            #print http_content
+            if res:
+                r = af.remove_extra_items(http_content, openmano_schemas.get_flavor_response_schema)
+                if r is not None: print "Warning: remove extra items ", r
+                #print http_content
+                flavor_id = http_content['flavor']['id']
+                print "Flavor id: ",flavor_id
+                return vim_response.status_code,flavor_id
+            else: return -HTTP_Bad_Request,http_content
+
+        else:
+            #print vim_response.text
+            jsonerror = af.format_jsonerror(vim_response)
+            text = 'Error in VIM "%s": not possible to get flavor. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
+            #print text
+            return -vim_response.status_code,text    
+        
     def new_tenant_flavor(self, flavor_data):
         '''Adds a tenant flavor to VIM'''
         '''Returns the flavor identifier'''
@@ -479,7 +516,7 @@ class vimconnector():
         if 'description' in image_dict and image_dict['description'] != None:
             new_image_dict['description'] = image_dict['description']
         if 'metadata' in image_dict and image_dict['metadata'] != None:
-            new_image_dict['metadata'] = image_dict['metadata']
+            new_image_dict['metadata'] = json.loads(image_dict['metadata'])
         if 'location' in image_dict and image_dict['location'] != None:
             new_image_dict['path'] = image_dict['location']
         payload_req = json.dumps({"image":new_image_dict})
@@ -658,14 +695,15 @@ class vimconnector():
                     for iface in numa.get('interfaces',() ):
                         if net['name'] == iface['name']:
                             net['vim_id'] = iface['iface_id']
-                            if net.get("net_id"):
-                            #connect dataplane interface
-                                result, port_id = self.connect_port_network(iface['iface_id'], net["net_id"])
-                                if result < 0:
-                                    error_text = "Error attaching port %s to network %s: %s." % (iface['iface_id'], net["net_id"], port_id)
-                                    print "new_tenant_vminstance: " + error_text
-                                    self.delete_tenant_vminstance(vminstance_id)
-                                    return result, error_text
+                            #Code bellow is not needed, current openvim connect dataplane interfaces 
+                            #if net.get("net_id"):
+                            ##connect dataplane interface
+                            #    result, port_id = self.connect_port_network(iface['iface_id'], net["net_id"])
+                            #    if result < 0:
+                            #        error_text = "Error attaching port %s to network %s: %s." % (iface['iface_id'], net["net_id"], port_id)
+                            #        print "new_tenant_vminstance: " + error_text
+                            #        self.delete_tenant_vminstance(vminstance_id)
+                            #        return result, error_text
                             break
         
         print "VM instance id: ",vminstance_id
