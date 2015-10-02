@@ -153,7 +153,7 @@ def rollback(mydb,  vims, rollback_list):
                     print "Error in rollback. Not possible to delete VIM image '%s'. Message: %s" % (item["uuid"],message)
                     undeleted_items.append("image %s from VIM %s" % (item["uuid"],vim["name"]))
                 else:
-                    result, message = mydb.delete_row_by_dict(FROM="datacenters_images", WEHRE={"datacenter_id": vim["datacenter_id"], "vim_id":item["uuid"]})
+                    result, message = mydb.delete_row_by_dict(FROM="datacenters_images", WEHRE={"datacenter_id": vim["id"], "vim_id":item["uuid"]})
                     if result < 0:
                         print "Error in rollback. Not possible to delete image '%s' from DB.dacenters_images. Message: %s" % (item["uuid"],message)
             elif item["what"]=="flavor":
@@ -162,7 +162,7 @@ def rollback(mydb,  vims, rollback_list):
                     print "Error in rollback. Not possible to delete VIM flavor '%s'. Message: %s" % (item["uuid"],message)
                     undeleted_items.append("flavor %s from VIM %s" % (item["uuid"],vim["name"]))
                 else:
-                    result, message = mydb.delete_row_by_dict(FROM="datacenters_flavos", WEHRE={"datacenter_id": vim["datacenter_id"], "vim_id":item["uuid"]})
+                    result, message = mydb.delete_row_by_dict(FROM="datacenters_flavos", WEHRE={"datacenter_id": vim["id"], "vim_id":item["uuid"]})
                     if result < 0:
                         print "Error in rollback. Not possible to delete flavor '%s' from DB.dacenters_flavors. Message: %s" % (item["uuid"],message)
             elif item["what"]=="network":
@@ -193,12 +193,51 @@ def rollback(mydb,  vims, rollback_list):
   
 def check_vnf_descriptor(vnf_descriptor):
     global global_config
-    #TODO:
-    #We should check if the info in external_connections matches with the one in the vnfcs
-    #We should check if the info in internal_connections matches with the one in the vnfcs
-    #We should check that internal-connections of type "ptp" have only 2 elements
-    #We should check if the name exists in the NFVO database (vnfs table)
-    #We should check if the path where we should store the YAML file already exists. In that case, we should return error. 
+    #create a dictionary with vnfc-name: vnfc:interface-list  key:values pairs 
+    vnfc_interfaces={}
+    for vnfc in vnf_descriptor["vnf"]["VNFC"]:
+        name_list = []
+        #dataplane interfaces
+        for numa in vnfc.get("numas",() ):
+            for interface in numa.get("interfaces",()):
+                if interface["name"] in name_list:
+                    return -HTTP_Bad_Request, "Error at vnf:VNFC[name:'%s']:numas:interfaces:name, interface name '%s' already used in this VNFC" %(vnfc["name"], interface["name"])
+                name_list.append( interface["name"] ) 
+        #bridge interfaces
+        for interface in vnfc.get("bridge-ifaces",() ):
+            if interface["name"] in name_list:
+                return -HTTP_Bad_Request, "Error at vnf:VNFC[name:'%s']:bridge-ifaces:name, interface name '%s' already used in this VNFC" %(vnfc["name"], interface["name"])
+            name_list.append( interface["name"] ) 
+        vnfc_interfaces[ vnfc["name"] ] = name_list
+    
+    #check if the info in external_connections matches with the one in the vnfcs
+    name_list=[]
+    for external_connection in vnf_descriptor["vnf"].get("external-connections",() ):
+        if external_connection["name"] in name_list:
+            return -HTTP_Bad_Request, "Error at vnf:external-connections:name, value '%s' already used as an external-connection" %(external_connection["name"])
+        name_list.append(external_connection["name"])
+        if external_connection["VNFC"] not in vnfc_interfaces:
+            return -HTTP_Bad_Request, "Error at vnf:external-connections[name:'%s']:VNFC, value '%s' does not match any VNFC" %(external_connection["name"], external_connection["VNFC"])
+        if external_connection["local_iface_name"] not in vnfc_interfaces[ external_connection["VNFC"] ]:
+            return -HTTP_Bad_Request, "Error at vnf:external-connections[name:'%s']:local_iface_name, value '%s' does not match any interface of this VNFC" %(external_connection["name"], external_connection["local_iface_name"])
+    
+    #check if the info in internal_connections matches with the one in the vnfcs
+    name_list=[]
+    for internal_connection in vnf_descriptor["vnf"].get("internal-connections",() ):
+        if internal_connection["name"] in name_list:
+            return -HTTP_Bad_Request, "Error at vnf:internal-connections:name, value '%s' already used as an internal-connection" %(internal_connection["name"])
+        name_list.append(internal_connection["name"])
+        #We should check that internal-connections of type "ptp" have only 2 elements
+        if len(internal_connection["elements"])>2 and internal_connection["type"] == "ptp":
+            return -HTTP_Bad_Request, "Error at vnf:internal-connections[name:'%s']:elements, size must be 2 for a type:'ptp'" %(internal_connection["name"])
+        for port in internal_connection["elements"]:
+            if port["VNFC"] not in vnfc_interfaces:
+                return -HTTP_Bad_Request, "Error at vnf:internal-connections[name:'%s']:elements[]:VNFC, value '%s' does not match any VNFC" %(internal_connection["name"], port["VNFC"])
+            if port["local_iface_name"] not in vnfc_interfaces[ port["VNFC"] ]:
+                return -HTTP_Bad_Request, "Error at vnf:internal-connections[name:'%s']:elements[]:local_iface_name, value '%s' does not match any interface of this VNFC" %(internal_connection["name"], port["local_iface_name"])
+
+    
+    #check if the path where we should store the YAML file already exists. In that case, we should return error. 
     vnf_filename=global_config['vnf_repository'] + "/" +vnf_descriptor['vnf']['name'] + ".vnfd"
     if os.path.exists(vnf_filename):
         print "WARNING: The VNF descriptor already exists in the VNF repository"
@@ -226,7 +265,7 @@ def create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vi
             else:
                 return res if res<0 else -1, content
     #create image at every vim
-    for vim_id,vim in vims.items():
+    for vim_id,vim in vims.iteritems():
         image_created="false"
         #look at database
         res_db,image_db = mydb.get_table(FROM="datacenters_images", WHERE={'datacenter_id':vim_id, 'image_id':image_mano_id})
@@ -355,9 +394,11 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
         if error:
             continue
         if res_db>0:
-            #TODO check that this vim_id exist in VIM, if not create
+            #check that this vim_id exist in VIM, if not create
             flavor_vim_id=flavor_db[0]["vim_id"]
-            continue
+            result, _ = vim.get_tenant_flavor(flavor_vim_id)
+            if result>=0: #flavor exist
+                continue
         #create flavor at vim
         print "nfvo.create_or_use_flavor() adding flavor to VIM %s" % vim["name"]
         result, flavor_vim_id = vim.new_tenant_flavor(flavor_dict)
@@ -382,18 +423,14 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
 def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacenter=None,vim_tenant=None):
     global global_config
     
-    # TODO: With future versions of the VNFD, different code might be applied for each version.
+    # With future versions of the VNFD, different code might be applied for each version.
     # Depending on the new structure of the VNFD (identified by version in vnf_descriptor), we should have separate code for each version, or integrated code with small changes.  
     
     # Step 1. Check the VNF descriptor
-    #TODO:
-    #WARNING!!!!!!!!!!!!!. For the moment, this check is dummy and returns 200
-    #TODO: check that interfaces are consistent in the different sections of the descriptor: bridge and interfaces
-    #TODO: external-connection: VM should exist and interface too
     result, message = check_vnf_descriptor(vnf_descriptor)
     if result < 0:
         print "new_vnf error: %s" %message
-        return result, "VNF de: %s" %message
+        return result, message
 
     print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
 
@@ -404,7 +441,6 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
         return result, vims
 
     # Step 4. Review the descriptor and add missing  fields
-    # TODO: to be moved to step 1????
     #print vnf_descriptor
     print "Refactoring VNF descriptor with fields: description, physical (default: false), public (default: true)"
     vnf_name = vnf_descriptor['vnf']['name']

@@ -194,6 +194,7 @@ def format_in(default_schema, version_fields=None, version_dict_schema=None):
                 if field in client_version:
                     client_version = client_version[field]
                 else:
+                    client_version=None
                     break
         if client_version==None:
             used_schema=default_schema
