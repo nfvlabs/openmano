@@ -58,6 +58,7 @@ def of_list(args):
     if args.verbose > 0:
         print yaml.safe_dump(c, indent=4, default_flow_style=False)
         return
+
     print "       switch           priority        name                             ingress_port    dst_mac       vlan_id  actions"
     for name,rule in c.iteritems():
         action_list=[]
@@ -263,7 +264,7 @@ if __name__=="__main__":
     if of_controller_type == "floodlight":
         ofconnector = FL.FL_conn(of_controller_ip, of_controller_port, of_controller_dpid)
     elif  of_controller_type == "opendaylight":
-        ofconnector = ODL.ODL_conn(of_controller_ip, of_controller_port, of_controller_dpid)
+        ofconnector = ODL.ODL_conn(of_controller_ip, of_controller_port, of_controller_dpid,"admin","admin")
     else:
         print "Wrong controller type"
 

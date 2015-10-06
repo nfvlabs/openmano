@@ -85,22 +85,14 @@ class ODL_conn():
                 if node_id == 'controller-config':
                     continue
 
-                switch_list.append( (node_id, "#TODO put here the ip address"))
-                if self.id != node_id:
-                    continue
+                node_ip_address = node.get('flow-node-inventory:ip-address')
+                if node_ip_address is None:
+                    return -1, "unexpected openflow response, 'flow-node-inventory:ip-address' element not found in " \
+                               "the node. Wrong version?"
 
-                node_connector_list = node.get('node-connector')
-                if node_connector_list is None or type(node_connector_list) is not list:
-                    return -1, "unexpected openflow response, 'node-connector' element not found in the node" \
-                               "or is not a list. Wrong version?"
+                node_id_hex=hex(int(node_id.split(':')[1])).split('x')[1].zfill(16)
+                switch_list.append( (':'.join(a+b for a,b in zip(node_id_hex[::2], node_id_hex[1::2])), node_ip_address))
 
-                for node_connector in node_connector_list:
-                    self.pp2ofi[ str(node_connector['flow-node-inventory:name']) ] = str(node_connector['id'] )
-
-                #If we found the appropriate dpid no need to continue in the for loop
-                break
-
-                switch_list.append( (node_id, "#TODO put here the ip address"))
             return len(switch_list), switch_list
         except requests.exceptions.RequestException, e:
             print self.name, ": obtain_port_correspondence Exception:", str(e)
@@ -154,10 +146,17 @@ class ODL_conn():
                     self.pp2ofi[ str(node_connector['flow-node-inventory:name']) ] = str(node_connector['id'] )
                     self.ofi2pp[ node_connector['id'] ] =  str(node_connector['flow-node-inventory:name'])
 
+
+                node_ip_address = node.get('flow-node-inventory:ip-address')
+                if node_ip_address is None:
+                    return -1, "unexpected openflow response, 'flow-node-inventory:ip-address' element not found in the node" \
+                               "or is not a string. Wrong version?"
+                self.ip_address = node_ip_address
+
                 #If we found the appropriate dpid no need to continue in the for loop
                 break
 
-            print self.name, ": obtain_port_correspondence ports:", self.pp2ofi
+           # print self.name, ": obtain_port_correspondence ports:", self.pp2ofi
             return 0, self.pp2ofi
         except requests.exceptions.RequestException, e:
             print self.name, ": obtain_port_correspondence Exception:", str(e)
@@ -171,7 +170,7 @@ class ODL_conn():
             Params:
                 translate_of_ports: if True it translates ports from openflow index to switch name
             Return:
-                0, dict if ok: with the rule name as key, description at value 
+                0, dict if ok: with the rule name as key and value is another dictionary with the rule parameters
                 -1, text_error on fail
         '''   
         
@@ -181,15 +180,135 @@ class ODL_conn():
                 return r,c
         #get rules
         try:
-            of_response = requests.delete(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
-                                          "/table/0/#TODO", headers=self.headers)
+            #print self.url+"/restconf/config/opendaylight-inventory:nodes/node/"+self.id+"/table/0  "+str(self.headers)
+            of_response = requests.get(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
+                                          "/table/0", headers=self.headers)
+
+            # The configured page does not exist if there are no rules installed. In that case we return an empty dict
+            if of_response.status_code == 404:
+                return 0, {}
+
             if of_response.status_code != 200:
                 raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
             
-            rule_dict={}
-            #info = of_response.json()
-            #TODO
-            return 0, rule_dict
+            info = of_response.json()
+
+            if type(info) != dict:
+                return -1, "unexpected openflow response, not a dict. Wrong version?"
+
+            table = info.get('flow-node-inventory:table')
+            if table is None:
+                return -1, "unexpected openflow response, 'flow-node-inventory:table' element not found. Wrong version?"
+
+            flow_list = table[0].get('flow')
+            if flow_list is None:
+               return 0, {}
+
+            if type(flow_list) is not list:
+                return -1, "unexpected openflow response, 'flow' element not found or is not a list. Wrong version?"
+
+            #TODO translate ports according to translate_of_ports parameter
+
+            rules = dict()
+            for flow in flow_list:
+                if not ('priority' in flow and 'id' in flow and 'match' in flow and 'instructions' in flow and \
+                   'instruction' in flow['instructions'] and 'apply-actions' in flow['instructions']['instruction'][0] and \
+                    'action' in flow['instructions']['instruction'][0]['apply-actions']):
+                        return -1, "unexpected openflow response, one or more elementa are missing. Wrong version?"
+
+                flow['instructions']['instruction'][0]['apply-actions']['action']
+
+                rule = dict()
+                rule['switch'] = self.dpid
+                rule['priority'] = flow['priority']
+                #rule['name'] = flow['id']
+                #rule['cookie'] = flow['cookie']
+                if 'in-port' in flow['match']:
+                    in_port = flow['match']['in-port']
+                    if not in_port in self.ofi2pp:
+                        return -1, "Error: Ingress port "+in_port+" is not in switch port list"
+
+                    if translate_of_ports:
+                        in_port = self.ofi2pp[in_port]
+
+                    rule['ingress_port'] = in_port
+
+                    if 'vlan-match' in flow['match'] and 'vlan-id' in flow['match']['vlan-match'] and \
+                                'vlan-id' in flow['match']['vlan-match']['vlan-id'] and \
+                                'vlan-id-present' in flow['match']['vlan-match']['vlan-id'] and \
+                                flow['match']['vlan-match']['vlan-id']['vlan-id-present'] == True:
+                        rule['vlan_id'] = flow['match']['vlan-match']['vlan-id']['vlan-id']
+
+                    if 'ethernet-match' in flow['match'] and 'ethernet-destination' in flow['match']['ethernet-match'] and \
+                        'address' in flow['match']['ethernet-match']['ethernet-destination']:
+                        rule['dst_mac'] = flow['match']['ethernet-match']['ethernet-destination']['address']
+
+                instructions=flow['instructions']['instruction'][0]['apply-actions']['action']
+
+                max_index=0
+                for instruction in instructions:
+                    if instruction['order'] > max_index:
+                       max_index = instruction['order']
+
+                actions=[None]*(max_index+1)
+                for instruction in instructions:
+                    if 'output-action' in instruction:
+                        if not 'output-node-connector' in instruction['output-action']:
+                            return -1, "unexpected openflow response, one or more elementa are missing. Wrong version?"
+
+                        out_port = instruction['output-action']['output-node-connector']
+                        if not out_port in self.ofi2pp:
+                            return -1, "Error: Output port "+out_port+" is not in switch port list"
+
+                        if translate_of_ports:
+                            out_port = self.ofi2pp[out_port]
+
+                        actions[instruction['order']] = ('out',out_port)
+
+                    elif 'strip-vlan-action' in instruction:
+                        actions[instruction['order']] = ('vlan', None)
+
+                    elif 'set-field' in instruction:
+                        if not ('vlan-match' in instruction['set-field'] and 'vlan-id' in  instruction['set-field']['vlan-match'] and 'vlan-id' in instruction['set-field']['vlan-match']['vlan-id']):
+                            return -1, "unexpected openflow response, one or more elementa are missing. Wrong version?"
+
+                        actions[instruction['order']] = ('vlan', instruction['set-field']['vlan-match']['vlan-id']['vlan-id'])
+
+                actions = [x for x in actions if x != None]
+
+                rule['actions'] = list(actions)
+                rules[flow['id']] = dict(rule)
+
+                #flow['id']
+                #flow['priority']
+                #flow['cookie']
+                #flow['match']['in-port']
+                #flow['match']['vlan-match']['vlan-id']['vlan-id']
+                # match -> in-port
+                #      -> vlan-match -> vlan-id -> vlan-id
+                #flow['match']['vlan-match']['vlan-id']['vlan-id-present']
+                #TODO se asume que no se usan reglas con vlan-id-present:false
+                #instructions -> instruction -> apply-actions -> action
+                #instructions=flow['instructions']['instruction'][0]['apply-actions']['action']
+                #Es una lista. Posibles elementos:
+                #max_index=0
+                #for instruction in instructions:
+                #  if instruction['order'] > max_index:
+                #    max_index = instruction['order']
+                #actions=[None]*(max_index+1)
+                #for instruction in instructions:
+                #   if 'output-action' in instruction:
+                #     actions[instruction['order']] = ('out',instruction['output-action']['output-node-connector'])
+                #   elif 'strip-vlan-action' in instruction:
+                #     actions[instruction['order']] = ('vlan', None)
+                #   elif 'set-field' in instruction:
+                #     actions[instruction['order']] = ('vlan', instruction['set-field']['vlan-match']['vlan-id']['vlan-id'])
+                #
+                #actions = [x for x in actions if x != None]
+                #                                                       -> output-action -> output-node-connector
+                #                                                       -> pop-vlan-action
+
+            return 0, rules
 
         except requests.exceptions.RequestException, e:
             print self.name, ": get_of_rules Exception:", str(e)
@@ -237,7 +356,7 @@ class ODL_conn():
             flow['priority'] = data['priority']
             flow['match'] = dict()
             flow['match']['in-port'] = self.pp2ofi[data['ingress_port']]
-            if 'dst-mac' in data:
+            if 'dst_mac' in data:
                 flow['match']['ethernet-match'] = dict()
                 flow['match']['ethernet-match']['ethernet-destination'] = dict()
                 flow['match']['ethernet-match']['ethernet-destination']['address'] = data['dst_mac']
@@ -259,8 +378,8 @@ class ODL_conn():
                 new_action = { 'order': order }
                 if  action[0] == "vlan":
                     if action[1] == None:
-                        #TODO strip vlan
-                        pass  #TODO !!!!!!!!!!!!!!!!!!!!!!
+                        #strip vlan
+                        new_action['strip-vlan-action'] = dict()
                     else:
                         new_action['set-field'] = dict()
                         new_action['set-field']['vlan-match'] = dict()
