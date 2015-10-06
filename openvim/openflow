@@ -83,11 +83,11 @@ def of_clear(args):
         print c
     return
 
-def of_dump(args):
-    args.verbose = 3
-    args.no_translate=False
-    of_list(args)
-    return
+#def of_dump(args):
+#    args.verbose = 3
+#    args.no_translate=False
+#    of_list(args)
+#    return
 
 def of_reinstall(args):
     try:
@@ -238,15 +238,15 @@ if __name__=="__main__":
     list_parser.add_argument("--no-translate", "-n", action="store_true", help="Skip translation from openflow index to switch port name")
     list_parser.set_defaults(func=of_list)
 
-    dump_parser = subparsers.add_parser('dump', help="dump openflow rules")
-    dump_parser.set_defaults(func=of_dump)
+ #   dump_parser = subparsers.add_parser('dump', help="dump openflow rules")
+ #   dump_parser.set_defaults(func=of_dump)
     
     clear_parser = subparsers.add_parser('clear', help="clear all openflow rules")
     clear_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
     clear_parser.set_defaults(func=of_clear)
 
     install_parser = subparsers.add_parser('install', help="install openflow rules from file")
-    install_parser.add_argument("file", action="store", help="file with rules")
+    install_parser.add_argument("file", action="store", help="file with rules generated using 'openflow list > rules.txt'")
     install_parser.set_defaults(func=of_install)
 
     reinstall_parser = subparsers.add_parser('reinstall', help="reinstall openflow rules from VIM rules")
