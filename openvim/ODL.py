@@ -355,6 +355,9 @@ class ODL_conn():
             flow['table_id'] = 0
             flow['priority'] = data['priority']
             flow['match'] = dict()
+            if not data['ingress_port'] in self.pp2ofi:
+                error_msj = 'Error. Port '+data['ingress_port']+' is not present in the switch'
+                return -1, error_msj
             flow['match']['in-port'] = self.pp2ofi[data['ingress_port']]
             if 'dst_mac' in data:
                 flow['match']['ethernet-match'] = dict()
@@ -388,6 +391,10 @@ class ODL_conn():
                         new_action['set-field']['vlan-match']['vlan-id']['vlan-id'] = int(action[1])
                 elif action[0] == 'out':
                     new_action['output-action'] = dict()
+                    if not action[1] in self.pp2ofi:
+                        error_msj = 'Error. Port '+action[1]+' is not present in the switch'
+                        return -1, error_msj
+
                     new_action['output-action']['output-node-connector'] = self.pp2ofi[ action[1] ]
                 else:
                     error_msj = 'Error. Data information used to create a new flow has not the expected format'
