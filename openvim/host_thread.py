@@ -79,7 +79,7 @@ class host_thread(threading.Thread):
         self.hostinfo = None 
         
         self.queueLock = threading.Lock()
-        self.taskQueue = Queue.Queue(20)
+        self.taskQueue = Queue.Queue(2000)
         
     def ssh_connect(self):
         try:
@@ -88,7 +88,7 @@ class host_thread(threading.Thread):
             self.ssh_conn.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             self.ssh_conn.load_system_host_keys()
             self.ssh_conn.connect(self.host, username=self.user, timeout=10) #, None)
-        except paramiko.ssh_exception.SSHException, e:
+        except paramiko.ssh_exception.SSHException as e:
             text = e.args[0]
             print self.name, ": ssh_connect ssh Exception:", text
         
@@ -120,23 +120,23 @@ class host_thread(threading.Thread):
                 print self.name, ': localinfo load from host'
                 return
     
-            except paramiko.ssh_exception.SSHException, e:
+            except paramiko.ssh_exception.SSHException as e:
                 text = e.args[0]
                 print self.name, ": load_localinfo ssh Exception:", text
-            except libvirt.libvirtError, e:
+            except libvirt.libvirtError as e:
                 text = e.get_error_message()
                 print self.name, ": load_localinfo libvirt Exception:", text
-            except yaml.YAMLError, exc:
+            except yaml.YAMLError as exc:
                 text = ""
                 if hasattr(exc, 'problem_mark'):
                     mark = exc.problem_mark
                     text = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
                 print self.name, ": load_localinfo yaml format Exception", text
-            except js_e.ValidationError, e:
+            except js_e.ValidationError as e:
                 text = ""
                 if len(e.path)>0: text=" at '" + ":".join(map(str, e.path))+"'"
                 print self.name, ": load_localinfo format Exception:", text, e.message 
-            except Exception, e:
+            except Exception as e:
                 text = str(e)
                 print self.name, ": load_localinfo Exception:", text
         
@@ -165,23 +165,23 @@ class host_thread(threading.Thread):
             print self.name, ': hostlinfo load from host', self.hostinfo
             return
 
-        except paramiko.ssh_exception.SSHException, e:
+        except paramiko.ssh_exception.SSHException as e:
             text = e.args[0]
             print self.name, ": load_hostinfo ssh Exception:", text
-        except libvirt.libvirtError, e:
+        except libvirt.libvirtError as e:
             text = e.get_error_message()
             print self.name, ": load_hostinfo libvirt Exception:", text
-        except yaml.YAMLError, exc:
+        except yaml.YAMLError as exc:
             text = ""
             if hasattr(exc, 'problem_mark'):
                 mark = exc.problem_mark
                 text = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
             print self.name, ": load_hostinfo yaml format Exception", text
-        except js_e.ValidationError, e:
+        except js_e.ValidationError as e:
             text = ""
             if len(e.path)>0: text=" at '" + ":".join(map(str, e.path))+"'"
             print self.name, ": load_hostinfo format Exception:", text, e.message 
-        except Exception, e:
+        except Exception as e:
             text = str(e)
             print self.name, ": load_hostinfo Exception:", text
         
@@ -204,21 +204,21 @@ class host_thread(threading.Thread):
                 self.localinfo_dirty = False
                 break #while tries
     
-            except paramiko.ssh_exception.SSHException, e:
+            except paramiko.ssh_exception.SSHException as e:
                 text = e.args[0]
                 print self.name, ": save_localinfo ssh Exception:", text
                 if "SSH session not active" in text:
                     self.ssh_connect()
-            except libvirt.libvirtError, e:
+            except libvirt.libvirtError as e:
                 text = e.get_error_message()
                 print self.name, ": save_localinfo libvirt Exception:", text
-            except yaml.YAMLError, exc:
+            except yaml.YAMLError as exc:
                 text = ""
                 if hasattr(exc, 'problem_mark'):
                     mark = exc.problem_mark
                     text = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
                 print self.name, ": save_localinfo yaml format Exception", text
-            except Exception, e:
+            except Exception as e:
                 text = str(e)
                 print self.name, ": save_localinfo Exception:", text
 
@@ -258,7 +258,7 @@ class host_thread(threading.Thread):
                     try:
                         print self.name, ": deleting file '%s' of unused server '%s'" %(localfile['source file'], uuid)
                         self.delete_file(localfile['source file'])
-                    except paramiko.ssh_exception.SSHException, e:
+                    except paramiko.ssh_exception.SSHException as e:
                         print self.name, ": Exception deleting file '%s': %s" %(localfile['source file'], str(e))
                 del self.localinfo['server_files'][uuid]
                 self.localinfo_dirty = True
@@ -346,7 +346,7 @@ class host_thread(threading.Thread):
                 self.save_localinfo()
             if not self.test:
                 self.ssh_conn.close()
-        except Exception, e:
+        except Exception as e:
             text = str(e)
             print self.name, ": terminate Exception:", text
         print self.name, ": exit from host_thread" 
@@ -685,7 +685,7 @@ class host_thread(threading.Thread):
         else:
             try: 
                 return yaml.load(content)
-            except yaml.YAMLError, exc:
+            except yaml.YAMLError as exc:
                 text = ""
                 if hasattr(exc, 'problem_mark'):
                     mark = exc.problem_mark
@@ -929,15 +929,15 @@ class host_thread(threading.Thread):
 
             return 0, 'Success'
 
-        except paramiko.ssh_exception.SSHException, e:
+        except paramiko.ssh_exception.SSHException as e:
             text = e.args[0]
             print self.name, ": launch_server(%s) ssh Exception: %s" %(server_id, text)
             if "SSH session not active" in text:
                 self.ssh_connect()
-        except libvirt.libvirtError, e:
+        except libvirt.libvirtError as e:
             text = e.get_error_message()
             print self.name, ": launch_server(%s) libvirt Exception: %s"  %(server_id, text)
-        except Exception, e:
+        except Exception as e:
             text = str(e)
             print self.name, ": launch_server(%s) Exception: %s"  %(server_id, text)
         return -1, text
@@ -976,7 +976,7 @@ class host_thread(threading.Thread):
                     new_status = None
                 domain_dict[uuid] = new_status
             conn.close
-        except libvirt.libvirtError, e:
+        except libvirt.libvirtError as e:
             print self.name, ": get_state() Exception '", e.get_error_message()
             return
 
@@ -1046,7 +1046,7 @@ class host_thread(threading.Thread):
                 conn = libvirt.open("qemu+ssh://"+self.user+"@"+self.host+"/system")
                 try:
                     dom = conn.lookupByUUIDString(server_id)
-                except libvirt.libvirtError, e:
+                except libvirt.libvirtError as e:
                     text = e.get_error_message()
                     if 'LookupByUUIDString' in text or 'Domain not found' in text or 'No existe un dominio coincidente' in text:
                         dom = None
@@ -1061,7 +1061,7 @@ class host_thread(threading.Thread):
                         try:
                             print self.name, ": sending DESTROY to server", server_id 
                             dom.destroy()
-                        except Exception, e:
+                        except Exception as e:
                             if "domain is not running" not in e.get_error_message():
                                 print self.name, ": action_on_server(",server_id,") Exception while sending force off:", e.get_error_message()
                                 last_error =  'action_on_server Exception while destroy: ' + e.get_error_message()
@@ -1081,7 +1081,7 @@ class host_thread(threading.Thread):
                                 print self.name, ": sending SHUTDOWN to server", server_id 
                                 dom.shutdown()
                                 self.pending_terminate_server.append( (time.time()+10,server_id) )
-                        except Exception, e:
+                        except Exception as e:
                             print self.name, ": action_on_server(",server_id,") Exception while destroy:", e.get_error_message() 
                             last_error =  'action_on_server Exception while destroy: ' + e.get_error_message()
                             new_status = 'ERROR'
@@ -1113,7 +1113,7 @@ class host_thread(threading.Thread):
                             dom.shutdown()
 #                        new_status = 'INACTIVE'
                         #TODO: check status for changing at database
-                    except Exception, e:
+                    except Exception as e:
                         new_status = 'ERROR'
                         print self.name, ": action_on_server(",server_id,") Exception while shutdown:", e.get_error_message() 
                         last_error =  'action_on_server Exception while shutdown: ' + e.get_error_message()
@@ -1144,7 +1144,7 @@ class host_thread(threading.Thread):
                         else:
                             dom.resume()
 #                            new_status = 'ACTIVE'
-                    except Exception, e:
+                    except Exception as e:
                         print self.name, ": action_on_server(",server_id,") Exception while resume:", e.get_error_message() 
                     
                 elif 'pause' in req['action']:
@@ -1154,7 +1154,7 @@ class host_thread(threading.Thread):
                         else:
                             dom.suspend()
 #                            new_status = 'PAUSED'
-                    except Exception, e:
+                    except Exception as e:
                         print self.name, ": action_on_server(",server_id,") Exception while pause:", e.get_error_message() 
     
                 elif 'reboot' in req['action']:
@@ -1165,14 +1165,14 @@ class host_thread(threading.Thread):
                             dom.reboot()
                         print self.name, ": action_on_server(",server_id,") reboot:" 
                         #new_status = 'ACTIVE'
-                    except Exception, e:
+                    except Exception as e:
                         print self.name, ": action_on_server(",server_id,") Exception while reboot:", e.get_error_message() 
                 elif 'createImage' in req['action']:
                     self.create_image(dom, req)
                         
         
                 conn.close()    
-            except libvirt.libvirtError, e:
+            except libvirt.libvirtError as e:
                 if conn is not None: conn.close
                 text = e.get_error_message()
                 new_status = "ERROR"
@@ -1245,13 +1245,13 @@ class host_thread(threading.Thread):
                                 break
                     image_status='ACTIVE'
                     break
-                except paramiko.ssh_exception.SSHException, e:
+                except paramiko.ssh_exception.SSHException as e:
                     image_status='ERROR'
                     error_text = e.args[0]
                     print self.name, "': create_image(",server_id,") ssh Exception:", error_text
                     if "SSH session not active" in error_text and retry==0:
                         self.ssh_connect()
-                except Exception, e:
+                except Exception as e:
                     image_status='ERROR'
                     error_text = str(e)
                     print self.name, "': create_image(",server_id,") Exception:", error_text
@@ -1308,7 +1308,7 @@ class host_thread(threading.Thread):
                     print self.name, ": edit_iface attaching SRIOV interface", text
                     dom.attachDeviceFlags(text, flags=libvirt.VIR_DOMAIN_AFFECT_LIVE)
                     
-            except libvirt.libvirtError, e:
+            except libvirt.libvirtError as e:
                 text = e.get_error_message()
                 print self.name, ": edit_iface(",port["instance_id"],") libvirt exception:", text 
                 

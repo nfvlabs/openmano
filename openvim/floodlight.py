@@ -109,10 +109,10 @@ class FL_conn():
             for switch in info:
                 switch_list.append( (switch[ self.ver_names["dpid"] ], switch['inetAddress']) )
             return len(switch_list), switch_list
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": get_of_switches Exception:", str(e)
             return -1, str(e)
-        except ValueError, e: # the case that JSON can not be decoded
+        except ValueError as e: # the case that JSON can not be decoded
             print self.name, ": get_of_switches Exception:", str(e)
             return -1, str(e)
 
@@ -202,14 +202,18 @@ class FL_conn():
                                 print "Unknown action in rule %s: %s" % (rule["name"], str(action))
                     rule_dict[str(name)] = rule
             return 0, rule_dict
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": get_of_rules Exception:", str(e)
             return -1, str(e)
-        except ValueError, e: # the case that JSON can not be decoded
+        except ValueError as e: # the case that JSON can not be decoded
             print self.name, ": get_of_rules Exception:", str(e)
             return -1, str(e)
 
     def obtain_port_correspondence(self):
+        '''Obtain the correspondence between physical and openflow port names
+        return 0, dictionary with physical to openflow names on success
+            -1, text on fail
+        '''
         try:
             of_response = requests.get(self.url+"/wm/core/controller/switches/json", headers=self.headers)
             #print vim_response.status_code
@@ -246,10 +250,10 @@ class FL_conn():
                     self.ofi2pp[ port["portNumber"]] = str(port["name"]) 
             #print self.name, ": get_of_controller_info ports:", self.pp2ofi
             return 0, self.pp2ofi
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": get_of_controller_info Exception:", str(e)
             return -1, str(e)
-        except ValueError, e: # the case that JSON can not be decoded
+        except ValueError as e: # the case that JSON can not be decoded
             print self.name, ": get_of_controller_info Exception:", str(e)
             return -1, str(e)
             
@@ -268,10 +272,10 @@ class FL_conn():
             print self.name, ": del_flow", flow_name, of_response
             #print vim_response.status_code
             if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
             return 0, None
 
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": del_flow", flow_name, "Exception:", str(e)
             return -1, str(e)
 
@@ -283,7 +287,9 @@ class FL_conn():
                 return r,c
         try:
             #We have to build the data for the floodlight call from the generic data
-            sdata = {'active': "true", "priority":str(data["priority"]), "name":data["name"]}
+            sdata = {'active': "true", "name":data["name"]}
+            if data.get("priority"):
+                sdata["priority"] = str(data["priority"])
             if data.get("vlan_id"):
                 sdata[ self.ver_names["vlanid"]  ] = data["vlan_id"]
             if data.get("dst_mac"):
@@ -309,10 +315,10 @@ class FL_conn():
             print self.name, ": new_flow():", sdata, of_response.text
             #print vim_response.status_code
             if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
             return 0, None
 
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": new_flow Exception:", str(e)
             return -1, str(e)
 
@@ -331,6 +337,6 @@ class FL_conn():
                 print self.name, ": clear_all_flows:", url, of_response, of_response.text
                 raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
             return 0, None
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": clear_all_flows Exception:", str(e)
             return -1, str(e)

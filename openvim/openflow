@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # PYTHON_ARGCOMPLETE_OK
+from quickstart.serializers import yaml_dump
 
 ##
 # Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
@@ -39,7 +40,7 @@ import floodlight as FL
 import ODL
 import yaml
 import requests
-from openflow_thread import change_db2of
+from openflow_thread import change_db2of, FlowBadFormat
 
 def of_switches(args):
     r,c = ofconnector.get_of_switches()
@@ -83,6 +84,13 @@ def of_clear(args):
         print c
     return
 
+def of_port_list(args):
+    r,c = ofconnector.obtain_port_correspondence()
+    if r<0:
+        print c
+        return
+    print yaml_dump({"ports": c})
+
 #def of_dump(args):
 #    args.verbose = 3
 #    args.no_translate=False
@@ -96,10 +104,11 @@ def of_reinstall(args):
         openvim_response = requests.put(URLrequest)
         print openvim_response.text
         return
-    except requests.exceptions.RequestException, e:
-        return -1, " Exception GET at '"+URLrequest+"' " + str(e.message)
+    except requests.exceptions.RequestException as e:
+        return -1, " Exception GET at '"+URLrequest+"' " + str(e)
 
 def of_install(args):
+    line_number=1
     try:
         f = open(args.file, "r")
         text = f.read()
@@ -108,38 +117,50 @@ def of_install(args):
         heads=lines[0].split()
 
         for line in lines[1:]:
+            line_number += 1
             rule={}
             items= line.split()
             if len(items)==0 or items[0][0]=="#": #empty line or commented
                 continue
             for i in range(0,len(items)):
                 rule[ heads[i] ] = items[i]
-            #TODO change to openflow format
             if rule["vlan_id"] == "any":
                 del rule["vlan_id"]
             if rule["dst_mac"] == "any":
                 del rule["dst_mac"]
-            change_db2of(rule)
+            if 'priority' in rule and (rule['priority']==None or rule['priority']=="None" ):
+                del rule['priority']
+            try:
+                change_db2of(rule)
+            except FlowBadFormat as e:
+                print "Format error at line %d:  %s" % (line_number, str(e))
+                continue
             r,c = ofconnector.new_flow(rule)
             if r<0:
                 error="ERROR: "+c
             else:
                 error="OK"
             print "%s  %s  %s  input=%s  dst_mac=%s  vlan_id=%s  %s" % \
-                    (rule["switch"], rule["priority"].ljust(6), rule["name"].ljust(20), rule["ingress_port"].ljust(3), \
+                    (rule["switch"], str(rule.get("priority")).ljust(6), rule["name"].ljust(20), rule["ingress_port"].ljust(3), \
                      rule.get("dst_mac","any").ljust(18), rule.get("vlan_id","any").ljust(4), error )
         return
-    except IOError, e:
+    except IOError as e:
         print " Error opening file '" + args.file + "': " + e.args[1]
-    except yaml.YAMLError, exc:
+    except yaml.YAMLError as exc:
         error_pos = ""
         if hasattr(exc, 'problem_mark'):
             mark = exc.problem_mark
             error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
         print " Error yaml/json format error at " + error_pos
 
-
 def of_add(args):
+    if args.act==None and args.actions==None:
+        print "openflow add: error: one of the arguments --actions or [--setvlan,--stripvlan],--out is required"
+        return
+    elif args.act!=None and args.actions!=None:
+        print "openflow add: error: Use either --actions option or [--setvlan,--stripvlan],--out options; but not both"
+        return
+    
     rule={"name":args.name, "priority":args.priority,
           "ingress_port": args.inport
         }
@@ -148,38 +169,30 @@ def of_add(args):
     if args.matchmac:
         rule["dst_mac"] = args.matchmac
 
-    actions=[]
-
-    actions_list = args.actions.split(',')
-    error_msj = 'Error specifiying actions parameter. Format must be vlan=<\'strip-vlan\'/vlan_id>,out=<egress-port>,...'
-    for action in actions_list:
-        action_tuple = action.split('=')
-        if len(action_tuple) != 2:
-            print error_msj
+    if args.actions:
+        rule["actions"] = args.actions
+        try:
+            change_db2of(rule)
+        except FlowBadFormat as e:
+            print "Format error at --actions: '%s' Expected 'vlan=<None/vlan_id>,out=<egress_port>,...'" % str(e)
             return
-        if action_tuple[0].lower() == 'vlan':
-            if action_tuple[1].lower() == 'strip-vlan':
-                tuple2 = None
-            elif action_tuple[1].isdigit():
-                tuple2 = action_tuple[1]
+    elif args.act:
+        rule["actions"]=[]
+        error_msj = "openflow add: error: --setvlan,--stripvlan options must be followed by an --out option"
+        previous_option_vlan=False # indicates if the previous option was a set or strip vlan to avoid consecutive ones and to force an out options afterwards
+        for action in args.act:
+            if action==None or type(action)==int:
+                if previous_option_vlan: #consecutive vlan options
+                    print error_msj
+                    return
+                previous_option_vlan=True
+                rule["actions"].append( ("vlan", action) )
             else:
-                print error_msj
-                return
-            actions.append( ("vlan", tuple2) )
-        elif action_tuple[0].lower() == 'out':
-            actions.append( ('out', action_tuple[1]) )
-        else:
+                previous_option_vlan=False
+                rule["actions"].append( ("out", action) ) 
+        if previous_option_vlan:
             print error_msj
             return
-
-    #if args.stripvlan:
-    #    actions.append( ("vlan", None) )
-    #elif args.setvlan != None:
-    #    actions.append( ("vlan", args.setvlan) )
-    #if args.outport:
-    #    actions.append( ("out", args.outport) )
-    rule["actions"] = actions
-
     #print rule
     #return
 
@@ -249,12 +262,13 @@ if __name__=="__main__":
     add_parser.add_argument('--verbose', '-v', action='count')
     add_parser.add_argument("name", action="store", help="name of the rule")
     add_parser.add_argument("--inport", required=True, action="store", type=str, help="match rule: ingress-port")
-    add_parser.add_argument("--actions", required=True, action="store", type=str, help="action: vlan=<\'strip-vlan\'/vlan_id>,out=<egress-port>,...")
+    add_parser.add_argument("--actions", action="store", type=str, help="action with the format: vlan=<None/vlan-id>,out=<egress-port>,...")
     add_parser.add_argument("--priority", action="store", type=int, help="rule priority")
     add_parser.add_argument("--matchmac", action="store", help="match rule: mac address")
     add_parser.add_argument("--matchvlan", action="store", type=int, help="match rule: vlan id")
-    add_parser.add_argument("--stripvlan", action="store_true", help="action: strip vlan")
-    add_parser.add_argument("--setvlan", action="store", type=int, help="action: sets vlan id")
+    add_parser.add_argument("--stripvlan", action="append_const", dest="act", const=None, help="alternative to --actions. Use before --out to strip vlan")
+    add_parser.add_argument("--setvlan", action="append", dest="act", type=int, help="alternative to --actions. Use before --out to set vlan")
+    add_parser.add_argument("--out", action="append", dest="act", type=str, help="alternative to --actions. out=<egress-port> can be used several times")
     add_parser.set_defaults(func=of_add)
     
     delete_parser = subparsers.add_parser('delete', help="delete an openflow rule")
@@ -272,8 +286,8 @@ if __name__=="__main__":
     list_parser.add_argument("--no-translate", "-n", action="store_true", help="Skip translation from openflow index to switch port name")
     list_parser.set_defaults(func=of_list)
 
- #   dump_parser = subparsers.add_parser('dump', help="dump openflow rules")
- #   dump_parser.set_defaults(func=of_dump)
+    #dump_parser = subparsers.add_parser('dump', help="dump openflow rules")
+    #dump_parser.set_defaults(func=of_dump)
     
     clear_parser = subparsers.add_parser('clear', help="clear all openflow rules")
     clear_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
@@ -285,6 +299,9 @@ if __name__=="__main__":
 
     reinstall_parser = subparsers.add_parser('reinstall', help="reinstall openflow rules from VIM rules")
     reinstall_parser.set_defaults(func=of_reinstall)
+
+    portlist_parser = subparsers.add_parser('port-list', help="list the physical to openflow port correspondence")
+    portlist_parser.set_defaults(func=of_port_list)
 
     argcomplete.autocomplete(main_parser)
     
@@ -300,7 +317,7 @@ if __name__=="__main__":
     elif  of_controller_type == "opendaylight":
         ofconnector = ODL.ODL_conn(of_controller_ip, of_controller_port, of_controller_dpid,of_controller_user,of_controller_password)
     else:
-        print "Wrong controller type"
+        print "Wrong OF_CONTROLLER_TYPE '%s' must be 'floodlight' or 'opendaylight'" %of_controller_type
 
     args.func(args)
     

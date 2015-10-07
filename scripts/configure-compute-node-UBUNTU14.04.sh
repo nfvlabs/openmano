@@ -234,9 +234,8 @@ hpages=$(( ($memtotal/(1024*1024))-8 ))
 
 memtotal=$((memtotal+1048576-1))   #memory must be ceiled
 memtotal=$((memtotal/1048576))   #from `kB to GBa
-hpages=$((memtotal-6))
-
-
+hpages=$((memtotal-8))
+[[ $hpages -lt 0 ]] $$ hpages=0
 
 
 echo "------> memtotal: $memtotal"

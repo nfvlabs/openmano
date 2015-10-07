@@ -94,14 +94,18 @@ class ODL_conn():
                 switch_list.append( (':'.join(a+b for a,b in zip(node_id_hex[::2], node_id_hex[1::2])), node_ip_address))
 
             return len(switch_list), switch_list
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": obtain_port_correspondence Exception:", str(e)
             return -1, str(e)
-        except ValueError, e: # the case that JSON can not be decoded
+        except ValueError as e: # the case that JSON can not be decoded
             print self.name, ": obtain_port_correspondence Exception:", str(e)
             return -1, str(e)
         
     def obtain_port_correspondence(self):
+        '''Obtain the correspondence between physical and openflow port names
+        return 0, dictionary with physical to openflow names on success
+            -1, text on fail
+        '''
         try:
             of_response = requests.get(self.url+"/restconf/operational/opendaylight-inventory:nodes",
                                        headers=self.headers)
@@ -156,12 +160,12 @@ class ODL_conn():
                 #If we found the appropriate dpid no need to continue in the for loop
                 break
 
-           # print self.name, ": obtain_port_correspondence ports:", self.pp2ofi
+            # print self.name, ": obtain_port_correspondence ports:", self.pp2ofi
             return 0, self.pp2ofi
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": obtain_port_correspondence Exception:", str(e)
             return -1, str(e)
-        except ValueError, e: # the case that JSON can not be decoded
+        except ValueError as e: # the case that JSON can not be decoded
             print self.name, ": obtain_port_correspondence Exception:", str(e)
             return -1, str(e)
         
@@ -202,7 +206,7 @@ class ODL_conn():
 
             flow_list = table[0].get('flow')
             if flow_list is None:
-               return 0, {}
+                return 0, {}
 
             if type(flow_list) is not list:
                 return -1, "unexpected openflow response, 'flow' element not found or is not a list. Wrong version?"
@@ -211,16 +215,16 @@ class ODL_conn():
 
             rules = dict()
             for flow in flow_list:
-                if not ('priority' in flow and 'id' in flow and 'match' in flow and 'instructions' in flow and \
+                if not ('id' in flow and 'match' in flow and 'instructions' in flow and \
                    'instruction' in flow['instructions'] and 'apply-actions' in flow['instructions']['instruction'][0] and \
                     'action' in flow['instructions']['instruction'][0]['apply-actions']):
-                        return -1, "unexpected openflow response, one or more elementa are missing. Wrong version?"
+                        return -1, "unexpected openflow response, one or more elements are missing. Wrong version?"
 
                 flow['instructions']['instruction'][0]['apply-actions']['action']
 
                 rule = dict()
                 rule['switch'] = self.dpid
-                rule['priority'] = flow['priority']
+                rule['priority'] = flow.get('priority')
                 #rule['name'] = flow['id']
                 #rule['cookie'] = flow['cookie']
                 if 'in-port' in flow['match']:
@@ -248,7 +252,7 @@ class ODL_conn():
                 max_index=0
                 for instruction in instructions:
                     if instruction['order'] > max_index:
-                       max_index = instruction['order']
+                        max_index = instruction['order']
 
                 actions=[None]*(max_index+1)
                 for instruction in instructions:
@@ -310,10 +314,10 @@ class ODL_conn():
 
             return 0, rules
 
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": get_of_rules Exception:", str(e)
             return -1, str(e)
-        except ValueError, e: # the case that JSON can not be decoded
+        except ValueError as e: # the case that JSON can not be decoded
             print self.name, ": get_of_rules Exception:", str(e)
             return -1, str(e)
 
@@ -330,10 +334,10 @@ class ODL_conn():
             print self.headers
             #print vim_response.status_code
             if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
             return 0, None
 
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": del_flow", flow_name, "Exception:", str(e)
             return -1, str(e)
 
@@ -353,7 +357,7 @@ class ODL_conn():
             flow['idle-timeout'] = 0
             flow['hard-timeout'] = 0
             flow['table_id'] = 0
-            flow['priority'] = data['priority']
+            flow['priority'] = data.get('priority')
             flow['match'] = dict()
             if not data['ingress_port'] in self.pp2ofi:
                 error_msj = 'Error. Port '+data['ingress_port']+' is not present in the switch'
@@ -412,10 +416,10 @@ class ODL_conn():
 
             #print vim_response.status_code
             if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
             return 0, None
 
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": new_flow Exception:", str(e)
             return -1, str(e)
 
@@ -425,8 +429,8 @@ class ODL_conn():
                                       "/table/0", headers=self.headers)
             print self.name, ": clear_all_flows:", of_response
             if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
             return 0, None
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": clear_all_flows Exception:", str(e)
             return -1, str(e)

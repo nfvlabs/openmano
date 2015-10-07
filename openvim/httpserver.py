@@ -287,7 +287,7 @@ def format_in(schema):
         js_v(client_data, schema)
 
         return client_data
-    except yaml.YAMLError, exc:
+    except yaml.YAMLError as exc:
         print "HTTP validate_in error, yaml exception ", exc
         print "  CONTENT: " + str(bottle.request.body.readlines())
         error_pos = ""
@@ -295,11 +295,11 @@ def format_in(schema):
             mark = exc.problem_mark
             error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
         bottle.abort(HTTP_Bad_Request, "Content error: Failed to parse Content-Type",  error_pos)
-    except ValueError, exc:
+    except ValueError as exc:
         print "HTTP validate_in error, ValueError exception ", exc
         print "  CONTENT: " + str(bottle.request.body.readlines())
         bottle.abort(HTTP_Bad_Request, "invalid format: "+str(exc))
-    except js_e.ValidationError, exc:
+    except js_e.ValidationError as exc:
         print "HTTP validate_in error, jsonschema exception ", exc.message, "at", exc.path
         print "  CONTENT: " + str(bottle.request.body.readlines())
         error_pos = ""
@@ -444,6 +444,7 @@ def check_valid_tenant(my, tenant_id):
 @bottle.error(403)
 @bottle.error(405) 
 @bottle.error(406)
+@bottle.error(408)
 @bottle.error(409)
 @bottle.error(503) 
 @bottle.error(500)
@@ -1474,6 +1475,7 @@ def http_server_action(server_id, tenant_id, action):
     #Program task
     r,c = config_dic['host_threads'][ server['host_id'] ].insert_task( 'instance',server )
     if r<0:
+        print "Task queue full at host ", server['host_id']
         bottle.abort(HTTP_Request_Timeout, c)
     if 'createImage' in action and result >= 0:
         return http_get_image_id(tenant_id, image_uuid)

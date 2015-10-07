@@ -72,7 +72,7 @@ class vim_db():
             self.con = mdb.connect(self.host, self.user, self.passwd, self.database)
             print "DB: conected to %s@%s -> %s" % (self.user, self.host, self.database)
             return 0
-        except mdb.Error, e:
+        except mdb.Error as e:
             print "Error connecting to DB %s@%s -> %s Error %d: %s" % (self.user, self.host, self.database, e.args[0], e.args[1])
             return -1
 
@@ -96,7 +96,7 @@ class vim_db():
                         if row[0]>highest_version_int:
                             highest_version_int, highest_version = row[0:2]
                     return highest_version_int, highest_version
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "get_db_version DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
@@ -107,10 +107,10 @@ class vim_db():
         try:
             self.con.close()
             del self.con
-        except mdb.Error, e:
+        except mdb.Error as e:
             print "Error disconnecting to DB: Error %d: %s" % (e.args[0], e.args[1])
             return -1
-        except AttributeError, e: #self.con not defined
+        except AttributeError as e: #self.con not defined
             if e[0][-5:] == "'con'": return -1, "Database internal error, no connection."
             else: raise
     
@@ -169,7 +169,7 @@ class vim_db():
                 for k in vlan_tuple:
                     self.net_vlan_usedlist.append(k[0])
             return 0
-        except (mdb.Error, AttributeError), e:
+        except (mdb.Error, AttributeError) as e:
             if not self.debug: print cmd
             print "get_free_net_vlan DB Exception %d: %s" % (e.args[0], e.args[1])
             return self.format_error(e)
@@ -239,7 +239,7 @@ class vim_db():
                     self.cur.execute(cmd)
                     rows = self.cur.fetchall()
                     return self.cur.rowcount, rows
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "get_table DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
@@ -302,7 +302,7 @@ class vim_db():
                     if self.debug: print "attached public images: ", self.cur.rowcount
 
                     return 1, uuid
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "new_tenant DB Exception %d: %s" % (e.args[0], e.args[1])
                 if inserted==1: return 1, uuid
@@ -365,7 +365,7 @@ class vim_db():
                         self.cur.execute(cmd)                    
                     return nb_rows, uuid
 
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "new_row DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
@@ -412,7 +412,7 @@ class vim_db():
                         if self.debug: print cmd
                         self.cur.execute(cmd)                    
                     return nb_rows, uuid
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "update_rows DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
@@ -482,7 +482,7 @@ class vim_db():
                         #delete internal field
                         del numa['id']
                     return 1, host
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "get_host DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
@@ -507,7 +507,7 @@ class vim_db():
                 self.cur.execute(cmd)
                 rows = self.cur.fetchall()
                 return self.cur.rowcount, rows
-        except (mdb.Error, AttributeError), e:
+        except (mdb.Error, AttributeError) as e:
             if not self.debug: print cmd
             print "check_uuid DB Exception %d: %s" % (e.args[0], e.args[1])
             return self.format_error(e)
@@ -540,7 +540,7 @@ class vim_db():
                         if self.debug: print cmd
                         self.cur.execute(cmd) 
                 return self.get_host(host_id)
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "edit_host DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
@@ -662,7 +662,7 @@ class vim_db():
 
                 if self.debug: print "getting host '%s'" % str(host_dict['uuid'])
                 return self.get_host(host_dict['uuid'])
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "new_host DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
@@ -721,7 +721,7 @@ class vim_db():
 
                     #inseted ok
                 return 1, uuid
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "new_flavor DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e, "update", tenant_id)
@@ -777,7 +777,7 @@ class vim_db():
 
                     #inseted ok
                 return 1, uuid
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "new_image DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e, "update", tenant_id)
@@ -859,7 +859,7 @@ class vim_db():
                                    (item_type, item_id, tenant_id, item_type)
                             if self.debug: print cmd
                             self.cur.execute(cmd)
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "delete_%s DB Exception %d: %s" % (item_type, e.args[0], e.args[1])
                 if deleted <0: result = self.format_error(e, "delete", "servers")
@@ -896,7 +896,7 @@ class vim_db():
                         if self.debug: print cmd
                         self.cur.execute(cmd)                    
                 return deleted, table[:-1] + " '%s' %s" %(uuid, "deleted" if deleted==1 else "not found")
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "delete_row DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e, "delete", 'instances' if table=='hosts' or table=='tenants' else 'dependencies')
@@ -924,7 +924,7 @@ class vim_db():
                         return -1, 'Not found'
                         #delete uuid
                     return 0, deleted
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "delete_row_by_key DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e, "delete", 'instances' if table=='hosts' or table=='tenants' else 'dependencies')
@@ -970,7 +970,7 @@ class vim_db():
                     self.cur.execute(cmd)
                     deleted = self.cur.rowcount
                 return deleted, "%d deleted from %s" % (deleted, sql_dict['FROM'][:-1] )
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "delete_row_by_dict DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c =  self.format_error(e, "delete", 'dependencies')
@@ -1081,7 +1081,7 @@ class vim_db():
                     if len(extended) > 0 :  instance['extended'] = extended
                     af.DeleteNone(instance)
                     return 1, instance
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "get_instance DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
@@ -1311,7 +1311,7 @@ class vim_db():
                         host_id=numa['host_id']
                         break
                 return 0, {'numa_id':numa_id, 'host_id': host_id, }
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "get_numas DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
@@ -1446,7 +1446,7 @@ class vim_db():
 
                     #inseted ok
                 return 1, uuid 
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "new_instance DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
@@ -1498,7 +1498,7 @@ class vim_db():
                     self.cur.execute(cmd)
                     return 1, "instance %s from tenant %s DELETED" % (instance_id, tenant_id)
 
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "delete_instance DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
@@ -1531,7 +1531,7 @@ class vim_db():
                     if self.cur.rowcount>0:  af.DeleteNone(ports)
                     return self.cur.rowcount, ports
     #                return self.get_table(FROM=from_, SELECT=select_,WHERE=where_,LIMIT=100)
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "get_ports DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
@@ -1559,7 +1559,7 @@ class vim_db():
                     net = self.cur.fetchone()
                     break
 
-            except (mdb.Error, AttributeError), e:
+            except (mdb.Error, AttributeError) as e:
                 if not self.debug: print cmd
                 print "check_target_net DB Exception %d: %s" % (e.args[0], e.args[1])
                 r,c = self.format_error(e)
