@@ -35,7 +35,13 @@ from utils import auxiliary_functions as af
 import openmano_schemas
 from nfvo_db import HTTP_Bad_Request, HTTP_Internal_Server_Error, HTTP_Not_Found, HTTP_Unauthorized, HTTP_Conflict
 
-#TODO: Decide if it makes sense to have the methods outside the class as static generic methods
+def _format_jsonerror(http_response):
+    try:
+        data = http_response.json()
+        return data["error"]["description"]
+    except:
+        return http_response.text
+
 class vimconnector():
     def __init__(self, uuid, name, tenant, url, url_admin=None, user=None, passwd=None,debug=True,config={}):
         self.id        = uuid
@@ -114,7 +120,7 @@ class vimconnector():
             else: return -HTTP_Bad_Request,http_content
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to add new host. HTTP Response: %d. Error: %s' % (self.url_admin, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -147,7 +153,7 @@ class vimconnector():
             else: return -HTTP_Bad_Request,http_content
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to add new external port. HTTP Response: %d. Error: %s' % (self.url_admin, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -181,7 +187,7 @@ class vimconnector():
             else: return -HTTP_Bad_Request,http_content
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to add new external network. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -221,7 +227,7 @@ class vimconnector():
             else: return -HTTP_Bad_Request,http_content
         else:
             print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to connect external port to network. HTTP Response: %d. Error: %s' % (self.url_admin, vim_response.status_code, jsonerror)
             print text
             return -vim_response.status_code,text
@@ -256,7 +262,7 @@ class vimconnector():
             else: return -HTTP_Bad_Request,http_content
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to add new tenant. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -276,7 +282,7 @@ class vimconnector():
             return vim_response.status_code,tenant_id
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to delete tenant. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -312,7 +318,7 @@ class vimconnector():
             else: return -HTTP_Bad_Request,http_content
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to add new tenant network. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -352,7 +358,7 @@ class vimconnector():
             return vim_response.status_code, vim_response.json()["networks"]
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to get network list. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -392,7 +398,7 @@ class vimconnector():
                 return vim_response.status_code,net_id
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to delete tenant network. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -435,7 +441,7 @@ class vimconnector():
 
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to get flavor. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text    
@@ -472,7 +478,7 @@ class vimconnector():
 
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to add new flavor. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -498,7 +504,7 @@ class vimconnector():
             return 200,result
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to delete flavor. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -543,7 +549,7 @@ class vimconnector():
             else: return -HTTP_Bad_Request,http_content
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to add new image. HTTP Response: %d. Error: %s' % (url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -567,7 +573,7 @@ class vimconnector():
             return 200,result
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to delete image. HTTP Response: %d. Error: %s' % (url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -600,7 +606,7 @@ class vimconnector():
             else: return -HTTP_Bad_Request,http_content
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to add new vm instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -661,7 +667,7 @@ class vimconnector():
         #print vim_response.status_code
         if vim_response.status_code != 200:
             print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to add new vm instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -734,7 +740,7 @@ class vimconnector():
             else: return -HTTP_Bad_Request,http_content
         else:
             print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to get vm instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code,text
@@ -757,7 +763,7 @@ class vimconnector():
             return vim_response.status_code, vm_id
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": not possible to delete vm instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return -vim_response.status_code, text
@@ -806,7 +812,7 @@ class vimconnector():
                     vms_unrefreshed.append(vm_id)
             else:
                 #print vim_response.text
-                jsonerror = af.format_jsonerror(vim_response)
+                jsonerror = _format_jsonerror(vim_response)
                 print 'VIMConnector refresh_tenant_vms_and_nets. Error in VIM "%s": not possible to get VM instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
                 vms_unrefreshed.append(vm_id)
         
@@ -852,7 +858,7 @@ class vimconnector():
             return vim_response.status_code, vm_id
         else:
             #print vim_response.text
-            jsonerror = af.format_jsonerror(vim_response)
+            jsonerror = _format_jsonerror(vim_response)
             text = 'Error in VIM "%s": action over vm instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
             #print text
             return vim_response.status_code, text

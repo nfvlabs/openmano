@@ -162,10 +162,7 @@ def _load_file_or_yaml(content):
 def vnf_create(args):
     #print "vnf-create",args
     headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
-    r,myvnf = parser_json_yaml(args.file)
-    if not r:
-        print myvnf
-        return -1
+    myvnf = _load_file_or_yaml(args.file)
 
     if args.name or args.description or args.image_path:
         #print args.name
@@ -177,7 +174,7 @@ def vnf_create(args):
             if args.image_path:
                 index=0
                 for image_path_ in args.image_path.split(","):
-                    print "image-path", image_path_
+                    #print "image-path", image_path_
                     myvnf['vnf']['VNFC'][index]['VNFC image']=image_path_
                     index=index+1
         except (KeyError, TypeError), e:
@@ -275,21 +272,13 @@ def vnf_delete(args):
 def scenario_create(args):
     #print "scenario-create",args
     headers_req = {'content-type': 'application/yaml'}
-    f = file(args.file, "r")
-    payload_req = f.read()
-    f.close()
+    myscenario = _load_file_or_yaml(args.file)
 
-    if args.name or args.description:
-        #print args.name
-        myscenario = yaml.load(payload_req)
-        if not 'topology' in myscenario: 
-            print 'Wrong file. Not a scenario descriptor. Expecting the following text: "topology"'
-            return -1
-        if args.name:
-            myscenario['name'] = args.name
-        if args.description:
-            myscenario['description'] = args.description
-        payload_req = yaml.safe_dump(myscenario, explicit_start=True, indent=4, default_flow_style=False, tags=False, encoding='utf-8', allow_unicode=True)
+    if args.name:
+        myscenario['name'] = args.name
+    if args.description:
+        myscenario['description'] = args.description
+    payload_req = yaml.safe_dump(myscenario, explicit_start=True, indent=4, default_flow_style=False, tags=False, encoding='utf-8', allow_unicode=True)
     
     #print payload_req
         

@@ -39,6 +39,7 @@ import glanceclient.exc as gl1Exceptions
 from httplib import HTTPException
 from neutronclient.neutron import client as neClient
 from neutronclient.common import exceptions as neExceptions
+from requests.exceptions import ConnectionError
 
 '''contain the openstack virtual machine status to openmano status'''
 vmStatus2manoFormat={'ACTIVE':'ACTIVE',
@@ -688,7 +689,7 @@ class osconnector():
 #        except nvExceptions.NotFound, e:
 #            error_value=-HTTP_Not_Found
 #            error_text= "vm instance %s not found" % vm_id
-        except (ksExceptions.ClientException, nvExceptions.ClientException), e:
+        except (ksExceptions.ClientException, nvExceptions.ClientException, ConnectionError), e:
             error_value=-HTTP_Bad_Request
             error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized

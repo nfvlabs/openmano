@@ -88,13 +88,6 @@ def remove_extra_items(data, schema):
 #    text = soup.p.get_text() + " " + soup.pre.get_text()
 #    return text
 
-def format_jsonerror(http_response):
-    data = http_response.json()
-    #print "format_jsonerror"
-    #print "http_content"
-    #print "http_content_error_description"
-    #print data["error"]["description"]
-    return data["error"]["description"]
 
 def convert_bandwidth(data, reverse=False):
     '''Check the field bandwidth recursivelly and when found, it removes units and convert to number 
