@@ -36,6 +36,8 @@ import time
 import Queue
 import requests
 
+class FlowBadFormat(Exception):
+    '''raise when a bad format of flow is found''' 
 
 def change_of2db(flow):
     '''Change 'flow' dictionary from openflow format to database format
@@ -43,24 +45,41 @@ def change_of2db(flow):
     double tuple to a string
     from [(A,B),(C,D),..] to "A=B,C=D" '''
     action_str_list=[]
-    for action in flow['actions']:
-        action_str_list.append( action[0] + "=" + str(action[1]) )
-    flow['actions'] = ",".join(action_str_list)
-        
+    if type(flow)!=dict or "actions" not in flow:
+        raise FlowBadFormat("Bad input parameters, expect dictionary with 'actions' as key")
+    try:
+        for action in flow['actions']:
+            action_str_list.append( action[0] + "=" + str(action[1]) )
+        flow['actions'] = ",".join(action_str_list)
+    except:
+        raise FlowBadFormat("Unexpected format at 'actions'")
+
 def change_db2of(flow):
     '''Change 'flow' dictionary from database format to openflow format
     Basically the change consist of changing 'flow[actions]' from a string to 
     a double tuple list
-    from "A=B,C=D,..." to [(A,B),(C,D),..] '''
+    from "A=B,C=D,..." to [(A,B),(C,D),..] 
+    raise FlowBadFormat '''
     actions=[]
+    if type(flow)!=dict or "actions" not in flow or type(flow["actions"])!=str:
+        raise FlowBadFormat("Bad input parameters, expect dictionary with 'actions' as key")
     action_list = flow['actions'].split(",")
     for action_item in action_list:
         action_tuple = action_item.split("=")
-        if action_tuple[1]=="None":
-            action_tuple[1] = None
-        elif action_tuple[0]=="vlan":
-            action_tuple[1] = int(action_tuple[1])
-        actions.append( (action_tuple[0],action_tuple[1]) )
+        if len(action_tuple) != 2:
+            raise FlowBadFormat("Expected key=value format at 'actions'")
+        if action_tuple[0].strip().lower()=="vlan":
+            if action_tuple[1].strip().lower() in ("none", "strip"):
+                actions.append( ("vlan",None) )
+            else:
+                try:
+                    actions.append( ("vlan", int(action_tuple[1])) )
+                except:
+                    raise FlowBadFormat("Expected integer after vlan= at 'actions'")
+        elif action_tuple[0].strip().lower()=="out":
+            actions.append( ("out", str(action_tuple[1])) )
+        else:
+            raise FlowBadFormat("Unexpected '%s' at 'actions'"%action_tuple[0])
     flow['actions'] = actions
 
 
@@ -267,7 +286,11 @@ class openflow_thread(threading.Thread):
         #modify database flows format and get the used names
         used_names=[]
         for flow in database_flows:
-            change_db2of(flow)
+            try:
+                change_db2of(flow)
+            except FlowBadFormat as e:
+                print self.name, ": Error Exception FlowBadFormat '%s'" % str(e), flow
+                continue
             used_names.append(flow['name'])
         name_index=0
         #insert at database the new flows, change actions to human text
@@ -291,7 +314,11 @@ class openflow_thread(threading.Thread):
                 print self.name, ": Error '%s' at flow insertion" % c, flow
                 return -1, content
             #4 insert at database
-            change_of2db(flow)
+            try:
+                change_of2db(flow)
+            except FlowBadFormat as e:
+                print self.name, ": Error Exception FlowBadFormat '%s'" % str(e), flow
+                return -1, str(e)
             self.db_lock.acquire()
             result, content = self.db.new_row('of_flows', flow)
             self.db_lock.release()
@@ -335,7 +362,7 @@ class openflow_thread(threading.Thread):
             self.db.delete_row_by_key('of_flows', None, None) #this will delete all lines
             self.db_lock.release()
             return 0, None
-        except requests.exceptions.RequestException, e:
+        except requests.exceptions.RequestException as e:
             print self.name, ": clear_all_flows Exception:", str(e)
             return -1, str(e)
 
