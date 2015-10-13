@@ -23,7 +23,9 @@
 ##
 
 '''
-This thread interacts with a openflow floodligth controller to create dataplane connections
+Implement the plugging for floodligth openflow controller
+It creates the class OF_conn to create dataplane connections
+with static rules based on packet destination MAC address
 '''
 
 __author__="Pablo Montes, Alfonso Tierno"
@@ -32,27 +34,42 @@ __date__ ="$28-oct-2014 12:07:15$"
 
 import json
 import requests
+import logging
 
-class FL_conn():
-    ''' Floodlight connector. No MAC learning is used
+class OF_conn():
+    ''' Openflow Connector for Floodlight.
+         No MAC learning is used
         version 0.9 or 1.X is autodetected
     '''
-    def __init__(self, of_ip, of_port, of_dpid, of_version=None):
+    def __init__(self, params):
+        ''' Constructor. 
+            params is a dictionay with the following keys:
+                of_dpid:     DPID to use for this controller
+                of_ip:       controller IP address
+                of_port:     controller TCP port
+                of_version:  version, can be "0.9" or "1.X". By default it is autodetected
+                of_debug:    debug level for logging. Default to ERROR
+                other keys are ignored
+            Raise an exception if same parameter is missing or wrong
+        '''
 
         self.name = "Floodlight"
-        self.dpid = str(of_dpid)
-        self.url = "http://%s:%s" %( str(of_ip), str(of_port) )
+        self.dpid = str(params["of_dpid"])
+        self.url = "http://%s:%s" %( str(params["of_ip"]), str(params["of_port"]) )
 
         self.pp2ofi={}  # From Physical Port to OpenFlow Index
         self.ofi2pp={}  # From OpenFlow Index to Physical Port
         self.headers = {'content-type':'application/json', 'Accept':'application/json'}
         self.version= None
-        if of_version!=None:
-            self._set_version(of_version)
+        self.logger = logging.getLogger('vim.OF.FL')
+        self.logger.setLevel( getattr(logging, params.get("of_debug", "ERROR") ) )
+        self._set_version(params.get("of_version") )
     
     def _set_version(self, version):
         #static version names
-        if version=="0.9":
+        if version==None:
+            self.version= None
+        elif version=="0.9":
             self.version= version
             self.name = "Floodlightv0.9"
             self.ver_names={
@@ -77,23 +94,25 @@ class FL_conn():
                 "stripvlan":    "strip_vlan",
             }
         else:
-            self.version= None
+            raise ValueError("Invalid version for floodlight controller")
             
     def get_of_switches(self):
         ''' Obtain a a list of switches or DPID detected by this controller
             Return
-                <number>, <list>: where each element of the list is a tuple pair (DPID, ip address)
-                <0, text_error: uppon error
+                <number>, <list>: where each element of the list is a tuple pair (DPID, ip-address)
+                <0, text_error: if fails
         '''  
         try:
             of_response = requests.get(self.url+"/wm/core/controller/switches/json", headers=self.headers)
-            #print vim_response.status_code
+            error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
             if of_response.status_code != 200:
-                print self.name, ": get_of_controller_info:", self.url, of_response
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+                self.logger.warning("get_of_switches " + error_text)
+                return -1 , error_text
+            self.logger.debug("get_of_switches " + error_text)
             info = of_response.json()
             if type(info) != list and type(info) != tuple:
-                return -1, "unexpected openflow response, not a list. Wrong version?"
+                self.logger.error("get_of_switches. Unexpected response not a list %s", str(type(info)))
+                return -1, "Unexpected response, not a list. Wrong version?"
             if len(info)==0:
                 return 0, info
             #autodiscover version
@@ -103,18 +122,18 @@ class FL_conn():
                 elif 'switchDPID' in info[0] and 'inetAddress' in info[0]:
                     self._set_version("1.X")
                 else:
-                    return -1, "unexpected openflow response, Wrong version?"
+                    self.logger.error("get_of_switches. Unexpected response, not found 'dpid' or 'switchDPID' field: %s", str(info[0]))
+                    return -1, "Unexpected response, not found 'dpid' or 'switchDPID' field. Wrong version?"
             
             switch_list=[]
             for switch in info:
                 switch_list.append( (switch[ self.ver_names["dpid"] ], switch['inetAddress']) )
             return len(switch_list), switch_list
-        except requests.exceptions.RequestException as e:
-            print self.name, ": get_of_switches Exception:", str(e)
-            return -1, str(e)
-        except ValueError as e: # the case that JSON can not be decoded
-            print self.name, ": get_of_switches Exception:", str(e)
-            return -1, str(e)
+        except (requests.exceptions.RequestException, ValueError) as e:
+            #ValueError in the case that JSON can not be decoded
+            error_text = type(e).__name__ + ": " + str(e)
+            self.logger.error("get_of_switches " + error_text)
+            return -1, error_text
 
     def get_of_rules(self, translate_of_ports=True):
         ''' Obtain the rules inserted at openflow controller
@@ -134,10 +153,11 @@ class FL_conn():
         try:
             of_response = requests.get(self.url+"/wm/%s/list/%s/json" %(self.ver_names["URLmodifier"], self.dpid),
                                         headers=self.headers)
-            #print vim_response.status_code
+            error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
             if of_response.status_code != 200:
-                print self.name, ": get_of_rules:", self.url, of_response
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+                self.logger.warning("get_of_rules " + error_text)
+                return -1 , error_text
+            self.logger.debug("get_of_rules " + error_text)
             info = of_response.json()
             rule_dict={}
             for switch,switch_info in info.iteritems():
@@ -171,7 +191,7 @@ class FL_conn():
                                 actionlist.append( ("vlan", action["virtualLanIdentifier"]) )
                             else:
                                 actionlist.append( (action["type"], str(action) ))
-                                print "Unknown action in rule %s: %s" % (rule["name"], str(action))
+                                self.logger.warning("get_of_rules() Unknown action in rule %s: %s", rule["name"], str(action))
                             rule["actions"] = actionlist
                     elif self.version[0]=="1":
                         if translate_of_ports:
@@ -198,16 +218,15 @@ class FL_conn():
                             elif action=="set_vlan_vid":
                                 actionlist.append( ("vlan", details["instructions"]["instruction_apply_actions"]["set_vlan_vid"]) )
                             else:
-                                actionlist.append( (action, str(details["instructions"]["instruction_apply_actions"]) ))
-                                print "Unknown action in rule %s: %s" % (rule["name"], str(action))
+                                self.logger.error("get_of_rules Unknown action in rule %s: %s", rule["name"], str(action))
+                                #actionlist.append( (action, str(details["instructions"]["instruction_apply_actions"]) ))
                     rule_dict[str(name)] = rule
             return 0, rule_dict
-        except requests.exceptions.RequestException as e:
-            print self.name, ": get_of_rules Exception:", str(e)
-            return -1, str(e)
-        except ValueError as e: # the case that JSON can not be decoded
-            print self.name, ": get_of_rules Exception:", str(e)
-            return -1, str(e)
+        except (requests.exceptions.RequestException, ValueError) as e:
+            #ValueError in the case that JSON can not be decoded
+            error_text = type(e).__name__ + ": " + str(e)
+            self.logger.error("get_of_rules " + error_text)
+            return -1, error_text
 
     def obtain_port_correspondence(self):
         '''Obtain the correspondence between physical and openflow port names
@@ -217,9 +236,11 @@ class FL_conn():
         try:
             of_response = requests.get(self.url+"/wm/core/controller/switches/json", headers=self.headers)
             #print vim_response.status_code
+            error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
             if of_response.status_code != 200:
-                print self.name, ": get_of_controller_info:", self.url, of_response
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+                self.logger.warning("obtain_port_correspondence " + error_text)
+                return -1 , error_text
+            self.logger.debug("obtain_port_correspondence " + error_text)
             info = of_response.json()
             
             if type(info) != list and type(info) != tuple:
@@ -241,8 +262,8 @@ class FL_conn():
                     index = i
                     break
             if index == -1:
-                text = "Error "+self.dpid+" not present in controller "+self.url
-                print self.name, ": get_of_controller_info ERROR", text 
+                text = "DPID '"+self.dpid+"' not present in controller "+self.url
+                #print self.name, ": get_of_controller_info ERROR", text 
                 return -1, text
             else:
                 for port in info[index]["ports"]:
@@ -250,12 +271,11 @@ class FL_conn():
                     self.ofi2pp[ port["portNumber"]] = str(port["name"]) 
             #print self.name, ": get_of_controller_info ports:", self.pp2ofi
             return 0, self.pp2ofi
-        except requests.exceptions.RequestException as e:
-            print self.name, ": get_of_controller_info Exception:", str(e)
-            return -1, str(e)
-        except ValueError as e: # the case that JSON can not be decoded
-            print self.name, ": get_of_controller_info Exception:", str(e)
-            return -1, str(e)
+        except (requests.exceptions.RequestException, ValueError) as e:
+            #ValueError in the case that JSON can not be decoded
+            error_text = type(e).__name__ + ": " + str(e)
+            self.logger.error("obtain_port_correspondence " + error_text)
+            return -1, error_text
             
     def del_flow(self, flow_name):
         #autodiscover version
@@ -269,15 +289,17 @@ class FL_conn():
             of_response = requests.delete(self.url+"/wm/%s/json" % self.ver_names["URLmodifier"],
                                 headers=self.headers, data='{"switch":"%s","name":"%s"}' %(self.dpid, flow_name)
                             )
-            print self.name, ": del_flow", flow_name, of_response
-            #print vim_response.status_code
+            error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
             if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
+                self.logger.warning("del_flow " + error_text)
+                return -1 , error_text
+            self.logger.debug("del_flow OK " + error_text)
             return 0, None
 
         except requests.exceptions.RequestException as e:
-            print self.name, ": del_flow", flow_name, "Exception:", str(e)
-            return -1, str(e)
+            error_text = type(e).__name__ + ": " + str(e)
+            self.logger.error("del_flow " + error_text)
+            return -1, error_text
 
     def new_flow(self, data):
         #get translation, autodiscover version
@@ -295,6 +317,11 @@ class FL_conn():
             if data.get("dst_mac"):
                 sdata[  self.ver_names["destmac"]  ] = data["dst_mac"]
             sdata['switch'] = self.dpid
+            if not data['ingress_port'] in self.pp2ofi:
+                error_text = 'Error. Port '+data['ingress_port']+' is not present in the switch'
+                self.logger.warning("new_flow " + error_text)
+                return -1, error_text
+            
             sdata[  self.ver_names["inport"]  ] = self.pp2ofi[data['ingress_port']]
             sdata['actions'] = ""
 
@@ -312,15 +339,17 @@ class FL_conn():
 
             of_response = requests.post(self.url+"/wm/%s/json" % self.ver_names["URLmodifier"],
                                 headers=self.headers, data=json.dumps(sdata) )
-            print self.name, ": new_flow():", sdata, of_response.text
-            #print vim_response.status_code
+            error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
             if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
+                self.logger.warning("new_flow " + error_text)
+                return -1 , error_text
+            self.logger.debug("new_flow OK" + error_text)
             return 0, None
 
         except requests.exceptions.RequestException as e:
-            print self.name, ": new_flow Exception:", str(e)
-            return -1, str(e)
+            error_text = type(e).__name__ + ": " + str(e)
+            self.logger.error("new_flow " + error_text)
+            return -1, error_text
 
     def clear_all_flows(self):
         #autodiscover version
@@ -333,10 +362,13 @@ class FL_conn():
         try:
             url = self.url+"/wm/%s/clear/%s/json" % (self.ver_names["URLmodifier"], self.dpid)
             of_response = requests.get(url )
+            error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
             if of_response.status_code < 200 or of_response.status_code >= 300:
-                print self.name, ": clear_all_flows:", url, of_response, of_response.text
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
+                self.logger.warning("clear_all_flows " + error_text)
+                return -1 , error_text
+            self.logger.debug("clear_all_flows OK " + error_text)
             return 0, None
         except requests.exceptions.RequestException as e:
-            print self.name, ": clear_all_flows Exception:", str(e)
-            return -1, str(e)
+            error_text = type(e).__name__ + ": " + str(e)
+            self.logger.error("clear_all_flows " + error_text)
+            return -1, error_text

@@ -50,6 +50,7 @@ vlan1000_schema={"type":"integer","minimum":1000,"maximun":4095}
 mac_schema={"type":"string", "pattern":"^[0-9a-fA-F][02468aceACE](:[0-9a-fA-F]{2}){5}$"}  #must be unicast LSB bit of MSB byte ==0 
 net_bind_schema={"oneOf":[{"type":"null"},{"type":"string", "pattern":"^(default|((bridge|macvtap):[0-9a-zA-Z\.\-]{1,29})|openflow:[/0-9a-zA-Z\.\-]{1,25}(:vlan)?)$"}]}
 yes_no_schema={"type":"string", "enum":["yes", "no"]}
+log_level_schema={"type":"string", "enum":["DEBUG", "INFO", "WARNING","ERROR","CRITICAL"]}
 
 config_schema = {
     "title":"main configuration information schema",
@@ -68,9 +69,10 @@ config_schema = {
         "of_controller_port": port_schema,
         "of_controller_dpid": nameshort_schema,
         "of_controller_nets_with_same_vlan": {"type" : "boolean"},
-        "of_controller": {"type":"string", "enum":["floodlight", "opendaylight"]},
-        "of_user": nameshort_schema,
-        "of_password": nameshort_schema,
+        "of_controller": nameshort_schema, #{"type":"string", "enum":["floodlight", "opendaylight"]},
+        "of_controller_module": {"type":"string"},
+        #"of_user": nameshort_schema,
+        #"of_password": nameshort_schema,
         "test_mode": {"type": "boolean"}, #leave for backward compatibility
         "mode": {"type":"string", "enum":["normal", "host only", "OF only", "development", "test"] },
         "development_bridge": {"type":"string"},
@@ -89,7 +91,13 @@ config_schema = {
                 },
             },
             "minProperties": 2
-        }
+        },
+        "log_level": log_level_schema,
+        "log_level_db": log_level_schema,
+        "log_level_of": log_level_schema,
+    },
+    "patternProperties": {
+        "of_*" : {"type": ["string", "integer", "boolean"]}
     },
     "required": ['db_host', 'db_user', 'db_passwd', 'db_name',
             'of_controller_ip', 'of_controller_port', 'of_controller_dpid', 'bridge_ifaces', 'of_controller'],

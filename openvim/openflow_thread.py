@@ -35,6 +35,7 @@ import threading
 import time
 import Queue
 import requests
+import logging
 
 class FlowBadFormat(Exception):
     '''raise when a bad format of flow is found''' 
@@ -85,39 +86,42 @@ def change_db2of(flow):
 
 
 class of_test_connector():
-    '''This is a fake openflow connector that does nothing for running openvim without an openflow controller 
+    '''This is a fake openflow connector for testing.
+        It does nothing and it is used for running openvim without an openflow controller 
     '''
-    def __init__(self):
+    def __init__(self, params):
         self.name = "ofc_test"
         self.rules={}
+        self.logger = logging.getLogger('vim.OF.TEST')
+        self.logger.setLevel( getattr(logging, params.get("of_debug", "ERROR") ) )
     def get_of_switches(self):
         return 0, ()
     def obtain_port_correspondence(self):
         return 0, ()
     def del_flow(self, flow_name):
         if flow_name in self.rules:
-            print self.name, ": del_flow", flow_name, "Ok"
+            self.logger.debug("del_flow OK")
             del self.rules[flow_name]
             return 0, None
         else:
-            print self.name, ": del_flow", flow_name, "Ok"
+            self.logger.warning("del_flow not found")
             return -1, "flow %s not found"
     def new_flow(self, data):
         self.rules[ data["name"] ] = data
-        print self.name, ": new_flow():", data, "Ok"
+        self.logger.debug("new_flow OK")
         return 0, None
     def get_of_rules(self, translate_of_ports=True):
         return 0, self.rules
 
     def clear_all_flows(self):
-        print self.name, ": clear_all_flows:", "Ok"
+        self.logger.debug("clear_all_flows OK")
         self.rules={}
         return 0, None
 
 
 
 class openflow_thread(threading.Thread):
-    def __init__(self, OF_connector, db, db_lock, of_test, pmp_with_same_vlan):
+    def __init__(self, OF_connector, db, db_lock, of_test, pmp_with_same_vlan, debug='ERROR'):
         threading.Thread.__init__(self)
 
         self.db = db
@@ -126,6 +130,8 @@ class openflow_thread(threading.Thread):
         self.test = of_test
         self.db_lock = db_lock
         self.OF_connector = OF_connector
+        self.logger = logging.getLogger('vim.OF')
+        self.logger.setLevel( getattr(logging, debug) )
 
         self.queueLock = threading.Lock()
         self.taskQueue = Queue.Queue(2000)
@@ -152,28 +158,35 @@ class openflow_thread(threading.Thread):
                 time.sleep(1)
                 continue        
 
-            print self.name, ": processing task", task
             if task[0] == 'update-net':
                 r,c = self.update_of_flows(task[1])
-                #updata database status
+                #update database status
                 self.db_lock.acquire()
                 if r<0:
                     UPDATE={'status':'ERROR', 'last_error': str(c)}
+                    self.logger.error("processing task 'update-net' %s: %s", str(task[1]), c)
                 else:
                     UPDATE={'status':'ACTIVE', 'last_error': None}
+                    self.logger.debug("processing task 'update-net' %s: OK", str(task[1]))
                 self.db.update_rows('nets', UPDATE, WHERE={'uuid':task[1]})
                 self.db_lock.release()
 
             elif task[0] == 'clear-all':
-                self.clear_all_flows()
+                r,c = self.clear_all_flows()
+                if r<0:
+                    self.logger.error("processing task 'clear-all': %s", c)
+                else:
+                    self.logger.debug("processing task 'clear-all': OK")
             elif task[0] == 'exit':
+                self.logger.debug("exit from openflow_thread")
                 self.terminate()
                 return 0
             else:
-                print self.name, ": unknown task", task
+                self.logger.error("unknown task %s", str(task))
                 
     def terminate(self):
-        print self.name, ": exit from openflow_thread"
+        pass
+        #print self.name, ": exit from openflow_thread"
 
     def update_of_flows(self, net_id):
         ports=()
@@ -182,8 +195,8 @@ class openflow_thread(threading.Thread):
                                             WHERE={'uuid':net_id} )
         self.db_lock.release()
         if result < 0:
-            print self.name, ": update_of_flows() ERROR getting net", content
-            return -1, "ERROR getting net " + content
+            #print self.name, ": update_of_flows() ERROR getting net", content
+            return -1, "DB error getting net: " + content
         elif result==0:
             #net has been deleted
             ifaces_nb = 0
@@ -200,8 +213,8 @@ class openflow_thread(threading.Thread):
                         WHERE={'net_id':net_id, 'admin_state_up':'true', 'status':'ACTIVE'} )
                 self.db_lock.release()
                 if ifaces_nb < 0:
-                    print self.name, ": update_of_flows() ERROR getting ports", ports
-                    return -1, "ERROR getting ports "+ ports
+                    #print self.name, ": update_of_flows() ERROR getting ports", ports
+                    return -1, "DB error getting ports: "+ ports
                 
                 #add the binding as an external port
                 if net['bind'] and net['bind'][:9]=="openflow:":
@@ -222,21 +235,21 @@ class openflow_thread(threading.Thread):
                                           WHERE_OR={'net_id':None} )
         self.db_lock.release()
         if result < 0:
-            print self.name, ": update_of_flows() ERROR getting flows from database", database_flows
-            return -1, "ERROR getting flows " + database_flows
+            #print self.name, ": update_of_flows() ERROR getting flows from database", database_flows
+            return -1, "DB error getting flows: " + database_flows
         #Get the existing flows at openflow controller
         result, of_flows = self.OF_connector.get_of_rules() 
         if result < 0:
-            print self.name, ": update_of_flows() ERROR getting flows from controller", of_flows
-            return -1, "ERROR getting flows " + of_flows
+            #print self.name, ": update_of_flows() ERROR getting flows from controller", of_flows
+            return -1, "OF error getting flows: " + of_flows
 
         if ifaces_nb < 2:
             pass
         elif net['type'] == 'ptp':
             if ifaces_nb > 2:
-                print self.name, 'Error, network '+str(net_id)+' has been defined as ptp but it has '+\
-                                 str(ifaces_nb)+' interfaces.'
-                return -1, 'Error, ptp type network cannot connect %d interfaces, only 2' % ifaces_nb
+                #print self.name, 'Error, network '+str(net_id)+' has been defined as ptp but it has '+\
+                #                 str(ifaces_nb)+' interfaces.'
+                return -1, "'ptp' type network cannot connect %d interfaces, only 2" % ifaces_nb
         elif net['type'] == 'data':
             if ifaces_nb > 2 and self.pmp_with_same_vlan:
                 # check all ports are VLAN (tagged) or none
@@ -245,35 +258,35 @@ class openflow_thread(threading.Thread):
                     if port["type"]=="external":
                         if port["vlan"] != None:
                             if port["vlan"]!=net["vlan"]:
-                                text="Error external port vlan-tag and net vlan-tag must be the same when flag 'of_controller_nets_with_same_vlan' is True"
-                                print self.name, text
+                                text="External port vlan-tag and net vlan-tag must be the same when flag 'of_controller_nets_with_same_vlan' is True"
+                                #print self.name, "Error", text
                                 return -1, text
                             if vlan_tag == None:
                                 vlan_tag=True
                             elif vlan_tag==False:
-                                text="Error passthrough and external port vlan-tagged can not be connected when flag 'of_controller_nets_with_same_vlan' is True"
-                                print self.name, text
+                                text="Passthrough and external port vlan-tagged can not be connected when flag 'of_controller_nets_with_same_vlan' is True"
+                                #print self.name, "Error", text
                                 return -1, text
                         else:
                             if vlan_tag == None:
                                 vlan_tag=False
                             elif vlan_tag == True:
-                                text="Error SR-IOV and external port not vlan-tagged can not be connected when flag 'of_controller_nets_with_same_vlan' is True"
-                                print self.name, text
+                                text="SR-IOV and external port not vlan-tagged can not be connected when flag 'of_controller_nets_with_same_vlan' is True"
+                                #print self.name, "Error", text
                                 return -1, text
                     elif port["model"]=="PF" or port["model"]=="VFnotShared":
                         if vlan_tag == None:
                             vlan_tag=False
                         elif vlan_tag==True:
-                            text="Error passthrough and SR-IOV ports cannot be connected when flag 'of_controller_nets_with_same_vlan' is True"
-                            print self.name, text
+                            text="Passthrough and SR-IOV ports cannot be connected when flag 'of_controller_nets_with_same_vlan' is True"
+                            #print self.name, "Error", text
                             return -1, text
                     elif port["model"] == "VF":
                         if vlan_tag == None:
                             vlan_tag=True
                         elif vlan_tag==False:
-                            text="Error passthrough and SR-IOV ports cannot be connected when flag 'of_controller_nets_with_same_vlan' is True"
-                            print self.name, text
+                            text="Passthrough and SR-IOV ports cannot be connected when flag 'of_controller_nets_with_same_vlan' is True"
+                            #print self.name, "Error", text
                             return -1, text
         else:
             return -1, 'Only ptp and data networks are supported for openflow'
@@ -289,7 +302,7 @@ class openflow_thread(threading.Thread):
             try:
                 change_db2of(flow)
             except FlowBadFormat as e:
-                print self.name, ": Error Exception FlowBadFormat '%s'" % str(e), flow
+                self.logger.error("Exception FlowBadFormat: '%s', flow: '%s'",str(e), str(flow))
                 continue
             used_names.append(flow['name'])
         name_index=0
@@ -299,7 +312,7 @@ class openflow_thread(threading.Thread):
             index = self._check_flow_already_present(flow, database_flows)
             if index>=0:
                 database_flows[index]["not delete"]=True
-                print self.name, ": skipping already present flow", flow
+                self.logger.debug("Skipping already present flow %s", str(flow))
                 continue
             #2 look for a non used name
             flow_name=flow["net_id"]+"_"+str(name_index)
@@ -311,19 +324,19 @@ class openflow_thread(threading.Thread):
             #3 insert at openflow
             r,c = self.OF_connector.new_flow(flow)
             if r < 0:
-                print self.name, ": Error '%s' at flow insertion" % c, flow
+                #print self.name, ": Error '%s' at flow insertion" % c, flow
                 return -1, content
             #4 insert at database
             try:
                 change_of2db(flow)
             except FlowBadFormat as e:
-                print self.name, ": Error Exception FlowBadFormat '%s'" % str(e), flow
+                #print self.name, ": Error Exception FlowBadFormat '%s'" % str(e), flow
                 return -1, str(e)
             self.db_lock.acquire()
             result, content = self.db.new_row('of_flows', flow)
             self.db_lock.release()
             if result < 0:
-                print self.name, ": Error '%s' at database insertion" % content, flow
+                #print self.name, ": Error '%s' at database insertion" % content, flow
                 return -1, content
 
         #delete not needed old flows from openflow and from DDBB, 
@@ -334,22 +347,21 @@ class openflow_thread(threading.Thread):
                     #not in controller, insert it
                     r,c = self.OF_connector.new_flow(flow)
                     if r < 0:
-                        print self.name, ": Error '%s' at flow insertion" % c, flow
+                        #print self.name, ": Error '%s' at flow insertion" % c, flow
                         return -1, content
                 continue
             #Delete flow
             if flow["name"] in of_flows:
                 r,c= self.OF_connector.del_flow(flow['name'])
-            else:
-                r=0
+                if r<0:
+                    self.logger.error("cannot delete flow '%s' from OF: %s", flow['name'], c )
+                    continue #skip deletion from database
+            #delete from database
             self.db_lock.acquire()
-            if r>=0:
-                self.db.delete_row_by_key('of_flows', 'id', flow['id'])
-            else:
-                #keep the flow, but put in actions the error
-                #self.db.update_rows('of_flows', {'actions':c}, {'id':flow['id']})
-                print self.name, ": Error '%s' at flow deletion" % c, flow
+            r,c=self.db.delete_row_by_key('of_flows', 'id', flow['id'])
             self.db_lock.release()
+            if r<0:
+                self.logger.error("cannot delete flow '%s' from DB: %s", flow['name'], c )
         
         return 0, 'Success'
 
@@ -363,7 +375,7 @@ class openflow_thread(threading.Thread):
             self.db_lock.release()
             return 0, None
         except requests.exceptions.RequestException as e:
-            print self.name, ": clear_all_flows Exception:", str(e)
+            #print self.name, ": clear_all_flows Exception:", str(e)
             return -1, str(e)
 
     flow_fields=('priority', 'vlan', 'ingress_port', 'actions', 'dst_mac', 'src_mac', 'net_id')
@@ -392,7 +404,7 @@ class openflow_thread(threading.Thread):
             for port in ports:
                 if str(port['switch_port']) not in self.OF_connector.pp2ofi and not self.test:
                     error_text= "switch port name '%s' is not valid for the openflow controller" % str(port['switch_port'])
-                    print self.name, ": ERROR " + error_text
+                    #print self.name, ": ERROR " + error_text
                     return -1, error_text
             
         # Insert rules so each point can reach other points using dest mac information
@@ -425,7 +437,7 @@ class openflow_thread(threading.Thread):
                 flow['actions'].append( ('out', str(dst_port['switch_port'])) )
     
                 if self._check_flow_already_present(flow, new_flows) >= 0:
-                    print self.name, ": skipping repeated flow", flow
+                    self.logger.debug("Skipping repeated flow '%s'", str(flow))
                     continue
                 
                 new_flows.append(flow)
@@ -461,7 +473,7 @@ class openflow_thread(threading.Thread):
                     continue #nothing to do, skip
 
                 if self._check_flow_already_present(flow, new_flows) >= 0:
-                    print self.name, ": skipping repeated flow", flow
+                    self.logger.debug("Skipping repeated flow '%s'", str(flow))
                     continue
                 
                 new_flows.append(flow)

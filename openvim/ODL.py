@@ -23,7 +23,9 @@
 ##
 
 '''
-This thread interacts with a openflow floodligth controller to create dataplane connections
+Implement the plugging for OpendayLight openflow controller
+It creates the class OF_conn to create dataplane connections
+with static rules based on packet destination MAC address
 '''
 
 __author__="Pablo Montes, Alfonso Tierno"
@@ -33,17 +35,30 @@ __date__ ="$28-oct-2014 12:07:15$"
 import json
 import requests
 import base64
+import logging
 
-class ODL_conn():
+class OF_conn():
     '''OpenDayLight connector. No MAC learning is used'''
-    def __init__(self, of_ip ,of_port, of_dpid, of_user, of_password):
-
+    def __init__(self, params):
+        ''' Constructor. 
+            Params is a dictionay with the following keys:
+                of_dpid:     DPID to use for this controller
+                of_ip:       controller IP address
+                of_port:     controller TCP port
+                of_user:     user credentials
+                of_password: password credentials
+                of_debug:    debug level for logging. Default to ERROR
+                other keys are ignored
+            Raise an exception if same parameter is missing or wrong
+        '''
         self.name = "OpenDayLight"
-        self.dpid = str(of_dpid)
+        self.dpid = str(params["of_dpid"])
         self.id = 'openflow:'+str(int(self.dpid.replace(':', ''), 16))
-        self.url = "http://%s:%s" %( str(of_ip), str(of_port) )
-        self.auth = base64.b64encode(of_user+":"+of_password)
+        self.url = "http://%s:%s" %( str(params["of_ip"]), str(params["of_port"] ) )
+        self.auth = base64.b64encode(params["of_user"]+":"+params["of_password"])
 
+        self.logger = logging.getLogger('vim.OF.ODL')
+        self.logger.setLevel( getattr(logging, params.get("of_debug", "ERROR")) )
         self.pp2ofi={}  # From Physical Port to OpenFlow Index
         self.ofi2pp={}  # From OpenFlow Index to Physical Port
         self.headers = {'content-type':'application/json', 'Accept':'application/json',
@@ -58,48 +73,51 @@ class ODL_conn():
         try:
             of_response = requests.get(self.url+"/restconf/operational/opendaylight-inventory:nodes",
                                        headers=self.headers)
-            #print vim_response.status_code
+            error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
             if of_response.status_code != 200:
-                print self.name, ": obtain_port_correspondence:", self.url, of_response
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+                self.logger.warning("get_of_switches " + error_text)
+                return -1 , error_text
+            self.logger.debug("get_of_switches " + error_text)
             info = of_response.json()
             
             if type(info) != dict:
-                return -1, "unexpected openflow response, not a dict. Wrong version?"
+                self.logger.error("get_of_switches. Unexpected response, not a dict: %s", str(info))
+                return -1, "Unexpected response, not a dict. Wrong version?"
 
             nodes = info.get('nodes')
-            if nodes is None:
-                return -1, "unexpected openflow response, 'nodes' element not found. Wrong version?"
+            if type(nodes) is not dict:
+                self.logger.error("get_of_switches. Unexpected response at 'nodes', not found or not a dict: %s", str(type(info)))
+                return -1, "Unexpected response at 'nodes', not found or not a dict. Wrong version?"
 
             node_list = nodes.get('node')
-            if node_list is None or type(node_list) is not list:
-                return -1, "unexpected openflow response, 'node' element not found or is not a list. Wrong version?"
+            if type(node_list) is not list:
+                self.logger.error("get_of_switches. Unexpected response, at 'nodes':'node', not found or not a list: %s", str(type(node_list)))
+                return -1, "Unexpected response, at 'nodes':'node', not found or not a list. Wrong version?"
 
             switch_list=[]
             for node in node_list:
                 node_id = node.get('id')
                 if node_id is None:
-                    return -1, "unexpected openflow response, 'id' element not found in one of the nodes. " \
-                               "Wrong version?"
+                    self.logger.error("get_of_switches. Unexpected response at 'nodes':'node'[]:'id', not found: %s", str(node))
+                    return -1, "Unexpected response at 'nodes':'node'[]:'id', not found . Wrong version?"
 
                 if node_id == 'controller-config':
                     continue
 
                 node_ip_address = node.get('flow-node-inventory:ip-address')
                 if node_ip_address is None:
-                    return -1, "unexpected openflow response, 'flow-node-inventory:ip-address' element not found in " \
-                               "the node. Wrong version?"
+                    self.logger.error("get_of_switches. Unexpected response at 'nodes':'node'[]:'flow-node-inventory:ip-address', not found: %s", str(node))
+                    return -1, "Unexpected response at 'nodes':'node'[]:'flow-node-inventory:ip-address', not found. Wrong version?"
 
                 node_id_hex=hex(int(node_id.split(':')[1])).split('x')[1].zfill(16)
                 switch_list.append( (':'.join(a+b for a,b in zip(node_id_hex[::2], node_id_hex[1::2])), node_ip_address))
 
             return len(switch_list), switch_list
-        except requests.exceptions.RequestException as e:
-            print self.name, ": obtain_port_correspondence Exception:", str(e)
-            return -1, str(e)
-        except ValueError as e: # the case that JSON can not be decoded
-            print self.name, ": obtain_port_correspondence Exception:", str(e)
-            return -1, str(e)
+        except (requests.exceptions.RequestException, ValueError) as e:
+            #ValueError in the case that JSON can not be decoded
+            error_text = type(e).__name__ + ": " + str(e)
+            self.logger.error("get_of_switches " + error_text)
+            return -1, error_text
         
     def obtain_port_correspondence(self):
         '''Obtain the correspondence between physical and openflow port names
@@ -109,28 +127,32 @@ class ODL_conn():
         try:
             of_response = requests.get(self.url+"/restconf/operational/opendaylight-inventory:nodes",
                                        headers=self.headers)
-            #print vim_response.status_code
+            error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
             if of_response.status_code != 200:
-                print self.name, ": obtain_port_correspondence:", self.url, of_response
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+                self.logger.warning("obtain_port_correspondence " + error_text)
+                return -1 , error_text
+            self.logger.debug("obtain_port_correspondence " + error_text)
             info = of_response.json()
             
             if type(info) != dict:
-                return -1, "unexpected openflow response, not a dict. Wrong version?"
+                self.logger.error("obtain_port_correspondence. Unexpected response not a dict: %s", str(info))
+                return -1, "Unexpected openflow response, not a dict. Wrong version?"
 
             nodes = info.get('nodes')
-            if nodes is None:
-                return -1, "unexpected openflow response, 'nodes' element not found. Wrong version?"
+            if type(nodes) is not dict:
+                self.logger.error("obtain_port_correspondence. Unexpected response at 'nodes', not found or not a dict: %s", str(type(nodes)))
+                return -1, "Unexpected response at 'nodes',not found or not a dict. Wrong version?"
 
             node_list = nodes.get('node')
-            if node_list is None or type(node_list) is not list:
-                return -1, "unexpected openflow response, 'node' element not found or is not a list. Wrong version?"
+            if type(node_list) is not list:
+                self.logger.error("obtain_port_correspondence. Unexpected response, at 'nodes':'node', not found or not a list: %s", str(type(node_list)))
+                return -1, "Unexpected response, at 'nodes':'node', not found or not a list. Wrong version?"
 
             for node in node_list:
                 node_id = node.get('id')
                 if node_id is None:
-                    return -1, "unexpected openflow response, 'id' element not found in one of the nodes. " \
-                               "Wrong version?"
+                    self.logger.error("obtain_port_correspondence. Unexpected response at 'nodes':'node'[]:'id', not found: %s", str(node))
+                    return -1, "Unexpected response at 'nodes':'node'[]:'id', not found . Wrong version?"
 
                 if node_id == 'controller-config':
                     continue
@@ -142,9 +164,9 @@ class ODL_conn():
                     continue
 
                 node_connector_list = node.get('node-connector')
-                if node_connector_list is None or type(node_connector_list) is not list:
-                    return -1, "unexpected openflow response, 'node-connector' element not found in the node" \
-                               "or is not a list. Wrong version?"
+                if type(node_connector_list) is not list:
+                    self.logger.error("obtain_port_correspondence. Unexpected response at 'nodes':'node'[]:'node-connector', not found or not a list: %s", str(node))
+                    return -1, "Unexpected response at 'nodes':'node'[]:'node-connector', not found  or not a list. Wrong version?"
 
                 for node_connector in node_connector_list:
                     self.pp2ofi[ str(node_connector['flow-node-inventory:name']) ] = str(node_connector['id'] )
@@ -153,21 +175,20 @@ class ODL_conn():
 
                 node_ip_address = node.get('flow-node-inventory:ip-address')
                 if node_ip_address is None:
-                    return -1, "unexpected openflow response, 'flow-node-inventory:ip-address' element not found in the node" \
-                               "or is not a string. Wrong version?"
+                    self.logger.error("obtain_port_correspondence. Unexpected response at 'nodes':'node'[]:'flow-node-inventory:ip-address', not found: %s", str(node))
+                    return -1, "Unexpected response at 'nodes':'node'[]:'flow-node-inventory:ip-address', not found. Wrong version?"
                 self.ip_address = node_ip_address
 
                 #If we found the appropriate dpid no need to continue in the for loop
                 break
 
-            # print self.name, ": obtain_port_correspondence ports:", self.pp2ofi
+            #print self.name, ": obtain_port_correspondence ports:", self.pp2ofi
             return 0, self.pp2ofi
-        except requests.exceptions.RequestException as e:
-            print self.name, ": obtain_port_correspondence Exception:", str(e)
-            return -1, str(e)
-        except ValueError as e: # the case that JSON can not be decoded
-            print self.name, ": obtain_port_correspondence Exception:", str(e)
-            return -1, str(e)
+        except (requests.exceptions.RequestException, ValueError) as e:
+            #ValueError in the case that JSON can not be decoded
+            error_text = type(e).__name__ + ": " + str(e)
+            self.logger.error("obtain_port_correspondence " + error_text)
+            return -1, error_text
         
     def get_of_rules(self, translate_of_ports=True):
         ''' Obtain the rules inserted at openflow controller
@@ -184,32 +205,37 @@ class ODL_conn():
                 return r,c
         #get rules
         try:
-            #print self.url+"/restconf/config/opendaylight-inventory:nodes/node/"+self.id+"/table/0  "+str(self.headers)
             of_response = requests.get(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
                                           "/table/0", headers=self.headers)
+            error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
 
             # The configured page does not exist if there are no rules installed. In that case we return an empty dict
             if of_response.status_code == 404:
                 return 0, {}
 
-            if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code))
+            elif of_response.status_code != 200:
+                self.logger.warning("get_of_rules " + error_text)
+                return -1 , error_text
+            self.logger.debug("get_of_rules " + error_text)
             
             info = of_response.json()
 
             if type(info) != dict:
-                return -1, "unexpected openflow response, not a dict. Wrong version?"
+                self.logger.error("get_of_rules. Unexpected response not a dict: %s", str(info))
+                return -1, "Unexpected openflow response, not a dict. Wrong version?"
 
             table = info.get('flow-node-inventory:table')
-            if table is None:
-                return -1, "unexpected openflow response, 'flow-node-inventory:table' element not found. Wrong version?"
+            if type(table) is not list:
+                self.logger.error("get_of_rules. Unexpected response at 'flow-node-inventory:table', not a list: %s", str(type(table)))
+                return -1, "Unexpected response at 'flow-node-inventory:table', not a list. Wrong version?"
 
             flow_list = table[0].get('flow')
             if flow_list is None:
                 return 0, {}
 
             if type(flow_list) is not list:
-                return -1, "unexpected openflow response, 'flow' element not found or is not a list. Wrong version?"
+                self.logger.error("get_of_rules. Unexpected response at 'flow-node-inventory:table'[0]:'flow', not a list: %s", str(type(flow_list)))
+                return -1, "Unexpected response at 'flow-node-inventory:table'[0]:'flow', not a list. Wrong version?"
 
             #TODO translate ports according to translate_of_ports parameter
 
@@ -274,7 +300,7 @@ class ODL_conn():
 
                     elif 'set-field' in instruction:
                         if not ('vlan-match' in instruction['set-field'] and 'vlan-id' in  instruction['set-field']['vlan-match'] and 'vlan-id' in instruction['set-field']['vlan-match']['vlan-id']):
-                            return -1, "unexpected openflow response, one or more elementa are missing. Wrong version?"
+                            return -1, "unexpected openflow response, one or more elements are missing. Wrong version?"
 
                         actions[instruction['order']] = ('vlan', instruction['set-field']['vlan-match']['vlan-id']['vlan-id'])
 
@@ -313,33 +339,27 @@ class ODL_conn():
                 #                                                       -> pop-vlan-action
 
             return 0, rules
-
-        except requests.exceptions.RequestException as e:
-            print self.name, ": get_of_rules Exception:", str(e)
-            return -1, str(e)
-        except ValueError as e: # the case that JSON can not be decoded
-            print self.name, ": get_of_rules Exception:", str(e)
-            return -1, str(e)
-
-
-
+        except (requests.exceptions.RequestException, ValueError) as e:
+            #ValueError in the case that JSON can not be decoded
+            error_text = type(e).__name__ + ": " + str(e)
+            self.logger.error("get_of_rules " + error_text)
+            return -1, error_text
             
     def del_flow(self, flow_name):
         try:
             of_response = requests.delete(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
                                           "/table/0/flow/"+flow_name, headers=self.headers)
-            print self.name, ": del_flow", flow_name, of_response
-            print self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id + \
-                                          "/table/0/flow/"+flow_name
-            print self.headers
-            #print vim_response.status_code
+            error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
             if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
+                self.logger.warning("del_flow " + error_text)
+                return -1 , error_text
+            self.logger.debug("del_flow OK " + error_text)
             return 0, None
 
         except requests.exceptions.RequestException as e:
-            print self.name, ": del_flow", flow_name, "Exception:", str(e)
-            return -1, str(e)
+            error_text = type(e).__name__ + ": " + str(e)
+            self.logger.error("del_flow " + error_text)
+            return -1, error_text
 
     def new_flow(self, data):
         if len(self.pp2ofi) == 0:
@@ -360,8 +380,9 @@ class ODL_conn():
             flow['priority'] = data.get('priority')
             flow['match'] = dict()
             if not data['ingress_port'] in self.pp2ofi:
-                error_msj = 'Error. Port '+data['ingress_port']+' is not present in the switch'
-                return -1, error_msj
+                error_text = 'Error. Port '+data['ingress_port']+' is not present in the switch'
+                self.logger.warning("new_flow " + error_text)
+                return -1, error_text
             flow['match']['in-port'] = self.pp2ofi[data['ingress_port']]
             if 'dst_mac' in data:
                 flow['match']['ethernet-match'] = dict()
@@ -396,41 +417,45 @@ class ODL_conn():
                 elif action[0] == 'out':
                     new_action['output-action'] = dict()
                     if not action[1] in self.pp2ofi:
-                        error_msj = 'Error. Port '+action[1]+' is not present in the switch'
+                        error_msj = 'Port '+action[1]+' is not present in the switch'
                         return -1, error_msj
 
                     new_action['output-action']['output-node-connector'] = self.pp2ofi[ action[1] ]
                 else:
-                    error_msj = 'Error. Data information used to create a new flow has not the expected format'
-                    print error_msj
+                    error_msj = "Unknown item '%s' in action list" % action[0]
+                    self.logger.error("new_flow " + error_msj)
                     return -1, error_msj
 
                 actions.append(new_action)
                 order += 1
 
-            print json.dumps(sdata)
+            #print json.dumps(sdata)
             of_response = requests.put(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
                           "/table/0/flow/" + data['name'],
                                 headers=self.headers, data=json.dumps(sdata) )
-            print self.name, ": new_flow():", sdata, of_response
-
-            #print vim_response.status_code
+            error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
             if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
+                self.logger.warning("new_flow " + error_text)
+                return -1 , error_text
+            self.logger.debug("new_flow OK " + error_text)
             return 0, None
 
         except requests.exceptions.RequestException as e:
-            print self.name, ": new_flow Exception:", str(e)
-            return -1, str(e)
+            error_text = type(e).__name__ + ": " + str(e)
+            self.logger.error("new_flow " + error_text)
+            return -1, error_text
 
     def clear_all_flows(self):
         try:
             of_response = requests.delete(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
                                       "/table/0", headers=self.headers)
-            print self.name, ": clear_all_flows:", of_response
-            if of_response.status_code != 200:
-                raise requests.exceptions.RequestException("Openflow response " + str(of_response.status_code) + of_response.text)
+            error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
+            if of_response.status_code != 200 and of_response.status_code != 404: #HTTP_Not_Found
+                self.logger.warning("clear_all_flows " + error_text)
+                return -1 , error_text
+            self.logger.debug("clear_all_flows OK " + error_text)
             return 0, None
         except requests.exceptions.RequestException as e:
-            print self.name, ": clear_all_flows Exception:", str(e)
-            return -1, str(e)
+            error_text = type(e).__name__ + ": " + str(e)
+            self.logger.error("clear_all_flows " + error_text)
+            return -1, error_text

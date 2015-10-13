@@ -36,29 +36,30 @@ __date__ ="$09-oct-2014 09:09:48$"
 import os
 import argparse
 import argcomplete
-import floodlight as FL
-import ODL
+import imp
 import yaml
 import requests
+import logging
 from openflow_thread import change_db2of, FlowBadFormat
 
 def of_switches(args):
     r,c = ofconnector.get_of_switches()
     if r<0:
         print c
+        return r
     else: 
         for s in c:
             print " %s %s" % (s[0], s[1])
-    return
+    return 0
 
 def of_list(args):
     r,c = ofconnector.get_of_rules(not args.no_translate)
     if r<0:
         print c
-        return
+        return r
     if args.verbose > 0:
         print yaml.safe_dump(c, indent=4, default_flow_style=False)
-        return
+        return 0
 
     print "       switch           priority        name                             ingress_port    dst_mac       vlan_id  actions"
     for name,rule in c.iteritems():
@@ -72,30 +73,31 @@ def of_list(args):
         print "%s  %s  %s  %s  %s  %s  %s" % \
             (rule["switch"], str(rule["priority"]).ljust(6), name.ljust(40), rule["ingress_port"].ljust(8), \
             rule.get("dst_mac","any").ljust(18), vlan.ljust(4), ",".join(action_list) )
-    return
+    return 0
 
 def of_clear(args):
     if not args.force:
         r = raw_input("Clear all Openflow rules (y/N)? ")
         if  not (len(r)>0  and r[0].lower()=="y"):
-            return
+            return 0
     r,c = ofconnector.clear_all_flows()
     if r<0:
         print c
-    return
+        return r
+    return 0
 
 def of_port_list(args):
     r,c = ofconnector.obtain_port_correspondence()
     if r<0:
         print c
-        return
+        return r
     print yaml_dump({"ports": c})
 
 #def of_dump(args):
 #    args.verbose = 3
 #    args.no_translate=False
 #    of_list(args)
-#    return
+    return 0
 
 def of_reinstall(args):
     try:
@@ -103,9 +105,10 @@ def of_reinstall(args):
         print URLrequest
         openvim_response = requests.put(URLrequest)
         print openvim_response.text
-        return
+        return 0
     except requests.exceptions.RequestException as e:
-        return -1, " Exception GET at '"+URLrequest+"' " + str(e)
+        print " Exception GET at '"+URLrequest+"' " + str(e)
+        return -1
 
 def of_install(args):
     line_number=1
@@ -143,23 +146,25 @@ def of_install(args):
             print "%s  %s  %s  input=%s  dst_mac=%s  vlan_id=%s  %s" % \
                     (rule["switch"], str(rule.get("priority")).ljust(6), rule["name"].ljust(20), rule["ingress_port"].ljust(3), \
                      rule.get("dst_mac","any").ljust(18), rule.get("vlan_id","any").ljust(4), error )
-        return
+        return 0
     except IOError as e:
         print " Error opening file '" + args.file + "': " + e.args[1]
+        return -1
     except yaml.YAMLError as exc:
         error_pos = ""
         if hasattr(exc, 'problem_mark'):
             mark = exc.problem_mark
             error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
         print " Error yaml/json format error at " + error_pos
+        return -1
 
 def of_add(args):
     if args.act==None and args.actions==None:
         print "openflow add: error: one of the arguments --actions or [--setvlan,--stripvlan],--out is required"
-        return
+        return -1
     elif args.act!=None and args.actions!=None:
         print "openflow add: error: Use either --actions option or [--setvlan,--stripvlan],--out options; but not both"
-        return
+        return -1
     
     rule={"name":args.name, "priority":args.priority,
           "ingress_port": args.inport
@@ -175,7 +180,7 @@ def of_add(args):
             change_db2of(rule)
         except FlowBadFormat as e:
             print "Format error at --actions: '%s' Expected 'vlan=<None/vlan_id>,out=<egress_port>,...'" % str(e)
-            return
+            return -1
     elif args.act:
         rule["actions"]=[]
         error_msj = "openflow add: error: --setvlan,--stripvlan options must be followed by an --out option"
@@ -184,7 +189,7 @@ def of_add(args):
             if action==None or type(action)==int:
                 if previous_option_vlan: #consecutive vlan options
                     print error_msj
-                    return
+                    return -1
                 previous_option_vlan=True
                 rule["actions"].append( ("vlan", action) )
             else:
@@ -192,31 +197,36 @@ def of_add(args):
                 rule["actions"].append( ("out", action) ) 
         if previous_option_vlan:
             print error_msj
-            return
+            return -1
     #print rule
     #return
 
     r,c = ofconnector.new_flow(rule)
     if r<0:
         print c
-    return
+        return -1
+    return 0
 
 def of_delete(args):
     if not args.force:
         r = raw_input("Clear rule %s (y/N)? " %(args.name))
         if  not (len(r)>0  and r[0].lower()=="y"):
-            return
+            return 0
     r,c = ofconnector.del_flow(args.name)
     if r<0:
         print c
-    return
+        return -1
+    return 0
 
 def config(args):
     print "OPENVIM_HOST: %s" %(vim_host)
     print "OPENVIM_ADMIN_PORT: %s" %(vim_admin_port)
     print "OF_CONTROLLER_TYPE: %s" %(of_controller_type)
-    if of_controller_type == 'opendaylight':
+    if of_controller_module or (of_controller_type!="floodlight" and of_controller_type!="opendaylight"):
+        print "OF_CONTROLLER_MODULE: %s" %(of_controller_module)
+    if of_controller_user or of_controller_type=="opendaylight":
         print "OF_CONTROLLER_USER: %s" %(of_controller_user)
+    if of_controller_password or of_controller_type=="opendaylight":
         print "OF_CONTROLLER_PASSWORD: %s" %(of_controller_password)
     #print "OF_CONTROLLER_VERSION: %s" %(of_controller_version)
     print "OF_CONTROLLER_IP: %s" %(of_controller_ip)
@@ -228,10 +238,12 @@ version="0.7"
 global vim_host
 global vim_admin_port
 global of_controller_type
-#global of_controller_version
+global of_controller_user
+global of_controller_password
 global of_controller_ip
 global of_controller_port
 global of_controller_dpid
+global of_controller_module
 global ofconnector
    
 if __name__=="__main__":
@@ -241,13 +253,13 @@ if __name__=="__main__":
     vim_host = os.getenv('OPENVIM_HOST',"localhost")
     vim_admin_port = os.getenv('OPENVIM_ADMIN_PORT',"8085")
     of_controller_type = os.getenv('OF_CONTROLLER_TYPE',"floodlight")
-    if of_controller_type == 'opendaylight':
-        of_controller_user = os.getenv('OF_CONTROLLER_USER',"admin")
-        of_controller_password = os.getenv('OF_CONTROLLER_PASSWORD',"admin")
+    of_controller_user = os.getenv('OF_CONTROLLER_USER',None)
+    of_controller_password = os.getenv('OF_CONTROLLER_PASSWORD',None)
     #of_controller_version = os.getenv('OF_CONTROLLER_VERSION',"0.90")
     of_controller_ip = os.getenv('OF_CONTROLLER_IP',"localhost")
     of_controller_port = os.getenv('OF_CONTROLLER_PORT',"7070")
     of_controller_dpid = os.getenv('OF_CONTROLLER_DPID','00:01:02:03:e4:05:e6:07')
+    of_controller_module = os.getenv('OF_CONTROLLER_MODULE',None)
     
     main_parser = argparse.ArgumentParser(description='User program to interact with Openflow controller')
     main_parser.add_argument('--version', action='version', version='%(prog)s ' + version )
@@ -269,21 +281,25 @@ if __name__=="__main__":
     add_parser.add_argument("--stripvlan", action="append_const", dest="act", const=None, help="alternative to --actions. Use before --out to strip vlan")
     add_parser.add_argument("--setvlan", action="append", dest="act", type=int, help="alternative to --actions. Use before --out to set vlan")
     add_parser.add_argument("--out", action="append", dest="act", type=str, help="alternative to --actions. out=<egress-port> can be used several times")
+    add_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     add_parser.set_defaults(func=of_add)
     
     delete_parser = subparsers.add_parser('delete', help="delete an openflow rule")
     delete_parser.add_argument('--verbose', '-v', action='count')
     delete_parser.add_argument("-f", "--force", action="store_true", help="force deletion without asking")
     delete_parser.add_argument("name", action="store", help="name of the rule to be deleted")
+    delete_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     delete_parser.set_defaults(func=of_delete)
     
     switches_parser = subparsers.add_parser('switches', help="list all switches controlled by the OFC")
     switches_parser.add_argument('--verbose', '-v', action='count')
+    switches_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     switches_parser.set_defaults(func=of_switches)
 
     list_parser = subparsers.add_parser('list', help="list openflow rules")
     list_parser.add_argument('--verbose', '-v', action='count')
     list_parser.add_argument("--no-translate", "-n", action="store_true", help="Skip translation from openflow index to switch port name")
+    list_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     list_parser.set_defaults(func=of_list)
 
     #dump_parser = subparsers.add_parser('dump', help="dump openflow rules")
@@ -291,17 +307,21 @@ if __name__=="__main__":
     
     clear_parser = subparsers.add_parser('clear', help="clear all openflow rules")
     clear_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
+    clear_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     clear_parser.set_defaults(func=of_clear)
 
     install_parser = subparsers.add_parser('install', help="install openflow rules from file")
     install_parser.add_argument("file", action="store", help="file with rules generated using 'openflow list > rules.txt'")
+    install_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     install_parser.set_defaults(func=of_install)
 
     reinstall_parser = subparsers.add_parser('reinstall', help="reinstall openflow rules from VIM rules")
     reinstall_parser.set_defaults(func=of_reinstall)
+    reinstall_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
 
     portlist_parser = subparsers.add_parser('port-list', help="list the physical to openflow port correspondence")
     portlist_parser.set_defaults(func=of_port_list)
+    portlist_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
 
     argcomplete.autocomplete(main_parser)
     
@@ -312,14 +332,51 @@ if __name__=="__main__":
     #    print "Wrong Floodlight controller version. Supported versions: %" %str(floodlight_versions)
     #    exit()
     
-    if of_controller_type == "floodlight":
-        ofconnector = FL.FL_conn(of_controller_ip, of_controller_port, of_controller_dpid)
-    elif  of_controller_type == "opendaylight":
-        ofconnector = ODL.ODL_conn(of_controller_ip, of_controller_port, of_controller_dpid,of_controller_user,of_controller_password)
-    else:
-        print "Wrong OF_CONTROLLER_TYPE '%s' must be 'floodlight' or 'opendaylight'" %of_controller_type
+    params={ "of_ip":   of_controller_ip,
+                "of_port": of_controller_port, 
+                "of_dpid": of_controller_dpid,
+                "of_user": of_controller_user,
+                "of_password": of_controller_password,
+        }
+    if "debug" in args and args.debug:
+        streamformat = "%(asctime)s %(name)s %(levelname)s: %(message)s"
+        logging.basicConfig(format=streamformat, level= logging.DEBUG)
+        logger = logging.getLogger('vim')
+        logger.setLevel(logging.DEBUG)
+        params["of_debug"]="DEBUG"
+    try:
+        if of_controller_type=='opendaylight':
+            module = "ODL.py"
+        elif of_controller_module != None:
+            module = of_controller_module
+        else:
+            module = of_controller_type + ".py"
+        of_conn = imp.load_source("of_conn", module)
+        ofconnector = of_conn.OF_conn(params)
 
-    args.func(args)
+    except IOError as e:
+        print "Cannot open the Openflow controller module '%s': %s" % (module, str(e))
+        exit(-1)
+    except Exception as e:
+        print "Cannot open the Openflow controller '%s': %s" % (type(e).__name__, str(e))
+        exit(-1)
+
+    try:
+        result = args.func(args)
+        if result == None:
+            result = 0
+        #for some reason it fails if call exit inside try instance. Need to call exit at the end !?
+    except (requests.exceptions.ConnectionError):
+        print "Connection error: not possible to contact controller"
+        result = -2
+    except (KeyboardInterrupt):
+        print 'Exiting openVIM'
+        result = -3
+    except (SystemExit):
+        result = -4
+    
+    #print result
+    exit(result)
     
     exit()
 

@@ -30,7 +30,7 @@ and host controllers
 
 __author__="Alfonso Tierno"
 __date__ ="$10-jul-2014 12:07:15$"
-__version__="0.3.1-r402"
+__version__="0.3.2-r411"
 version_date="Sep 2015"
 database_version="0.4"      #expected database schema version
 
@@ -45,25 +45,30 @@ import os
 from jsonschema import validate as js_v, exceptions as js_e
 import host_thread as ht
 import openflow_thread as oft
-import floodlight as fl_conn
-import ODL as odl_conn
 import threading
 from vim_schema import config_schema
+import logging
+import imp
 
 global config_dic
+global logger
+logger = logging.getLogger('vim')
 
 def load_configuration(configuration_file):
     default_tokens ={'http_port':9080, 'http_host':'localhost', 
                      'of_controller_nets_with_same_vlan':True,
                      'image_path':'/opt/VNF/images',
                      'network_vlan_range_start':1000,
-                     'network_vlan_range_end': 4096
+                     'network_vlan_range_end': 4096,
+                     'log_level': "DEBUG",
+                     'log_level_db': "ERROR",
+                     'log_level_of': 'ERROR',
             }
     try:
         #First load configuration from configuration file
         #Check config file exists
         if not os.path.isfile(configuration_file):
-            return (False, 'Error: Configuration file '+configuration_file+' does not exists.')
+            return (False, "Configuration file '"+configuration_file+"' does not exists")
             
         #Read and parse file
         (return_status, code) = af.read_file(configuration_file)
@@ -99,9 +104,9 @@ def load_configuration(configuration_file):
     return (True, config)
 
 def create_database_connection(config_dic):
-    db = vim_db.vim_db( (config_dic["network_vlan_range_start"],config_dic["network_vlan_range_end"]) );
+    db = vim_db.vim_db( (config_dic["network_vlan_range_start"],config_dic["network_vlan_range_end"]), config_dic['log_level_db'] );
     if db.connect(config_dic['db_host'], config_dic['db_user'], config_dic['db_passwd'], config_dic['db_name']) == -1:
-        print "Error connecting to database", config_dic['db_name'], "at", config_dic['db_user'], "@", config_dic['db_host']
+        logger.error("Cannot connect to database %s at %s@%s", config_dic['db_name'], config_dic['db_user'], config_dic['db_host'])
         exit(-1)
     return db
 
@@ -116,12 +121,16 @@ def usage():
 
 
 if __name__=="__main__":
+    #streamformat = "%(levelname)s (%(module)s:%(lineno)d) %(message)s"
+    streamformat = "%(asctime)s %(name)s %(levelname)s: %(message)s"
+    logging.basicConfig(format=streamformat, level= logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
     try:
         opts, args = getopt.getopt(sys.argv[1:], "hvc:p:P:", ["config", "help", "version", "port", "adminport"])
     except getopt.GetoptError, err:
         # print help information and exit:
-        print "Error:", err # will print something like "option -a not recognized"
-        usage()
+        logger.error("%s. Type -h for help", err) # will print something like "option -a not recognized"
+        #usage()
         sys.exit(-2)
 
     port=None
@@ -151,9 +160,11 @@ if __name__=="__main__":
         r, config_dic = load_configuration(config_file)
         #print config_dic
         if not r:
-            print config_dic
+            logger.error(config_dic)
             config_dic={}
             exit(-1)
+        logging.basicConfig(level = getattr(logging, config_dic['log_level']))
+        logger.setLevel(getattr(logging, config_dic['log_level']))
         #override parameters obtained by command line
         if port is not None: config_dic['http_port'] = port
         if port_admin is not None: config_dic['http_admin_port'] = port_admin
@@ -165,7 +176,7 @@ if __name__=="__main__":
             if 'test_mode' in config_dic and config_dic['test_mode']==True:
                 config_dic['mode'] = 'test' 
         if config_dic['mode'] == 'development' and ( 'development_bridge' not in config_dic or config_dic['development_bridge'] not in config_dic.get("bridge_ifaces",None) ):
-            print "Error at '%s': Provide a valid 'development_bridge' that must be one of the 'bridge_ifaces'" %config_file
+            logger.error("'%s' is not a valid 'development_bridge', not one of the 'bridge_ifaces'", config_file)
             exit(-1)
             
         if config_dic['mode'] != 'normal':
@@ -178,10 +189,10 @@ if __name__=="__main__":
         db_http = create_database_connection(config_dic)
         r = db_http.get_db_version()
         if r[0]<0:
-            print "Error DATABASE is not a VIM one or it is a '0.0' version. Try to upgrade to version '%s' with './database_utils/migrate_vim_db.sh'" % database_version
+            logger.error("DATABASE is not a VIM one or it is a '0.0' version. Try to upgrade to version '%s' with './database_utils/migrate_vim_db.sh'", database_version)
             exit(-1)
         elif r[1]!=database_version:
-            print "Error DATABASE wrong version '%s'. Try to upgrade/downgrade to version '%s' with './database_utils/migrate_vim_db.sh'" % (r[1], database_version) 
+            logger.error("DATABASE wrong version '%s'. Try to upgrade/downgrade to version '%s' with './database_utils/migrate_vim_db.sh'", r[1], database_version) 
             exit(-1)
         db_of = create_database_connection(config_dic)
         db_lock= threading.Lock()
@@ -192,36 +203,42 @@ if __name__=="__main__":
         of_test_mode = False if config_dic['mode']=='normal' or config_dic['mode']=="OF only" else True
 
         if of_test_mode:
-            OF_conn = oft.of_test_connector()
-        elif config_dic['of_controller']=='floodlight':
-            OF_conn = fl_conn.FL_conn(of_ip = config_dic['of_controller_ip'],
-                                      of_port = config_dic['of_controller_port'], 
-                                      of_dpid=config_dic['of_controller_dpid'])
-        elif config_dic['of_controller']=='opendaylight':
-            of_user = config_dic.get('of_user')
-            of_password = config_dic.get('of_password')
-            if of_user is None or of_password is None:
-                print 'ERROR. When using OpenDayLight as Openflow Controller is compulsory to specify in the ' \
-                      'configuration file the of_user and the of_password'
-                exit()
-
-            OF_conn = odl_conn.ODL_conn(of_ip = config_dic['of_controller_ip'],
-                                        of_port = config_dic['of_controller_port'],
-                                        of_dpid=config_dic['of_controller_dpid'],
-                                        of_user = of_user,
-                                        of_password = of_password)
+            OF_conn = oft.of_test_connector({"of_debug": config_dic['log_level_of']} )
         else:
-            print "ERROR. The Openflow controller specified in the configuration file is not valid. Only valid options " \
-                  "for OFC are 'floodlight' and 'opendaylight'"
-            exit()
-
+            try:
+                if config_dic['of_controller']=='floodlight':
+                    module = "floodlight.py"
+                elif config_dic['of_controller']=='opendaylight':
+                    module = "ODL.py"
+                elif "of_controller_module" in config_dic:
+                    module = config_dic["of_controller_module"]
+                else:
+                    module = config_dic['of_controller'] + ".py"
+                of_conn = imp.load_source("of_conn", module)
+                #load other parameters starting by of_ from config dict in a temporal dict
+                temp_dict={ "of_ip":  config_dic['of_controller_ip'],
+                            "of_port": config_dic['of_controller_port'], 
+                            "of_dpid": config_dic['of_controller_dpid'],
+                            "of_debug":   config_dic['log_level_of']
+                    }
+                for k,v in config_dic.iteritems():
+                    if type(k) is str and k[0:3]=="of_" and k[0:13] != "of_controller":
+                        temp_dict[k]=v
+                OF_conn = of_conn.OF_conn(temp_dict)
+            except IOError as e:
+                logger.error("Cannot open the Openflow controller module '%s': %s", module, str(e))
+                exit()
+            except Exception as e:
+                logger.error("Cannot open the Openflow controller '%s': %s", type(e).__name__, str(e))
+                exit()
 
     #create openflow thread
         thread = oft.openflow_thread(OF_conn, of_test=of_test_mode, db=db_of,  db_lock=db_lock,
-                        pmp_with_same_vlan=config_dic['of_controller_nets_with_same_vlan'])
+                        pmp_with_same_vlan=config_dic['of_controller_nets_with_same_vlan'],
+                        debug=config_dic['log_level_of'])
         r,c = thread.OF_connector.obtain_port_correspondence()
         if r<0:
-            print "Error getting openflow information", c
+            logger.error("Cannot get openflow information %s", c)
             exit()
         thread.start()
         config_dic['of_thread'] = thread
@@ -243,7 +260,7 @@ if __name__=="__main__":
                 brnet[3] = c[0]['uuid']
                 used_bridge_nets.append(brnet[0])
         if len(used_bridge_nets) > 0 :
-            print "found used bridge nets: " + ",".join(used_bridge_nets)
+            logger.info("found used bridge nets: " + ",".join(used_bridge_nets))
     
         
     #Create one thread for each host
@@ -253,7 +270,7 @@ if __name__=="__main__":
         config_dic['host_threads'] = {}
         r,c = db_of.get_table(SELECT=('name','ip_name','user','uuid'), FROM='hosts', WHERE={'status':'ok'})
         if r<0:
-            print "Error getting hosts from database", c
+            logger.error("Cannot get hosts from database %s", c)
             exit(-1)
         else:
             for host in c:
@@ -277,7 +294,7 @@ if __name__=="__main__":
         else:
             http_thread_admin = None
         time.sleep(1)      
-        print 'Waiting for http clients'
+        logger.info('Waiting for http clients')
         print 'openvimd ready'
         print '===================='
         sys.stdout.flush()
@@ -295,7 +312,7 @@ if __name__=="__main__":
     except (KeyboardInterrupt, SystemExit):
         pass
 
-    print 'Exiting openvimd'
+    logger.info('Exiting openvimd')
     threads = config_dic.get('host_threads', {})
     if 'of_thread' in config_dic:
         threads['of'] = (config_dic['of_thread'])
@@ -307,6 +324,6 @@ if __name__=="__main__":
     #http_thread.join()
     #if http_thread_admin is not None: 
     #http_thread_admin.join()
-    print "bye!"
+    logger.debug( "bye!")
     exit()
 

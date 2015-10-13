@@ -40,13 +40,6 @@ function usage(){
 #detect if is called with a source to use the 'exit'/'return' command for exiting
 [[ ${BASH_SOURCE[0]} != $0 ]] && echo "Do not execute this script as SOURCE" >&2 && return 1
 
-#detect if environment variables are set
-fail=""
-[[ -z $VIM_TEST_NETWORK_INTERNET ]] && echo "VIM_TEST_NETWORK_INTERNET not defined" >&2 && fail=1
-[[ -z $VIM_TEST_IMAGE_PATH ]] && echo "VIM_TEST_IMAGE_PATH not defined" >&2 && fail=1
-[[ -z $VIM_TEST_IMAGE_PATH_EXTRA ]] && echo "VIM_TEST_IMAGE_PATH_EXTRA not defined" >&2 && fail=1
-[[ -n $fail ]] && exit 1
-
 #check correct arguments
 force=n
 same_vlan=n
@@ -55,7 +48,7 @@ do
    if [[ $param == -h ]] || [[ $param == --help ]]
    then
        usage
-       $_exit 0
+       exit 0
    elif [[ $param == -v ]] || [[ $param == --same-vlan ]]
    then
        same_vlan=y
@@ -63,10 +56,16 @@ do
    then
        force=y
    else
-       echo "invalid argument '$param'?" &&  usage >&2 && $_exit 1
+       echo "invalid argument '$param'?" &&  usage >&2 && exit 1
    fi
 done
 
+#detect if environment variables are set
+fail=""
+[[ -z $VIM_TEST_NETWORK_INTERNET ]] && echo "VIM_TEST_NETWORK_INTERNET not defined" >&2 && fail=1
+[[ -z $VIM_TEST_IMAGE_PATH ]] && echo "VIM_TEST_IMAGE_PATH not defined" >&2 && fail=1
+[[ -z $VIM_TEST_IMAGE_PATH_EXTRA ]] && echo "VIM_TEST_IMAGE_PATH_EXTRA not defined" >&2 && fail=1
+[[ -n $fail ]] && exit 1
 
 TODELETE=""
 export _exit=delete_and_exit

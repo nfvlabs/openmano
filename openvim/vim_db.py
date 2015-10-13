@@ -36,6 +36,7 @@ import MySQLdb as mdb
 import uuid as myUuid
 from utils import auxiliary_functions as af
 import json
+import logging
 
 HTTP_Bad_Request = 400
 HTTP_Unauthorized = 401 
@@ -48,7 +49,7 @@ HTTP_Internal_Server_Error = 500
 
 
 class vim_db():
-    def __init__(self, vlan_range, debug=False):
+    def __init__(self, vlan_range, debug="ERROR"):
         '''vlan_range must be a tuple (vlan_ini, vlan_end) with available vlan values for networks
         every dataplane network contain a unique value, regardless of it is used or not 
         ''' 
@@ -57,6 +58,9 @@ class vim_db():
         self.net_vlan_usedlist = None
         self.net_vlan_lastused = self.net_vlan_range[0] -1
         self.debug=debug
+        self.logger = logging.getLogger('vim.db')
+        self.logger.setLevel( getattr(logging, debug) )
+
 
     def connect(self, host=None, user=None, passwd=None, database=None):
         '''Connect to the concrete data base. 
@@ -70,10 +74,10 @@ class vim_db():
             if database is not None: self.database = database
 
             self.con = mdb.connect(self.host, self.user, self.passwd, self.database)
-            print "DB: conected to %s@%s -> %s" % (self.user, self.host, self.database)
+            self.logger.debug("connected to DB %s at %s@%s", self.database,self.user, self.host)
             return 0
         except mdb.Error as e:
-            print "Error connecting to DB %s@%s -> %s Error %d: %s" % (self.user, self.host, self.database, e.args[0], e.args[1])
+            self.logger.error("Cannot connect to DB %s at %s@%s Error %d: %s", self.database, self.user, self.host, e.args[0], e.args[1])
             return -1
 
     def get_db_version(self):
@@ -86,7 +90,7 @@ class vim_db():
             try:
                 with self.con:
                     self.cur = self.con.cursor()
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     rows = self.cur.fetchall()
                     highest_version_int=0
@@ -97,8 +101,7 @@ class vim_db():
                             highest_version_int, highest_version = row[0:2]
                     return highest_version_int, highest_version
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "get_db_version DB Exception %d: %s" % (e.args[0], e.args[1])
+                self.logger.error("get_db_version DB Exception %d: %s. Command %s",e.args[0], e.args[1], cmd)
                 r,c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c    
                 
@@ -108,13 +111,25 @@ class vim_db():
             self.con.close()
             del self.con
         except mdb.Error as e:
-            print "Error disconnecting to DB: Error %d: %s" % (e.args[0], e.args[1])
+            self.logger.error("while disconnecting from DB: Error %d: %s",e.args[0], e.args[1])
             return -1
         except AttributeError as e: #self.con not defined
             if e[0][-5:] == "'con'": return -1, "Database internal error, no connection."
             else: raise
     
-    def format_error(self, e, command=None, extra=None): 
+    def format_error(self, e, func, cmd, command=None, extra=None):
+        '''Creates a text error base on the produced exception
+            Params:
+                e: mdb exception
+                func: name of the function that makes the call, for logging purposes
+                cmd: database command that produce the exception
+                command: if the intention is update or delete
+                extra: extra information to add to some commands
+            Return
+                HTTP error in negative, formatted error text
+        ''' 
+                
+        self.logger.error("%s DB Exception %d: %s. Command %s",func, e.args[0], e.args[1], cmd)
         if type(e[0]) is str:
             if e[0][-5:] == "'con'": return -HTTP_Internal_Server_Error, "DB Exception, no connection."
             else: raise
@@ -158,10 +173,10 @@ class vim_db():
     def __get_used_net_vlan(self):
         #get used from database if needed
         try:
+            cmd = "SELECT vlan FROM nets WHERE vlan>='%s' and (type='ptp' or type='data') ORDER BY vlan LIMIT 25" % self.net_vlan_lastused
             with self.con:
                 self.cur = self.con.cursor()
-                cmd = "SELECT vlan FROM nets WHERE vlan>='%s' and (type='ptp' or type='data') ORDER BY vlan LIMIT 25" % self.net_vlan_lastused
-                if self.debug: print cmd
+                self.logger.debug(cmd)
                 self.cur.execute(cmd)
                 vlan_tuple = self.cur.fetchall()
                 #convert a tuple of tuples in a list of numbers
@@ -170,15 +185,14 @@ class vim_db():
                     self.net_vlan_usedlist.append(k[0])
             return 0
         except (mdb.Error, AttributeError) as e:
-            if not self.debug: print cmd
-            print "get_free_net_vlan DB Exception %d: %s" % (e.args[0], e.args[1])
-            return self.format_error(e)
+            return self.format_error(e, "get_free_net_vlan", cmd)
     
     def get_free_net_vlan(self):
         '''obtain a vlan not used in any net'''
         
         while True:
-            print "net_vlan_lastused", self.net_vlan_lastused, "self.net_vlan_range", self.net_vlan_range,"net_vlan_usedlist", self.net_vlan_usedlist
+            self.logger.debug("net_vlan_lastused:%d  net_vlan_range:%d-%d  net_vlan_usedlist:%s", 
+                            self.net_vlan_lastused, self.net_vlan_range[0], self.net_vlan_range[1], str(self.net_vlan_usedlist))
             self.net_vlan_lastused += 1
             if self.net_vlan_lastused ==  self.net_vlan_range[1]:
                 #start from the begining
@@ -188,7 +202,7 @@ class vim_db():
             or (len(self.net_vlan_usedlist)>0 and self.net_vlan_lastused >= self.net_vlan_usedlist[-1] and len(self.net_vlan_usedlist)==25):
                 r = self.__get_used_net_vlan()
                 if r<0: return r
-                print "new net_vlan_usedlist", self.net_vlan_usedlist
+                self.logger.debug("new net_vlan_usedlist ", self.net_vlan_usedlist)
             if self.net_vlan_lastused in self.net_vlan_usedlist:
                 continue
             else:
@@ -235,14 +249,12 @@ class vim_db():
             try:
                 with self.con:
                     self.cur = self.con.cursor(mdb.cursors.DictCursor)
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     rows = self.cur.fetchall()
                     return self.cur.rowcount, rows
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "get_table DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e)
+                r,c = self.format_error(e, "get_table", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
         
     def new_tenant(self, tenant_dict):
@@ -267,19 +279,19 @@ class vim_db():
                     self.cur = self.con.cursor()
                     #inserting new uuid
                     cmd = "INSERT INTO uuids (uuid, used_at) VALUES ('%s','tenants')" % uuid
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     #insert tenant
                     cmd= "INSERT INTO tenants (" + \
                         ",".join(map(str, tenant_dict.keys() ))   + ") VALUES(" + \
                         ",".join(map(lambda x: "Null" if x is None else "'"+str(x)+"'",tenant_dict.values() )) + ")"
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     inserted = self.cur.rowcount
                     #inserting new log
                     del tenant_dict['uuid'] # not interested for the log
                     cmd = "INSERT INTO logs (related,level,tenant_id,uuid,description) VALUES ('tenants','debug','%s','%s',\"new tenant %s\")" % (uuid, tenant_id, str(tenant_dict))
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)  
                     #commit transaction
                     self.cur.close()
@@ -288,26 +300,25 @@ class vim_db():
                     self.cur = self.con.cursor()
                     #adding public flavors
                     cmd = "INSERT INTO tenants_flavors(flavor_id,tenant_id) SELECT uuid as flavor_id,'"+ tenant_id + "' FROM flavors WHERE public = 'yes'"
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd) 
-                    if self.debug: print "attached public flavors: ", self.cur.rowcount
+                    self.logger.debug("attached public flavors: %s", str(self.cur.rowcount))
                     #rows = self.cur.fetchall()
                     #for row in rows:
                     #    cmd = "INSERT INTO tenants_flavors(flavor_id,tenant_id) VALUES('%s','%s')" % (row[0], tenant_id)
                     #    self.cur.execute(cmd )
                     #adding public images
                     cmd = "INSERT INTO tenants_images(image_id,tenant_id) SELECT uuid as image_id,'"+ tenant_id + "' FROM images WHERE public = 'yes'"
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd) 
-                    if self.debug: print "attached public images: ", self.cur.rowcount
-
+                    self.logger.debug("attached public images: %s", str(self.cur.rowcount))
                     return 1, uuid
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "new_tenant DB Exception %d: %s" % (e.args[0], e.args[1])
-                if inserted==1: return 1, uuid
+                if inserted==1:
+                    self.logger.warning("new_tenant DB Exception %d: %s. Command %s",e.args[0], e.args[1], cmd)
+                    return 1, uuid
                 else: 
-                    r,c = self.format_error(e)
+                    r,c = self.format_error(e, "new_tenant", cmd)
                     if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
     def new_row(self, table, INSERT, add_uuid=False, log=False):
@@ -335,13 +346,13 @@ class vim_db():
                     if add_uuid:
                         #inserting new uuid
                         cmd = "INSERT INTO uuids (uuid, used_at) VALUES ('%s','%s')" % (uuid, table)
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
                     #insertion
                     cmd= "INSERT INTO " + table +" (" + \
                         ",".join(map(str, INSERT.keys() ))   + ") VALUES(" + \
                         ",".join(map(lambda x: 'Null' if x is None else "'"+str(x)+"'", INSERT.values() )) + ")"
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     nb_rows = self.cur.rowcount
                     #inserting new log
@@ -361,14 +372,12 @@ class vim_db():
                         else: tenant_k=",tenant_id"; tenant_v=",'" + str(tenant_id) + "'"
                         cmd = "INSERT INTO logs (related,level%s%s,description) VALUES ('%s','debug'%s%s,\"new %s %s\")" \
                             % (uuid_k, tenant_k, table, uuid_v, tenant_v, table[:-1], str(INSERT))
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)                    
                     return nb_rows, uuid
 
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "new_row DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e)
+                r,c = self.format_error(e, "new_row", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
     
     def __remove_quotes(self, data):
@@ -400,7 +409,7 @@ class vim_db():
                         ",".join(map(lambda x: str(x)+'='+ self.__data2db_format(UPDATE[x]),   UPDATE.keys() ));
                     if WHERE:
                         cmd += " WHERE " + " and ".join(map(lambda x: str(x)+ (' is Null' if WHERE[x] is None else"='"+str(WHERE[x])+"'" ),  WHERE.keys() ))
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd) 
                     nb_rows = self.cur.rowcount
                     if nb_rows > 0 and log:                
@@ -409,13 +418,11 @@ class vim_db():
                         else: uuid_k=",uuid"; uuid_v=",'" + str(uuid) + "'"
                         cmd = "INSERT INTO logs (related,level%s,description) VALUES ('%s','debug'%s,\"updating %d entry %s\")" \
                             % (uuid_k, table, uuid_v, nb_rows, (str(UPDATE)).replace('"','-')  )
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)                    
                     return nb_rows, uuid
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "update_rows DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e)
+                r,c = self.format_error(e, "update_rows", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
             
     def get_host(self, host_id):
@@ -431,7 +438,7 @@ class vim_db():
                     #get HOST
                     cmd = "SELECT uuid, user, name, ip_name, description, ranking, admin_state_up, DATE_FORMAT(created_at,'%Y-%m-%dT%H:%i:%s') as created_at \
                         FROM hosts WHERE " + where_filter
-                    if self.debug: print cmd 
+                    self.logger.debug(cmd) 
                     self.cur.execute(cmd)
                     if self.cur.rowcount == 0 : 
                         return 0, "host '" + str(host_id) +"'not found."
@@ -441,14 +448,14 @@ class vim_db():
                     host_id = host['uuid']
                     #get numa
                     cmd = "SELECT id, numa_socket, hugepages, memory, admin_state_up FROM numas WHERE host_id = '" + str(host_id) + "'"
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     host['numas'] = self.cur.fetchall()
                     for numa in host['numas']:
                         #print "SELECT core_id, instance_id, status, thread_id, v_thread_id FROM resources_core  WHERE numa_id = '" + str(numa['id']) + "'"
                         #get cores
                         cmd = "SELECT core_id, instance_id, status, thread_id, v_thread_id FROM resources_core  WHERE numa_id = '" + str(numa['id']) + "'"
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
                         numa['cores'] = self.cur.fetchall()
                         for core in numa['cores']: 
@@ -456,7 +463,7 @@ class vim_db():
                             if core['status'] == 'ok': del core['status']
                         #get used memory
                         cmd = "SELECT sum(consumed) as hugepages_consumed FROM resources_mem  WHERE numa_id = '" + str(numa['id']) + "' GROUP BY numa_id"
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
                         used = self.cur.fetchone()
                         used_= int(used['hugepages_consumed']) if used != None else 0
@@ -472,7 +479,7 @@ class vim_db():
                             FROM(SELECT * FROM resources_port WHERE numa_id=%d AND id=root_id) as A\
                             INNER JOIN(SELECT root_id, count(pci) as sriovs, sum(Mbps_used) as Mbps_consumed\
                             FROM resources_port WHERE numa_id=%d GROUP BY root_id) as B ON A.id = B.root_id;" % (numa['id'], numa['id'])
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
                         numa['interfaces'] = self.cur.fetchall()
                         for iface in numa['interfaces']: 
@@ -483,9 +490,7 @@ class vim_db():
                         del numa['id']
                     return 1, host
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "get_host DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e)
+                r,c = self.format_error(e, "get_host", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
         
     def new_uuid(self):
@@ -500,17 +505,15 @@ class vim_db():
     def check_uuid(self, uuid):
         '''check in the database if this uuid is already present'''
         try:
+            cmd = "SELECT * FROM uuids where uuid='" + str(uuid) + "'"
             with self.con:
                 self.cur = self.con.cursor(mdb.cursors.DictCursor)
-                cmd = "SELECT * FROM uuids where uuid='" + str(uuid) + "'"
-                if self.debug: print cmd
+                self.logger.debug(cmd)
                 self.cur.execute(cmd)
                 rows = self.cur.fetchall()
                 return self.cur.rowcount, rows
         except (mdb.Error, AttributeError) as e:
-            if not self.debug: print cmd
-            print "check_uuid DB Exception %d: %s" % (e.args[0], e.args[1])
-            return self.format_error(e)
+            return self.format_error(e, "check_uuid", cmd)
             
     def __get_next_ids(self):
         '''get next auto increment index of all table in the database'''
@@ -532,18 +535,16 @@ class vim_db():
                         cmd= "UPDATE hosts SET " + \
                             ",".join(map(lambda x: str(x)+ ('=Null' if host_dict[x] is None else "='"+ str(host_dict[x]) +"'"  ),   host_dict.keys() )) + \
                             " WHERE uuid='" + host_id +"'"
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd) 
                     for numa_dict in numa_list:
                         cmd= "UPDATE numas SET admin_state_up='" + str(numa_dict['admin_state_up']) + \
                             "' WHERE host_id='" + host_id +"' AND numa_socket='"+ str(numa_dict['numa_socket']) + "'"
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd) 
                 return self.get_host(host_id)
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "edit_host DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e)
+                r,c = self.format_error(e, "edit_host", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
     def new_host(self, host_dict):
@@ -555,7 +556,7 @@ class vim_db():
                     self.cur = self.con.cursor()
 
                     result, next_ids = self.__get_next_ids()
-                    print "next_ids: " + str(next_ids)
+                    #print "next_ids: " + str(next_ids)
                     if result <= 0: return result, "Internal DataBase error getting next id of tables"
 
                     #create uuid if not provided
@@ -569,7 +570,7 @@ class vim_db():
 
                     #inserting new uuid
                     cmd = "INSERT INTO uuids (uuid, used_at) VALUES ('%s','hosts')" % uuid
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     result = self.cur.execute(cmd)
 
                     #insert in table host
@@ -589,7 +590,7 @@ class vim_db():
                     keys    = ",".join(host_dict.keys())
                     values  = ",".join( map(lambda x: "Null" if x is None else "'"+str(x)+"'", host_dict.values() ) )
                     cmd = "INSERT INTO hosts (" + keys + ") VALUES (" + values + ")"
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     result = self.cur.execute(cmd)
                     #if result != 1: return -1, "Database Error while inserting at hosts table"
 
@@ -604,7 +605,7 @@ class vim_db():
                         keys    = ",".join(numa_dict.keys())
                         values  = ",".join( map(lambda x: "Null" if x is None else "'"+str(x)+"'", numa_dict.values() ) )
                         cmd = "INSERT INTO numas (" + keys + ") VALUES (" + values + ")"
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         result = self.cur.execute(cmd)
 
                         #insert cores
@@ -614,7 +615,7 @@ class vim_db():
                             keys    = ",".join(core_dict.keys())
                             values  = ",".join( map(lambda x: "Null" if x is None else "'"+str(x)+"'", core_dict.values() ) )
                             cmd = "INSERT INTO resources_core (" + keys + ") VALUES (" + values + ")"
-                            if self.debug: print cmd
+                            self.logger.debug(cmd)
                             result = self.cur.execute(cmd)
 
                         #insert ports
@@ -629,7 +630,7 @@ class vim_db():
                             keys    = ",".join(port_dict.keys())
                             values  = ",".join( map(lambda x:  "Null" if x is None else "'"+str(x)+"'", port_dict.values() ) )
                             cmd = "INSERT INTO resources_port (" + keys + ") VALUES (" + values + ")"
-                            if self.debug: print cmd
+                            self.logger.debug(cmd)
                             result = self.cur.execute(cmd)
 
                             #insert sriovs into port table
@@ -646,26 +647,24 @@ class vim_db():
                                 keys    = ",".join(sriov_dict.keys())
                                 values  = ",".join( map(lambda x:  "Null" if x is None else "'"+str(x)+"'", sriov_dict.values() ) )
                                 cmd = "INSERT INTO resources_port (" + keys + ") VALUES (" + values + ")"
-                                if self.debug: print cmd
+                                self.logger.debug(cmd)
                                 result = self.cur.execute(cmd)
 
                     #inserting new log
                     cmd = "INSERT INTO logs (related,level,uuid,description) VALUES ('hosts','debug','%s','new host: %d numas, %d theads, %d ifaces')" % (uuid, nb_numas, nb_cores, nb_ifaces)
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     result = self.cur.execute(cmd)                    
 
                     #inseted ok
                 with self.con:
                     self.cur = self.con.cursor()
-                    if self.debug: print "callproc('UpdateSwitchPort', () )"
+                    self.logger.debug("callproc('UpdateSwitchPort', () )")
                     self.cur.callproc('UpdateSwitchPort', () )
 
-                if self.debug: print "getting host '%s'" % str(host_dict['uuid'])
+                self.logger.debug("getting host '%s'",str(host_dict['uuid']))
                 return self.get_host(host_dict['uuid'])
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "new_host DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e)
+                r,c = self.format_error(e, "new_host", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
     def new_flavor(self, flavor_dict, tenant_id ):
@@ -694,21 +693,21 @@ class vim_db():
 
                     #inserting new uuid
                     cmd = "INSERT INTO uuids (uuid, used_at) VALUES ('%s','flavors')" % uuid
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
 
                     #insert in table flavor
                     keys    = ",".join(flavor_dict.keys())
                     values  = ",".join( map(lambda x:  "Null" if x is None else "'"+str(x)+"'", flavor_dict.values() ) )
                     cmd = "INSERT INTO flavors (" + keys + ") VALUES (" + values + ")"
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     #if result != 1: return -1, "Database Error while inserting at flavors table"
 
                     #insert tenants_flavors
                     if tenant_id != 'any':
                         cmd = "INSERT INTO tenants_flavors (tenant_id,flavor_id) VALUES ('%s','%s')" % (tenant_id, uuid)
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
 
                     #inserting new log
@@ -716,15 +715,13 @@ class vim_db():
                     if 'extended' in flavor_dict: del flavor_dict['extended'] #remove two many information
                     cmd = "INSERT INTO logs (related,level,uuid, tenant_id, description) VALUES ('flavors','debug','%s','%s',\"new flavor: %s\")" \
                         % (uuid, tenant_id, str(flavor_dict))
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)                    
 
                     #inseted ok
                 return 1, uuid
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "new_flavor DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e, "update", tenant_id)
+                r,c = self.format_error(e, "new_flavor", cmd, "update", tenant_id)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
         
     def new_image(self, image_dict, tenant_id):
@@ -753,34 +750,32 @@ class vim_db():
 
                     #inserting new uuid
                     cmd = "INSERT INTO uuids (uuid, used_at) VALUES ('%s','images')" % uuid
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
 
                     #insert in table image
                     keys    = ",".join(image_dict.keys())
                     values  = ",".join( map(lambda x:  "Null" if x is None else "'"+str(x)+"'", image_dict.values() ) )
                     cmd = "INSERT INTO images (" + keys + ") VALUES (" + values + ")"
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     #if result != 1: return -1, "Database Error while inserting at images table"
 
                     #insert tenants_images
                     if tenant_id != 'any':
                         cmd = "INSERT INTO tenants_images (tenant_id,image_id) VALUES ('%s','%s')" % (tenant_id, uuid)
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
 
                     #inserting new log
                     cmd = "INSERT INTO logs (related,level,uuid, tenant_id, description) VALUES ('images','debug','%s','%s',\"new image: %s path: %s\")" % (uuid, tenant_id, image_dict['name'], image_dict['path'])
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)                    
 
                     #inseted ok
                 return 1, uuid
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "new_image DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e, "update", tenant_id)
+                r,c = self.format_error(e, "new_image", cmd, "update", tenant_id)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
         
     def delete_image_flavor(self, item_type, item_id, tenant_id):
@@ -806,24 +801,24 @@ class vim_db():
                     cmd = "DELETE FROM tenants_%ss WHERE %s_id = '%s'" % (item_type, item_type, item_id)
                     if tenant_id != 'any':
                         cmd += " AND tenant_id = '%s'" % tenant_id
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     deleted = self.cur.rowcount
                     if tenant_id == 'any': #delete from images/flavors in the SAME transaction
                         cmd = "DELETE FROM %ss WHERE uuid = '%s'" % (item_type, item_id)
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
                         deleted = self.cur.rowcount
                         if deleted>=1:
                             #delete uuid
                             cmd = "DELETE FROM uuids WHERE uuid = '%s'" % item_id
-                            if self.debug: print cmd
+                            self.logger.debug(cmd)
                             self.cur.execute(cmd)
                             #inserting new log
                             cmd = "INSERT INTO logs (related,level,uuid,tenant_id,description) \
                                    VALUES ('%ss','debug','%s','%s','delete %s completely')" % \
                                    (item_type, item_id, tenant_id, item_type)
-                            if self.debug: print cmd
+                            self.logger.debug(cmd)
                             self.cur.execute(cmd)
                             return deleted, "%s '%s' completely deleted" % (item_type, item_id)
                         return 0, "%s '%s' not found" % (item_type, item_id)
@@ -833,7 +828,7 @@ class vim_db():
                         cmd = "INSERT INTO logs (related,level,uuid,tenant_id,description) \
                                 VALUES ('%ss','debug','%s','%s','delete %s reference for this tenant')" % \
                                 (item_type, item_id, tenant_id, item_type)
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
 
                         #commit transaction
@@ -845,24 +840,24 @@ class vim_db():
 
                         #delete image/flavor if not public
                         cmd = "DELETE FROM %ss WHERE uuid = '%s' AND public = 'no'" % (item_type, item_id)
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
                         deleted_item = self.cur.rowcount
                         if deleted_item == 1:
                             #delete uuid
                             cmd = "DELETE FROM uuids WHERE uuid = '%s'" % item_id
-                            if self.debug: print cmd
+                            self.logger.debug(cmd)
                             self.cur.execute(cmd)
                             #inserting new log
                             cmd = "INSERT INTO logs (related,level,uuid,tenant_id,description) \
                                    VALUES ('%ss','debug','%s','%s','delete %s completely')" % \
                                    (item_type, item_id, tenant_id, item_type)
-                            if self.debug: print cmd
+                            self.logger.debug(cmd)
                             self.cur.execute(cmd)
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "delete_%s DB Exception %d: %s" % (item_type, e.args[0], e.args[1])
-                if deleted <0: result = self.format_error(e, "delete", "servers")
+                #print "delete_%s DB Exception %d: %s" % (item_type, e.args[0], e.args[1])
+                if deleted <0: 
+                    result = self.format_error(e, "delete_"+item_type, cmd, "delete", "servers")
             finally:
                 if deleted==1:
                     return 1, "%s '%s' from tenant '%s' %sdeleted" % \
@@ -880,7 +875,7 @@ class vim_db():
                     #delete host
                     self.cur = self.con.cursor()
                     cmd = "DELETE FROM %s WHERE uuid = '%s'" % (table, uuid)
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     deleted = self.cur.rowcount
                     if deleted == 1:
@@ -889,17 +884,15 @@ class vim_db():
                         else: tenant_str='Null'
                         self.cur = self.con.cursor()
                         cmd = "DELETE FROM uuids WHERE uuid = '%s'" % uuid
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
                         #inserting new log
                         cmd = "INSERT INTO logs (related,level,uuid,tenant_id,description) VALUES ('%s','debug','%s','%s','delete %s')" % (table, uuid, tenant_str, table[:-1])
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)                    
                 return deleted, table[:-1] + " '%s' %s" %(uuid, "deleted" if deleted==1 else "not found")
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "delete_row DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e, "delete", 'instances' if table=='hosts' or table=='tenants' else 'dependencies')
+                r,c = self.format_error(e, "delete_row", cmd, "delete", 'instances' if table=='hosts' or table=='tenants' else 'dependencies')
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
     def delete_row_by_key(self, table, key, value):
@@ -917,7 +910,7 @@ class vim_db():
                             cmd += " WHERE %s is null" % (key)
                     else: #delete all
                         pass
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     deleted = self.cur.rowcount
                     if deleted < 1:
@@ -925,9 +918,7 @@ class vim_db():
                         #delete uuid
                     return 0, deleted
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "delete_row_by_key DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e, "delete", 'instances' if table=='hosts' or table=='tenants' else 'dependencies')
+                r,c = self.format_error(e, "delete_row_by_key", cmd, "delete", 'instances' if table=='hosts' or table=='tenants' else 'dependencies')
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
                 
     def delete_row_by_dict(self, **sql_dict):
@@ -961,7 +952,7 @@ class vim_db():
         limit_ = "LIMIT " + str(sql_dict['LIMIT']) if 'LIMIT' in sql_dict else ""
         #print 'limit_', limit_
         cmd =  " ".join( ("DELETE", from_, where_, limit_) )
-        if self.debug: print cmd
+        self.logger.debug(cmd)
         for retry_ in range(0,2):
             try:
                 with self.con:
@@ -971,9 +962,7 @@ class vim_db():
                     deleted = self.cur.rowcount
                 return deleted, "%d deleted from %s" % (deleted, sql_dict['FROM'][:-1] )
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "delete_row_by_dict DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c =  self.format_error(e, "delete", 'dependencies')
+                r,c =  self.format_error(e, "delete_row_by_dict", cmd, "delete", 'dependencies')
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
     
@@ -986,14 +975,14 @@ class vim_db():
                     #get INSTANCE
                     cmd = "SELECT uuid, name, description, progress, host_id, flavor_id, image_id, status, last_error, tenant_id, ram, vcpus, created_at \
                         FROM instances WHERE uuid = '" +  str(instance_id) +"'"
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     if self.cur.rowcount == 0 : return 0, "instance '" + str(instance_id) +"'not found."
                     instance = self.cur.fetchone()
                     #get networks
                     cmd = "SELECT uuid as iface_id, net_id, mac as mac_address, name, Mbps as bandwidth, vpci, model \
                         FROM ports WHERE type = 'instance:bridge' AND instance_id = '" + instance_id + "'"
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     if self.cur.rowcount > 0 :
                         instance['networks'] = self.cur.fetchall()
@@ -1002,23 +991,23 @@ class vim_db():
                     extended = {}
                     #get devices
                     cmd = "SELECT type, vpci, image_id, xml,dev FROM instance_devices WHERE instance_id = '%s' " %  str(instance_id)
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     if self.cur.rowcount > 0 :
                         extended['devices'] = self.cur.fetchall()
                     #get numas
                     numas = []
                     cmd = "SELECT id, numa_socket as source FROM numas WHERE host_id = '" + str(instance['host_id']) + "'"
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     host_numas = self.cur.fetchall()
-                    print 'host_numas', host_numas
+                    #print 'host_numas', host_numas
                     for k in host_numas:
                         numa_id = str(k['id'])
                         numa_dict ={}
                         #get memory
                         cmd = "SELECT consumed FROM resources_mem WHERE instance_id = '%s' AND numa_id = '%s'" % ( instance_id, numa_id)
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
                         if self.cur.rowcount > 0:
                             mem_dict = self.cur.fetchone()
@@ -1026,15 +1015,13 @@ class vim_db():
                         #get full cores
                         cursor2 = self.con.cursor()
                         cmd = "SELECT core_id, paired, MIN(v_thread_id) as v1, MAX(v_thread_id) as v2, COUNT(instance_id) as nb, MIN(thread_id) as t1, MAX(thread_id) as t2 FROM resources_core WHERE instance_id = '%s' AND numa_id = '%s' GROUP BY core_id,paired" % ( str(instance_id), numa_id) 
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         cursor2.execute(cmd)
                         core_list = [];     core_source = []
                         paired_list = [];   paired_source = []
                         thread_list = [];   thread_source = []
-    #                     print '***************** antes if '+str(cursor2.rowcount) 
                         if cursor2.rowcount > 0: 
                             cores = cursor2.fetchall()
-    #                         print 'cores', cores
                             for core in cores:
                                 if core[4] == 2: #number of used threads from core
                                     if core[3] == core[2]:  #only one thread asigned to VM, so completely core
@@ -1067,11 +1054,11 @@ class vim_db():
                         cmd = "SELECT port_id as iface_id, p.vlan as vlan, p.mac as mac_address, net_id, if(model='PF','yes',if(model='VF','no','yes:sriov')) as dedicated,\
                             rp.Mbps as bandwidth, name, vpci, pci as source \
                             FROM resources_port as rp join ports as p on port_id=uuid  WHERE p.instance_id = '%s' AND numa_id = '%s' and p.type='instance:data'" % (instance_id, numa_id) 
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
                         if self.cur.rowcount > 0: 
                             numa_dict['interfaces'] = self.cur.fetchall()
-                            print 'interfaces', numa_dict
+                            #print 'interfaces', numa_dict
 
                         if len(numa_dict) > 0 : 
                             numa_dict['source'] = k['source'] #numa socket
@@ -1082,9 +1069,7 @@ class vim_db():
                     af.DeleteNone(instance)
                     return 1, instance
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "get_instance DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e)
+                r,c = self.format_error(e, "get_instance", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
         
     def get_numas(self, requirements, prefered_host_id=None, only_of_ports=True):
@@ -1119,7 +1104,7 @@ class vim_db():
                     #Find valid host for the ram and vcpus
                     self.cur = self.con.cursor(mdb.cursors.DictCursor)
                     cmd = "CALL GetHostByMemCpu(%s, %s)" % (str(requirements['ram']), str(requirements['vcpus']))
-                    if self.debug: print cmd   
+                    self.logger.debug(cmd)   
                     self.cur.callproc('GetHostByMemCpu', (str(requirements['ram']), str(requirements['vcpus'])) )
                     valid_hosts = self.cur.fetchall()
                     self.cur.close()   
@@ -1127,21 +1112,21 @@ class vim_db():
                     match_found = False
                     if len(valid_hosts)<=0:
                         error_text = 'No room at data center. Can not find a host with %s MB memory and %s cpus available' % (str(requirements['ram']), str(requirements['vcpus'])) 
-                        print  error_text
+                        #self.logger.debug(error_text)
                         return -1, error_text
                     
                     #elif req_numa != None:
                     #Find valid numa nodes for memory requirements
                     self.cur = self.con.cursor(mdb.cursors.DictCursor)
                     cmd = "CALL GetNumaByMemory(%s)" % str(requirements['numa']['memory'])
-                    if self.debug: print cmd   
+                    self.logger.debug(cmd)   
                     self.cur.callproc('GetNumaByMemory', (requirements['numa']['memory'],) )
                     valid_for_memory = self.cur.fetchall()
                     self.cur.close()   
                     self.cur = self.con.cursor()
                     if len(valid_for_memory)<=0:
                         error_text = 'No room at data center. Can not find a host with %s GB Hugepages memory available' % str(requirements['numa']['memory']) 
-                        print  error_text
+                        #self.logger.debug(error_text)
                         return -1, error_text
 
                     #Find valid numa nodes for processor requirements
@@ -1149,19 +1134,19 @@ class vim_db():
                     if requirements['numa']['proc_req_type'] == 'threads':
                         cpu_requirement_text='cpu-threads'
                         cmd = "CALL GetNumaByThread(%s)" % str(requirements['numa']['proc_req_nb'])
-                        if self.debug: print cmd 
+                        self.logger.debug(cmd) 
                         self.cur.callproc('GetNumaByThread', (requirements['numa']['proc_req_nb'],) )
                     else:
                         cpu_requirement_text='cpu-cores'
                         cmd = "CALL GetNumaByCore(%s)" % str(requirements['numa']['proc_req_nb'])
-                        if self.debug: print cmd 
+                        self.logger.debug(cmd) 
                         self.cur.callproc('GetNumaByCore', (requirements['numa']['proc_req_nb'],) )
                     valid_for_processor = self.cur.fetchall()
                     self.cur.close()   
                     self.cur = self.con.cursor()
                     if len(valid_for_processor)<=0:
                         error_text = 'No room at data center. Can not find a host with %s %s available' % (str(requirements['numa']['proc_req_nb']),cpu_requirement_text)  
-                        print  error_text
+                        #self.logger.debug(error_text)
                         return -1, error_text
 
                     #Find the numa nodes that comply for memory and processor requirements
@@ -1189,7 +1174,7 @@ class vim_db():
                     if len(valid_numas)<=0:
                         error_text = 'No room at data center. Can not find a host with %s MB hugepages memory and %s %s available in the same numa' %\
                             (requirements['numa']['memory'], str(requirements['numa']['proc_req_nb']),cpu_requirement_text)  
-                        print  error_text
+                        #self.logger.debug(error_text)
                         return -1, error_text
                     
     #                 print 'Valid numas list: '+str(valid_numas)
@@ -1203,11 +1188,11 @@ class vim_db():
                         self.cur = self.con.cursor(mdb.cursors.DictCursor)
                         if only_of_ports:
                             cmd="CALL GetAvailablePorts(%s)" % str(numa_id) 
-                            if self.debug: print cmd
+                            self.logger.debug(cmd)
                             self.cur.callproc('GetAvailablePorts', (numa_id,) )
                         else:
                             cmd="CALL GetAllAvailablePorts(%s)" % str(numa_id) 
-                            if self.debug: print cmd
+                            self.logger.debug(cmd)
                             self.cur.callproc('GetAllAvailablePorts', (numa_id,) )
                         available_ports = self.cur.fetchall()
                         self.cur.close()   
@@ -1301,10 +1286,10 @@ class vim_db():
 
                     if not match_found:
                         error_text = 'No room at data center. Can not find a host with the required hugepages, vcpus and interfaces'  
-                        print  error_text
+                        #self.logger.debug(error_text)
                         return -1, error_text
 
-                    print 'Full match found in numa '+str(numa_id)
+                    #self.logger.debug('Full match found in numa %s', str(numa_id))
 
                 for numa in valid_for_processor:
                     if numa_id==numa['numa_id']:
@@ -1312,9 +1297,7 @@ class vim_db():
                         break
                 return 0, {'numa_id':numa_id, 'host_id': host_id, }
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "get_numas DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e)
+                r,c = self.format_error(e, "get_numas", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
     def new_instance(self, instance_dict, nets):
@@ -1333,7 +1316,7 @@ class vim_db():
 
                     #inserting new uuid
                     cmd = "INSERT INTO uuids (uuid, root_uuid, used_at) VALUES ('%s','%s', 'instances')" % (uuid, uuid)
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
 
                     #insert in table instance
@@ -1343,7 +1326,7 @@ class vim_db():
                     keys    = ",".join(instance_dict.keys())
                     values  = ",".join( map(lambda x: "Null" if x is None else "'"+str(x)+"'", instance_dict.values() ) )
                     cmd = "INSERT INTO instances (" + keys + ") VALUES (" + values + ")"
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     #if result != 1: return -1, "Database Error while inserting at instances table"
 
@@ -1354,7 +1337,7 @@ class vim_db():
                         #generate and insert a iface uuid
                         iface['uuid'] = str(myUuid.uuid1()) # create_uuid
                         cmd = "INSERT INTO uuids (uuid, root_uuid, used_at) VALUES ('%s','%s', 'ports')" % (iface['uuid'], uuid)
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
                         #insert iface
                         iface['instance_id'] = uuid
@@ -1370,7 +1353,7 @@ class vim_db():
                         keys    = ",".join(iface.keys())
                         values  = ",".join( map(lambda x: "Null" if x is None else "'"+str(x)+"'", iface.values() ) )
                         cmd = "INSERT INTO ports (" + keys + ") VALUES (" + values + ")"
-                        if self.debug: print cmd
+                        self.logger.debug(cmd)
                         self.cur.execute(cmd)
                         nb_bridge_ifaces += 1
 
@@ -1387,7 +1370,7 @@ class vim_db():
                                     (",v_thread_id='" + str(core['vthread']) + "'") if 'vthread' in core else '', \
                                     (",paired='"      + core['paired']  + "'") if 'paired' in core else '', \
                                     core['id'] )
-                                if self.debug: print cmd
+                                self.logger.debug(cmd)
                                 self.cur.execute(cmd)
                             #interfaces
                             if 'interfaces' not in numa or numa['interfaces'] is None: numa['interfaces'] = ()
@@ -1395,7 +1378,7 @@ class vim_db():
                                 #generate and insert an uuid; iface[id]=iface_uuid; iface[uuid]= net_id
                                 iface['id'] = str(myUuid.uuid1()) # create_uuid
                                 cmd = "INSERT INTO uuids (uuid, root_uuid, used_at) VALUES ('%s','%s', 'ports')" % (iface['id'], uuid)
-                                if self.debug: print cmd
+                                self.logger.debug(cmd)
                                 self.cur.execute(cmd)
                                 nb_ifaces += 1
                                 mbps_=("'"+str(iface['Mbps_used'])+"'") if 'Mbps_used' in iface and iface['Mbps_used'] is not None else "Mbps"
@@ -1410,7 +1393,7 @@ class vim_db():
                                         uuid, instance_dict['tenant_id'], iface.get('name',None), iface.get('vpci',None), iface.get('uuid',None), iface_model )
                                 cmd = "INSERT INTO ports (mac,switch_port,vlan,type,Mbps,uuid,instance_id,tenant_id,name,vpci,net_id, model) " + \
                                        " VALUES (" + ",".join(map(lambda x: 'Null' if x is None else "'"+str(x)+"'", INSERT )) + ")"
-                                if self.debug: print cmd
+                                self.logger.debug(cmd)
                                 self.cur.execute(cmd)
                                 if 'uuid' in iface:
                                     nets.append(iface['uuid'])
@@ -1418,12 +1401,12 @@ class vim_db():
                                 cmd = "UPDATE resources_port SET instance_id='%s', port_id='%s',Mbps_used=%s WHERE id='%s'" \
                                     % (uuid, iface['id'], mbps_, iface['port_id'])
                                 #if Mbps_used not suply, set the same value of 'Mpbs', that is the total
-                                if self.debug: print cmd
+                                self.logger.debug(cmd)
                                 self.cur.execute(cmd)
                             #memory
                             if 'memory' in numa and numa['memory'] is not None and numa['memory']>0:
                                 cmd = "INSERT INTO resources_mem (numa_id, instance_id, consumed) VALUES ('%s','%s','%s')" % (numa['numa_id'], uuid, numa['memory'])
-                                if self.debug: print cmd
+                                self.logger.debug(cmd)
                                 self.cur.execute(cmd)
                         if 'devices' not in extended or extended['devices'] is None: extended['devices'] = ()
                         for device in extended['devices']:
@@ -1437,19 +1420,17 @@ class vim_db():
                             else:                    dev = 'Null'
                             cmd = "INSERT INTO instance_devices (type, instance_id, image_id, vpci, xml, dev) VALUES ('%s','%s', %s, %s, %s, %s)" % \
                                 (device['type'], uuid, image_id, vpci, xml, dev)
-                            if self.debug: print cmd
+                            self.logger.debug(cmd)
                             self.cur.execute(cmd)
                     #inserting new log
                     cmd = "INSERT INTO logs (related,level,uuid,description) VALUES ('instances','debug','%s','new instance: %d numas, %d theads, %d ifaces %d bridge_ifaces')" % (uuid, nb_numas, nb_cores, nb_ifaces, nb_bridge_ifaces)
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)                    
 
                     #inseted ok
                 return 1, uuid 
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "new_instance DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e)
+                r,c = self.format_error(e, "new_instance", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
     def delete_instance(self, instance_id, tenant_id, net_list, logcause="requested by http"):
@@ -1460,7 +1441,7 @@ class vim_db():
                     self.cur = self.con.cursor()
                     #get INSTANCE
                     cmd = "SELECT uuid FROM instances WHERE uuid='%s' AND tenant_id='%s'" % (instance_id, tenant_id)
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     if self.cur.rowcount == 0 : return 0, "instance %s not found in tenant %s" % (instance_id, tenant_id)
 
@@ -1468,29 +1449,29 @@ class vim_db():
 
                     #update resources port, first get nets afected
                     cmd = "SELECT DISTINCT net_id from ports WHERE instance_id = '%s' AND net_id is not Null AND type='instance:data'" % instance_id
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     net_list__ = self.cur.fetchall()
                     for net in net_list__:
                         net_list.append(net[0])
 
                     cmd = "UPDATE resources_port SET instance_id=Null, port_id=Null, Mbps_used='0' WHERE instance_id = '%s'" % instance_id
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
 
                     #update resources core
                     cmd = "UPDATE resources_core SET instance_id=Null, v_thread_id=Null, paired='N' WHERE instance_id = '%s'" % instance_id
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
 
                     #delete all related uuids
                     cmd = "DELETE FROM uuids WHERE root_uuid='%s'" % instance_id
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
 
                     #insert log
                     cmd = "INSERT INTO logs (related,level,uuid,description) VALUES ('instances','debug','%s','delete instance %s')" % (instance_id, logcause)
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)                    
 
                     #delete instance
@@ -1499,9 +1480,7 @@ class vim_db():
                     return 1, "instance %s from tenant %s DELETED" % (instance_id, tenant_id)
 
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "delete_instance DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e)
+                r,c = self.format_error(e, "delete_instance", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
     def get_ports(self, WHERE):
@@ -1525,16 +1504,14 @@ class vim_db():
                     limit_ = "LIMIT 100"
                     cmd =  " ".join( (select_, where_, limit_) )
     #                print "SELECT multiple de instance_ifaces, iface_uuid, external_ports" #print cmd
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     ports = self.cur.fetchall()
                     if self.cur.rowcount>0:  af.DeleteNone(ports)
                     return self.cur.rowcount, ports
     #                return self.get_table(FROM=from_, SELECT=select_,WHERE=where_,LIMIT=100)
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "get_ports DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e)
+                r,c = self.format_error(e, "get_ports", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
         
     def check_target_net(self, net_id, tenant_id, port_type):
@@ -1553,16 +1530,14 @@ class vim_db():
                 with self.con:
                     self.cur = self.con.cursor(mdb.cursors.DictCursor)
                     cmd = "SELECT * FROM nets WHERE uuid='%s'" % net_id
-                    if self.debug: print cmd
+                    self.logger.debug(cmd)
                     self.cur.execute(cmd)
                     if self.cur.rowcount == 0 : return -1, "network_id %s does not match any net" % net_id
                     net = self.cur.fetchone()
                     break
 
             except (mdb.Error, AttributeError) as e:
-                if not self.debug: print cmd
-                print "check_target_net DB Exception %d: %s" % (e.args[0], e.args[1])
-                r,c = self.format_error(e)
+                r,c = self.format_error(e, "check_target_net", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
         #check permissions
         if tenant_id is not None and tenant_id is not "admin":
