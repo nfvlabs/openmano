@@ -1440,14 +1440,16 @@ def http_server_action(server_id, tenant_id, action):
             bottle.abort(HTTP_Not_Found, 'image_id %s not found or not ACTIVE' % image_id)
             return
         if content[0]['metadata'] is not None:
-            metadata = json.loads(content[0]['metadata'])
+            try:
+                metadata = json.loads(content[0]['metadata'])
+            except:
+                return -HTTP_Internal_Server_Error, "Can not decode image metadata"
             content[0]['metadata']=metadata
         else:
             content[0]['metadata'] = {}
         server['image']=content[0]
         if 'createImage' in action:
             action['createImage']['source'] = {'image_id': image_id, 'path': content[0]['path']}
-            
     if 'createImage' in action:
         #Create an entry in Database for the new image
         new_image={'status':'BUILD', 'progress': 0 }

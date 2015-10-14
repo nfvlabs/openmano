@@ -41,34 +41,48 @@ class OF_conn():
     '''OpenDayLight connector. No MAC learning is used'''
     def __init__(self, params):
         ''' Constructor. 
-            Params is a dictionay with the following keys:
+            Params: dictionary with the following keys:
                 of_dpid:     DPID to use for this controller
                 of_ip:       controller IP address
                 of_port:     controller TCP port
-                of_user:     user credentials
+                of_user:     user credentials, can be missing or None
                 of_password: password credentials
                 of_debug:    debug level for logging. Default to ERROR
                 other keys are ignored
             Raise an exception if same parameter is missing or wrong
         '''
+        #check params
+        if "of_ip" not in params or params["of_ip"]==None or "of_port" not in params or params["of_port"]==None:
+            raise ValueError("IP address and port must be provided")
+        #internal variables
         self.name = "OpenDayLight"
+        self.headers = {'content-type':'application/json', 
+                        'Accept':'application/json'
+        }
+        self.auth=None
+        self.pp2ofi={}  # From Physical Port to OpenFlow Index
+        self.ofi2pp={}  # From OpenFlow Index to Physical Port
+
         self.dpid = str(params["of_dpid"])
         self.id = 'openflow:'+str(int(self.dpid.replace(':', ''), 16))
         self.url = "http://%s:%s" %( str(params["of_ip"]), str(params["of_port"] ) )
-        self.auth = base64.b64encode(params["of_user"]+":"+params["of_password"])
+        if "of_user" in params and params["of_user"]!=None:
+            if not params.get("of_password"):
+                of_password=""
+            else:
+                of_password=str(params["of_password"])
+            self.auth = base64.b64encode(str(params["of_user"])+":"+of_password)
+            self.headers['Authorization'] = 'Basic '+self.auth
+            
 
         self.logger = logging.getLogger('vim.OF.ODL')
         self.logger.setLevel( getattr(logging, params.get("of_debug", "ERROR")) )
-        self.pp2ofi={}  # From Physical Port to OpenFlow Index
-        self.ofi2pp={}  # From OpenFlow Index to Physical Port
-        self.headers = {'content-type':'application/json', 'Accept':'application/json',
-                        'Authorization': 'Basic '+self.auth}
 
     def get_of_switches(self):
         ''' Obtain a a list of switches or DPID detected by this controller
             Return
-                <number>, <list>: where each element of the list is a tuple pair (DPID, ip address)
-                <0, text_error: uppon error
+                >=0, list:      list length, and a list where each element a tuple pair (DPID, IP address)
+                <0, text_error: if fails
         '''  
         try:
             of_response = requests.get(self.url+"/restconf/operational/opendaylight-inventory:nodes",
@@ -121,8 +135,9 @@ class OF_conn():
         
     def obtain_port_correspondence(self):
         '''Obtain the correspondence between physical and openflow port names
-        return 0, dictionary with physical to openflow names on success
-            -1, text on fail
+        return:
+             0, dictionary: with physical name as key, openflow name as value
+            -1, error_text: if fails
         '''
         try:
             of_response = requests.get(self.url+"/restconf/operational/opendaylight-inventory:nodes",
@@ -193,10 +208,19 @@ class OF_conn():
     def get_of_rules(self, translate_of_ports=True):
         ''' Obtain the rules inserted at openflow controller
             Params:
-                translate_of_ports: if True it translates ports from openflow index to switch name
+                translate_of_ports: if True it translates ports from openflow index to physical switch name
             Return:
-                0, dict if ok: with the rule name as key and value is another dictionary with the rule parameters
-                -1, text_error on fail
+                0, dict if ok: with the rule name as key and value is another dictionary with the following content:
+                    priority: rule priority
+                    name:         rule name (present also as the master dict key)
+                    ingress_port: match input port of the rule
+                    dst_mac:      match destination mac address of the rule, can be missing or None if not apply
+                    vlan_id:      match vlan tag of the rule, can be missing or None if not apply
+                    actions:      list of actions, composed by a pair tuples:
+                        (vlan, None/int): for stripping/setting a vlan tag
+                        (out, port):      send to this port 
+                    switch:       DPID, all 
+                -1, text_error if fails
         '''   
         
         if len(self.ofi2pp) == 0:
@@ -346,6 +370,12 @@ class OF_conn():
             return -1, error_text
             
     def del_flow(self, flow_name):
+        ''' Delete an existing rule
+            Params: flow_name, this is the rule name
+            Return
+                0, None if ok
+                -1, text_error if fails
+        '''           
         try:
             of_response = requests.delete(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
                                           "/table/0/flow/"+flow_name, headers=self.headers)
@@ -362,6 +392,20 @@ class OF_conn():
             return -1, error_text
 
     def new_flow(self, data):
+        ''' Insert a new static rule
+            Params: data: dictionary with the following content:
+                priority:     rule priority
+                name:         rule name
+                ingress_port: match input port of the rule
+                dst_mac:      match destination mac address of the rule, missing or None if not apply
+                vlan_id:      match vlan tag of the rule, missing or None if not apply
+                actions:      list of actions, composed by a pair tuples with these posibilities:
+                    ('vlan', None/int): for stripping/setting a vlan tag
+                    ('out', port):      send to this port
+            Return
+                0, None if ok
+                -1, text_error if fails
+        '''   
         if len(self.pp2ofi) == 0:
             r,c = self.obtain_port_correspondence()
             if r<0:
@@ -446,6 +490,11 @@ class OF_conn():
             return -1, error_text
 
     def clear_all_flows(self):
+        ''' Delete all existing rules
+            Return:
+                0, None if ok
+                -1, text_error if fails
+        '''           
         try:
             of_response = requests.delete(self.url+"/restconf/config/opendaylight-inventory:nodes/node/" + self.id +
                                       "/table/0", headers=self.headers)

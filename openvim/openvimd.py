@@ -205,32 +205,39 @@ if __name__=="__main__":
         if of_test_mode:
             OF_conn = oft.of_test_connector({"of_debug": config_dic['log_level_of']} )
         else:
+            #load other parameters starting by of_ from config dict in a temporal dict
+            temp_dict={ "of_ip":  config_dic['of_controller_ip'],
+                        "of_port": config_dic['of_controller_port'], 
+                        "of_dpid": config_dic['of_controller_dpid'],
+                        "of_debug":   config_dic['log_level_of']
+                }
+            for k,v in config_dic.iteritems():
+                if type(k) is str and k[0:3]=="of_" and k[0:13] != "of_controller":
+                    temp_dict[k]=v
+            if config_dic['of_controller']=='opendaylight':
+                module = "ODL"
+            elif "of_controller_module" in config_dic:
+                module = config_dic["of_controller_module"]
+            else:
+                module = config_dic['of_controller']
+            module_info=None
             try:
-                if config_dic['of_controller']=='floodlight':
-                    module = "floodlight.py"
-                elif config_dic['of_controller']=='opendaylight':
-                    module = "ODL.py"
-                elif "of_controller_module" in config_dic:
-                    module = config_dic["of_controller_module"]
-                else:
-                    module = config_dic['of_controller'] + ".py"
-                of_conn = imp.load_source("of_conn", module)
-                #load other parameters starting by of_ from config dict in a temporal dict
-                temp_dict={ "of_ip":  config_dic['of_controller_ip'],
-                            "of_port": config_dic['of_controller_port'], 
-                            "of_dpid": config_dic['of_controller_dpid'],
-                            "of_debug":   config_dic['log_level_of']
-                    }
-                for k,v in config_dic.iteritems():
-                    if type(k) is str and k[0:3]=="of_" and k[0:13] != "of_controller":
-                        temp_dict[k]=v
-                OF_conn = of_conn.OF_conn(temp_dict)
-            except IOError as e:
-                logger.error("Cannot open the Openflow controller module '%s': %s", module, str(e))
-                exit()
-            except Exception as e:
-                logger.error("Cannot open the Openflow controller '%s': %s", type(e).__name__, str(e))
-                exit()
+                module_info = imp.find_module(module)
+            
+                OF_conn = imp.load_module("OF_conn", *module_info)
+                try:
+                    OF_conn = OF_conn.OF_conn(temp_dict)
+                except Exception as e: 
+                    logger.error("Cannot open the Openflow controller '%s': %s", type(e).__name__, str(e))
+                    if module_info and module_info[0]:
+                        file.close(module_info[0])
+                    exit(-1)
+            except (IOError, ImportError) as e:
+                if module_info and module_info[0]:
+                    file.close(module_info[0])
+                logger.error("Cannot open openflow controller module '%s'; %s: %s; revise 'of_controller' field of configuration file.", module, type(e).__name__, str(e))
+                exit(-1)
+
 
     #create openflow thread
         thread = oft.openflow_thread(OF_conn, of_test=of_test_mode, db=db_of,  db_lock=db_lock,

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # PYTHON_ARGCOMPLETE_OK
-from quickstart.serializers import yaml_dump
 
 ##
 # Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
@@ -34,6 +33,7 @@ __date__ ="$09-oct-2014 09:09:48$"
 
 #import time
 import os
+import sys
 import argparse
 import argcomplete
 import imp
@@ -91,7 +91,7 @@ def of_port_list(args):
     if r<0:
         print c
         return r
-    print yaml_dump({"ports": c})
+    yaml.safe_dump({"ports": c}, sys.stdout, indent=2, default_flow_style=False)
 
 #def of_dump(args):
 #    args.verbose = 3
@@ -326,48 +326,54 @@ if __name__=="__main__":
     argcomplete.autocomplete(main_parser)
     
     args = main_parser.parse_args()
-    
-    #floodlight_versions = ("0.90", "1.0", "1.1")
-    #if of_controller_type == "floodlight" and of_controller_version not in floodlight_versions:
-    #    print "Wrong Floodlight controller version. Supported versions: %" %str(floodlight_versions)
-    #    exit()
-    
-    params={ "of_ip":   of_controller_ip,
-                "of_port": of_controller_port, 
-                "of_dpid": of_controller_dpid,
-                "of_user": of_controller_user,
-                "of_password": of_controller_password,
-        }
-    if "debug" in args and args.debug:
-        streamformat = "%(asctime)s %(name)s %(levelname)s: %(message)s"
-        logging.basicConfig(format=streamformat, level= logging.DEBUG)
-        logger = logging.getLogger('vim')
-        logger.setLevel(logging.DEBUG)
-        params["of_debug"]="DEBUG"
+    module_info=None
     try:
-        if of_controller_type=='opendaylight':
-            module = "ODL.py"
-        elif of_controller_module != None:
-            module = of_controller_module
-        else:
-            module = of_controller_type + ".py"
-        of_conn = imp.load_source("of_conn", module)
-        ofconnector = of_conn.OF_conn(params)
-
-    except IOError as e:
-        print "Cannot open the Openflow controller module '%s': %s" % (module, str(e))
-        exit(-1)
-    except Exception as e:
-        print "Cannot open the Openflow controller '%s': %s" % (type(e).__name__, str(e))
-        exit(-1)
-
-    try:
+        if args.func is not config:
+            params={ "of_ip":   of_controller_ip,
+                        "of_port": of_controller_port, 
+                        "of_dpid": of_controller_dpid,
+                        "of_user": of_controller_user,
+                        "of_password": of_controller_password,
+                }
+            if "debug" in args and args.debug:
+                streamformat = "%(asctime)s %(name)s %(levelname)s: %(message)s"
+                logging.basicConfig(format=streamformat, level= logging.DEBUG)
+                logger = logging.getLogger('vim')
+                logger.setLevel(logging.DEBUG)
+                params["of_debug"]="DEBUG"
+            else:
+                #logger = logging.getLogger('vim').addHandler(logging.NullHandler())
+                #logger.setLevel(logging.CRITICAL)
+                params["of_debug"]="CRITICAL"
+            
+            if of_controller_type=='opendaylight':
+                module = "ODL"
+            elif of_controller_module != None:
+                module = of_controller_module
+            else:
+                module = of_controller_type
+            module_info = imp.find_module(module)
+            
+            of_conn = imp.load_module("of_conn", *module_info)
+            try:
+                ofconnector = of_conn.OF_conn(params)
+            except Exception as e: 
+                print "Cannot open the Openflow controller '%s': %s" % (type(e).__name__, str(e))
+                result = -1
+                exit()
         result = args.func(args)
         if result == None:
             result = 0
+            
         #for some reason it fails if call exit inside try instance. Need to call exit at the end !?
-    except (requests.exceptions.ConnectionError):
-        print "Connection error: not possible to contact controller"
+    except (IOError, ImportError) as e:
+        print "Cannot open openflow controller module '%s'; %s: %s" % (module, type(e).__name__, str(e))
+        result = -1
+    #except Exception as e:
+    #    print "Cannot open the Openflow controller '%s': %s" % (type(e).__name__, str(e))
+    #    result = -1
+    except requests.exceptions.ConnectionError as e:
+        print "Cannot connect to server; %s: %s" % (type(e).__name__, str(e))
         result = -2
     except (KeyboardInterrupt):
         print 'Exiting openVIM'
@@ -375,9 +381,10 @@ if __name__=="__main__":
     except (SystemExit):
         result = -4
     
-    #print result
+    #close open file
+    if module_info and module_info[0]:
+        file.close(module_info[0])
     exit(result)
     
-    exit()
 
 

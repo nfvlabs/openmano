@@ -52,6 +52,9 @@ class OF_conn():
                 other keys are ignored
             Raise an exception if same parameter is missing or wrong
         '''
+        #check params
+        if "of_ip" not in params or params["of_ip"]==None or "of_port" not in params or params["of_port"]==None:
+            raise ValueError("IP address and port must be provided")
 
         self.name = "Floodlight"
         self.dpid = str(params["of_dpid"])
@@ -66,6 +69,9 @@ class OF_conn():
         self._set_version(params.get("of_version") )
     
     def _set_version(self, version):
+        '''set up a version of the controller.
+         Depending on the version it fills the self.ver_names with the naming used in this version
+        '''
         #static version names
         if version==None:
             self.version= None
@@ -99,7 +105,7 @@ class OF_conn():
     def get_of_switches(self):
         ''' Obtain a a list of switches or DPID detected by this controller
             Return
-                <number>, <list>: where each element of the list is a tuple pair (DPID, ip-address)
+                >=0, list:      list length, and a list where each element a tuple pair (DPID, IP address)
                 <0, text_error: if fails
         '''  
         try:
@@ -138,10 +144,19 @@ class OF_conn():
     def get_of_rules(self, translate_of_ports=True):
         ''' Obtain the rules inserted at openflow controller
             Params:
-                translate_of_ports: if True it translates ports from openflow index to switch name
+                translate_of_ports: if True it translates ports from openflow index to physical switch name
             Return:
-                0, dict if ok: with the rule name as key, description at value 
-                -1, text_error on fail
+                0, dict if ok: with the rule name as key and value is another dictionary with the following content:
+                    priority: rule priority
+                    name:         rule name (present also as the master dict key)
+                    ingress_port: match input port of the rule
+                    dst_mac:      match destination mac address of the rule, can be missing or None if not apply
+                    vlan_id:      match vlan tag of the rule, can be missing or None if not apply
+                    actions:      list of actions, composed by a pair tuples:
+                        (vlan, None/int): for stripping/setting a vlan tag
+                        (out, port):      send to this port 
+                    switch:       DPID, all 
+                -1, text_error if fails
         '''   
         
         #get translation, autodiscover version
@@ -159,8 +174,15 @@ class OF_conn():
                 return -1 , error_text
             self.logger.debug("get_of_rules " + error_text)
             info = of_response.json()
+            if type(info) != list and type(info) != tuple:
+                self.logger.error("get_of_rules. Unexpected response not a list %s", str(type(info)))
+                return -1, "Unexpected response, not a list. Wrong version?"
             rule_dict={}
             for switch,switch_info in info.iteritems():
+                if switch_info == None:
+                    continue
+                if str(switch) != self.dpid:
+                    continue
                 for name,details in switch_info.iteritems():
                     rule = {}
                     rule["switch"] = str(switch)
@@ -230,8 +252,9 @@ class OF_conn():
 
     def obtain_port_correspondence(self):
         '''Obtain the correspondence between physical and openflow port names
-        return 0, dictionary with physical to openflow names on success
-            -1, text on fail
+        return:
+             0, dictionary: with physical name as key, openflow name as value
+            -1, error_text: if fails
         '''
         try:
             of_response = requests.get(self.url+"/wm/core/controller/switches/json", headers=self.headers)
@@ -278,6 +301,12 @@ class OF_conn():
             return -1, error_text
             
     def del_flow(self, flow_name):
+        ''' Delete an existing rule
+            Params: flow_name, this is the rule name
+            Return
+                0, None if ok
+                -1, text_error if fails
+        '''           
         #autodiscover version
         if self.version == None:
             r,c = self.get_of_switches()
@@ -302,6 +331,20 @@ class OF_conn():
             return -1, error_text
 
     def new_flow(self, data):
+        ''' Insert a new static rule
+            Params: data: dictionary with the following content:
+                priority:     rule priority
+                name:         rule name
+                ingress_port: match input port of the rule
+                dst_mac:      match destination mac address of the rule, missing or None if not apply
+                vlan_id:      match vlan tag of the rule, missing or None if not apply
+                actions:      list of actions, composed by a pair tuples with these posibilities:
+                    ('vlan', None/int): for stripping/setting a vlan tag
+                    ('out', port):      send to this port
+            Return
+                0, None if ok
+                -1, text_error if fails
+        '''   
         #get translation, autodiscover version
         if len(self.pp2ofi) == 0:
             r,c = self.obtain_port_correspondence()
@@ -352,6 +395,11 @@ class OF_conn():
             return -1, error_text
 
     def clear_all_flows(self):
+        ''' Delete all existing rules
+            Return:
+                0, None if ok
+                -1, text_error if fails
+        '''           
         #autodiscover version
         if self.version == None:
             r,c = self.get_of_switches()
