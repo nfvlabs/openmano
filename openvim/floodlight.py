@@ -174,9 +174,9 @@ class OF_conn():
                 return -1 , error_text
             self.logger.debug("get_of_rules " + error_text)
             info = of_response.json()
-            if type(info) != list and type(info) != tuple:
-                self.logger.error("get_of_rules. Unexpected response not a list %s", str(type(info)))
-                return -1, "Unexpected response, not a list. Wrong version?"
+            if type(info) != dict:
+                self.logger.error("get_of_rules. Unexpected response not a dict %s", str(type(info)))
+                return -1, "Unexpected response, not a dict. Wrong version?"
             rule_dict={}
             for switch,switch_info in info.iteritems():
                 if switch_info == None:
