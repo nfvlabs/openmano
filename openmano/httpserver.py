@@ -405,7 +405,7 @@ def http_get_datacenter_id(tenant_id, datacenter_id):
     what = 'uuid' if af.check_valid_uuid(datacenter_id) else 'name'
     where_={}
     where_[what] = datacenter_id
-    select_=('uuid', 'name','vim_url', 'vim_url_admin', 'type', 'config', 'd.created_at as created_at')
+    select_=('uuid', 'name','vim_url', 'vim_url_admin', 'type', 'config', 'description', 'd.created_at as created_at')
     if tenant_id != 'any':
         where_['td.nfvo_tenant_id']= tenant_id
         from_='datacenters as d join tenants_datacenters as td on d.uuid=td.datacenter_id'

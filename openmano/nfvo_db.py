@@ -31,6 +31,7 @@ import MySQLdb as mdb
 import uuid as myUuid
 from utils import auxiliary_functions as af
 import json
+import yaml
 
 HTTP_Bad_Request = 400
 HTTP_Unauthorized = 401 
@@ -40,6 +41,8 @@ HTTP_Request_Timeout = 408
 HTTP_Conflict = 409
 HTTP_Service_Unavailable = 503 
 HTTP_Internal_Server_Error = 500 
+
+
 
 class nfvo_db():
     def __init__(self):
@@ -130,7 +133,73 @@ class nfvo_db():
             if fl>=0:
                 return -HTTP_Bad_Request, "Field %s does not exist" % e.args[1][uk+14:wc]
         return -HTTP_Internal_Server_Error, "Database internal Error %d: %s" % (e.args[0], e.args[1])
+    
+    def __str2db_format(self, data):
+        '''Convert string data to database format. 
+        If data is None it returns the 'Null' text,
+        otherwise it returns the text surrounded by quotes ensuring internal quotes are escaped.
+        '''
+        if data==None:
+            return 'Null'
+        out=str(data)
+        if "'" not in out:
+            return "'" + out + "'"
+        elif '"' not in out:
+            return '"' + out + '"'
+        else:
+            return json.dumps(out)
+    
+    def __tuple2db_format_set(self, data):
+        '''Compose the needed text for a SQL SET, parameter 'data' is a pair tuple (A,B),
+        and it returns the text 'A="B"', where A is a field of a table and B is the value 
+        If B is None it returns the 'A=Null' text, without surrounding Null by quotes
+        If B is not None it returns the text "A='B'" or 'A="B"' where B is surrounded by quotes,
+        and it ensures internal quotes of B are escaped.
+        '''
+        if data[1]==None:
+            return str(data[0]) + "=Null"
+        out=str(data[1])
+        if "'" not in out:
+            return str(data[0]) + "='" + out + "'"
+        elif '"' not in out:
+            return str(data[0]) + '="' + out + '"'
+        else:
+            return str(data[0]) + '=' + json.dumps(out)
+    
+    def __tuple2db_format_where(self, data):
+        '''Compose the needed text for a SQL WHERE, parameter 'data' is a pair tuple (A,B),
+        and it returns the text 'A="B"', where A is a field of a table and B is the value 
+        If B is None it returns the 'A is Null' text, without surrounding Null by quotes
+        If B is not None it returns the text "A='B'" or 'A="B"' where B is surrounded by quotes,
+        and it ensures internal quotes of B are escaped.
+        '''
+        if data[1]==None:
+            return str(data[0]) + " is Null"
+        out=str(data[1])
+        if "'" not in out:
+            return str(data[0]) + "='" + out + "'"
+        elif '"' not in out:
+            return str(data[0]) + '="' + out + '"'
+        else:
+            return str(data[0]) + '=' + json.dumps(out)
 
+    def __tuple2db_format_where_not(self, data):
+        '''Compose the needed text for a SQL WHERE(not). parameter 'data' is a pair tuple (A,B),
+        and it returns the text 'A<>"B"', where A is a field of a table and B is the value 
+        If B is None it returns the 'A is not Null' text, without surrounding Null by quotes
+        If B is not None it returns the text "A<>'B'" or 'A<>"B"' where B is surrounded by quotes,
+        and it ensures internal quotes of B are escaped.
+        '''
+        if data[1]==None:
+            return str(data[0]) + " is not Null"
+        out=str(data[1])
+        if "'" not in out:
+            return str(data[0]) + "<>'" + out + "'"
+        elif '"' not in out:
+            return str(data[0]) + '<>"' + out + '"'
+        else:
+            return str(data[0]) + '<>' + json.dumps(out)
+    
     def __remove_quotes(self, data):
         '''remove single quotes ' of any string content of data dictionary'''
         for k,v in data.items():
@@ -146,13 +215,12 @@ class nfvo_db():
             WHERE: dictionary of elements to update
         Return: (result, descriptive text) where result indicates the number of updated files, negative if error
         '''
-        self.__remove_quotes(UPDATE)
                 #gettting uuid 
         uuid = WHERE['uuid'] if 'uuid' in WHERE else None
 
         cmd= "UPDATE " + table +" SET " + \
-            ",".join(map(lambda x: str(x)+ ('=Null' if UPDATE[x] is None else "='"+ str(UPDATE[x]) +"'"  ),   UPDATE.keys() )) + \
-            " WHERE " + " and ".join(map(lambda x: str(x)+ (' is Null' if WHERE[x] is None else"='"+str(WHERE[x])+"'" ),  WHERE.keys() ))
+            ",".join(map(self.__tuple2db_format_set, UPDATE.iteritems() )) + \
+            " WHERE " + " and ".join(map(self.__tuple2db_format_where, WHERE.iteritems() ))
         print cmd
         self.cur.execute(cmd) 
         nb_rows = self.cur.rowcount
@@ -194,9 +262,8 @@ class nfvo_db():
             print cmd
             self.cur.execute(cmd)
         #insertion
-        cmd= "INSERT INTO " + table +" (" + \
-            ",".join(map(str, INSERT.keys() ))   + ") VALUES(" + \
-            ",".join(map(lambda x: 'Null' if x is None else "'"+str(x)+"'", INSERT.values() )) + ")"
+        cmd= "INSERT INTO " + table +" SET " + \
+            ",".join(map(self.__tuple2db_format_set, INSERT.iteritems() )) 
         print cmd
         self.cur.execute(cmd)
         nb_rows = self.cur.rowcount
@@ -305,11 +372,11 @@ class nfvo_db():
         #print 'from_', from_
         if 'WHERE' in sql_dict and len(sql_dict['WHERE']) > 0:
             w=sql_dict['WHERE']
-            where_ = "WHERE " + " AND ".join(map( lambda x: str(x) + (" is Null" if w[x] is None else "='"+str(w[x])+"'"),  w.keys()) ) 
+            where_ = "WHERE " + " AND ".join(map(self.__tuple2db_format_where, w.iteritems())) 
         else: where_ = ""
         if 'WHERE_NOT' in sql_dict and len(sql_dict['WHERE_NOT']) > 0: 
             w=sql_dict['WHERE_NOT']
-            where_2 = " AND ".join(map( lambda x: str(x) + (" is not Null" if w[x] is None else "<>'"+str(w[x])+"'"),  w.keys()) )
+            where_2 = " AND ".join(map(self.__tuple2db_format_where_not, w.iteritems()))
             if len(where_)==0:   where_ = "WHERE " + where_2
             else:                where_ = where_ + " AND " + where_2
         if 'WHERE_NOTNULL' in sql_dict and len(sql_dict['WHERE_NOTNULL']) > 0: 
@@ -367,11 +434,11 @@ class nfvo_db():
         #print 'from_', from_
         if 'WHERE' in sql_dict and len(sql_dict['WHERE']) > 0:
             w=sql_dict['WHERE']
-            where_ = "WHERE " + " AND ".join(map( lambda x: str(x) + (" is Null" if w[x] is None else "='"+str(w[x])+"'"),  w.keys()) ) 
+            where_ = "WHERE " + " AND ".join(map(self.__tuple2db_format_where, w.iteritems() ))
         else: where_ = ""
         if 'WHERE_NOT' in sql_dict and len(sql_dict['WHERE_NOT']) > 0: 
             w=sql_dict['WHERE_NOT']
-            where_2 = " AND ".join(map( lambda x: str(x) + (" is not Null" if w[x] is None else "<>'"+str(w[x])+"'"),  w.keys()) )
+            where_2 = " AND ".join(map(self.__tuple2db_format_where_not, w.iteritems() ) )
             if len(where_)==0:   where_ = "WHERE " + where_2
             else:                where_ = where_ + " AND " + where_2
         if 'WHERE_NOTNULL' in sql_dict and len(sql_dict['WHERE_NOTNULL']) > 0: 
@@ -470,9 +537,8 @@ class nfvo_db():
                     print cmd
                     self.cur.execute(cmd)
                     #insert tenant
-                    cmd= "INSERT INTO nfvo_tenants (" + \
-                        ",".join(map(str, tenant_dict.keys() ))   + ") VALUES(" + \
-                        ",".join(map(lambda x: "Null" if x is None else "'"+str(x)+"'",tenant_dict.values() )) + ")"
+                    cmd= "INSERT INTO nfvo_tenants SET " + \
+                        ",".join(map(self.__tuple2db_format_set, tenant_dict.iteritems() ))
                     print cmd
                     self.cur.execute(cmd)
                     inserted = self.cur.rowcount
@@ -524,9 +590,8 @@ class nfvo_db():
                     print cmd
                     self.cur.execute(cmd)
                     #insert tenant
-                    cmd= "INSERT INTO datacenters (" + \
-                        ",".join(map(str, datacenter_dict.keys() ))   + ") VALUES(" + \
-                        ",".join(map(lambda x: "Null" if x is None else "'"+str(x)+"'",datacenter_dict.values() )) + ")"
+                    cmd= "INSERT INTO datacenters SET "
+                        ",".join(map(self.__tuple2db_format_set, datacenter_dict.iteritems() ))
                     print cmd
                     self.cur.execute(cmd)
                     inserted = self.cur.rowcount
@@ -581,9 +646,8 @@ class nfvo_db():
                     print cmd
                     self.cur.execute(cmd)
                     #insert tenant
-                    cmd= "INSERT INTO vim_tenants (" + \
-                        ",".join(map(str, vim_tenant_dict.keys() ))   + ") VALUES(" + \
-                        ",".join(map(lambda x: "Null" if x is None else "'"+str(x)+"'",vim_tenant_dict.values() )) + ")"
+                    cmd= "INSERT INTO vim_tenants SET " + \
+                        ",".join(map(self.__tuple2db_format_set, vim_tenant_dict.iteritems() ))
                     print cmd
                     self.cur.execute(cmd)
                     inserted = self.cur.rowcount
@@ -623,9 +687,8 @@ class nfvo_db():
                 with self.con:
                     self.cur = self.con.cursor()
                     #insert new association
-                    cmd= "INSERT INTO tenants_datacenters (" + \
-                        ",".join(map(str, association_dict.keys() ))   + ") VALUES(" + \
-                        ",".join(map(lambda x: "Null" if x is None else "'"+str(x)+"'",association_dict.values() )) + ")"
+                    cmd= "INSERT INTO tenants_datacenters SET " + \
+                        ",".join(map(self.__tuple2db_format_set, association_dict.iteritems() ))
                     print cmd
                     self.cur.execute(cmd)
                     inserted = self.cur.rowcount
@@ -877,7 +940,7 @@ class nfvo_db():
                         net.pop('net_id', None)
                         net['scenario_id']=scenario_uuid
                         if "graph" in net:
-                            net["graph"]=json.dumps(net["graph"])
+                            net["graph"]=yaml.safe_dump(net["graph"],default_flow_style=True,width=256)
                         r,net_uuid =  self._new_row_internal('sce_nets', net, tenant_id, True, True)
                         if r<0:
                             print 'nfvo_db.new_scenario Error inserting at table sce_vnfs: ' + net_uuid
@@ -892,7 +955,7 @@ class nfvo_db():
                                 'description': vnf['description']
                             }
                         if "graph" in vnf:
-                            INSERT_["graph"]=json.dumps(vnf["graph"])
+                            INSERT_["graph"]=yaml.safe_dump(vnf["graph"],default_flow_style=True,width=256)
                         r,scn_vnf_uuid =  self._new_row_internal('sce_vnfs', INSERT_, tenant_id, True, scenario_uuid, True)
                         if r<0:
                             print 'nfvo_db.new_scenario Error inserting at table sce_vnfs: ' + scn_vnf_uuid
@@ -948,7 +1011,7 @@ class nfvo_db():
                     #sce_nets
                     for node_id, node in nodes.items():
                         if "graph" in node:
-                            node["graph"] = json.dumps(node["graph"])
+                            node["graph"] = yaml.safe_dump(node["graph"],default_flow_style=True,width=256)
                         WHERE_={'scenario_id': scenario_uuid, 'uuid': node_id}
                         r,c =  self.__update_rows('sce_nets', node, WHERE_)
                         if r<=0:

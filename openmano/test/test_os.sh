@@ -112,70 +112,140 @@ then
 
 elif [[ $action == "delete" ]]
 then
-    openmano instance-scenario-delete -f simple-instance     || echo "fail" >&2
-    openmano instance-scenario-delete -f complex2-instance   || echo "fail" >&2
-    openmano scenario-delete -f simple       || echo "fail" >&2
-    openmano scenario-delete -f complex2     || echo "fail" >&2
-    openmano vnf-delete -f linux             || echo "fail" >&2
-    openmano vnf-delete -f dataplaneVNF_2VMs || echo "fail" >&2
-    openmano vnf-delete -f dataplaneVNF3     || echo "fail" >&2
-    openmano datacenter-detach myos          || echo "fail" >&2
-    openmano datacenter-delete -f myos       || echo "fail" >&2
-    openmano tenant-delete -f mytenant-os    || echo "fail" >&2
+    result=`openmano tenant-list TOS-tenant`
+    nfvotenant=`echo $result |gawk '{print $1}'`
+    #check a valid uuid is obtained
+    is_valid_uuid $nfvotenant || ! echo "Tenant TOS-tenant not found. Already delete?" >&2 || $_exit 1
+    export OPENMANO_TENANT=$nfvotenant
+    openmano instance-scenario-delete -f simple-instance     || echo "fail"
+    openmano instance-scenario-delete -f complex2-instance   || echo "fail"
+    openmano scenario-delete -f simple       || echo "fail"
+    openmano scenario-delete -f complex2     || echo "fail"
+    openmano vnf-delete -f linux             || echo "fail"
+    openmano vnf-delete -f linux             || echo "fail"
+    openmano vnf-delete -f dataplaneVNF_2VMs || echo "fail"
+    openmano vnf-delete -f dataplaneVNF3     || echo "fail"
+    openmano vnf-delete -f TOS-VNF1          || echo "fail"
+    openmano datacenter-detach TOS-dc        || echo "fail"
+    openmano datacenter-delete -f TOS-dc     || echo "fail"
+    openmano tenant-delete -f TOS-tenant     || echo "fail"
 
 elif [[ $action == "create" ]]
 then 
 
-    echo "Creating openmano tenant 'mytenant-os'"
-    result=`openmano tenant-create mytenant-os --description=mytenant`
+    printf "%-50s" "Creating openmano tenant 'TOS-tenant': "
+    result=`openmano tenant-create TOS-tenant --description="created by test_os.sh"`
     nfvotenant=`echo $result |gawk '{print $1}'`
     #check a valid uuid is obtained
-    is_valid_uuid $nfvotenant || ! echo "fail" >&2 || echo $result >$2 || $_exit 1 
+    ! is_valid_uuid $nfvotenant && echo "FAIL" && echo "    $result" && $_exit 1 
     export OPENMANO_TENANT=$nfvotenant
     [[ $insert_bashrc == y ]] && echo -e "\nexport OPENMANO_TENANT=$nfvotenant"  >> ~/.bashrc
-    echo "  $nfvotenant"
+    echo $nfvotenant
 
-    echo "Creating datacenter 'myos' in openmano"
-    result=`openmano datacenter-create myos "${OS_AUTH_URL}" "--type=openstack" "--config=${OS_CONFIG}"`
+    printf "%-50s" "Creating datacenter 'TOS-dc' in openmano:"
+    result=`openmano datacenter-create TOS-dc "${OS_AUTH_URL}" "--type=openstack" "--config=${OS_CONFIG}"`
     datacenter=`echo $result |gawk '{print $1}'`
     #check a valid uuid is obtained
-    is_valid_uuid $datacenter || ! echo "fail" >&2 || echo $result >$2 || $_exit 1 
-    echo "  $datacenter"
+    ! is_valid_uuid $datacenter && echo "FAIL" && echo "    $result" && $_exit 1 
+    echo $datacenter
     export OPENMANO_DATACENTER=$datacenter
     [[ $insert_bashrc == y ]] && echo -e "\nexport OPENMANO_DATACENTER=$datacenter"  >> ~/.bashrc
 
-    echo "Adding openmano environment variables to ~/.bashrc"
-    echo "export OPENMANO_TENANT=$nfvotenant" >> ~/.bashrc
-    echo "export OPENMANO_DATACENTER=$datacenter" >> ~/.bashrc
+    printf "%-50s" "Attaching openmano tenant to the datacenter:"
+    result=`openmano datacenter-attach TOS-dc "--user=$OS_USERNAME" "--password=$OS_PASSWORD" "--vim-tenant-name=$OS_TENANT_NAME"`
+    [[ $? != 0 ]] && echo  "FAIL" && echo "    $result" && $_exit 1
+    echo OK
 
-    echo "Attaching openmano tenant to the datacenter and the openvim tenant"
-    openmano datacenter-attach myos "--user=$OS_USERNAME" "--password=$OS_PASSWORD" "--vim-tenant-name=$OS_TENANT_NAME"  || ! echo "fail" >&2 || $_exit 1 
+    printf "%-50s" "Updating external nets in openmano: "
+    result=`openmano datacenter-net-update -f TOS-dc`
+    [[ $? != 0 ]] && echo  "FAIL" && echo "    $result"  && $_exit 1
+    echo OK
 
-    echo "Updating external nets in openmano"
-    openmano datacenter-net-update -f myos || ! echo "fail" >&2 || $_exit 1
-
-    echo "Adding particular configuration - VNFs"
+    printf "%-50s" "Creating VNF 'linux': "
     #glance image-create --file=./US1404dpdk.qcow2 --name=US1404dpdk --disk-format=qcow2 --min-disk=2 --is-public=True --container-format=bare
     #nova image-meta US1404dpdk set location=/mnt/powervault/virtualization/vnfs/os/US1404dpdk.qcow2
-
-
     #glance image-create --file=./US1404user.qcow2 --min-disk=2 --is-public=True --container-format=bare --name=US1404user --disk-format=qcow2
     #nova image-meta US1404user  set location=/mnt/powervault/virtualization/vnfs/os/US1404user.qcow2
+    result=`openmano vnf-create $DIRmano/vnfs/examples/linux.yaml "--image-path=$OS_TEST_IMAGE_PATH_LINUX"`
+    vnf=`echo $result |gawk '{print $1}'`
+    #check a valid uuid is obtained
+    ! is_valid_uuid $vnf && echo FAIL && echo "    $result" &&  $_exit 1
+    echo $vnf
+    
+    printf "%-50s" "Creating VNF 1PF,1VF,2GHP,4PThreads: "
+    result=`openmano vnf-create "vnf:
+        name: TOS-VNF1
+        external-connections:
+        - name: eth0
+          type: mgmt
+          VNFC: TOS-VNF1-VM
+          local_iface_name: eth0
+        - name: PF0
+          type: data
+          VNFC: TOS-VNF1-VM
+          local_iface_name: PF0
+        - name: VF0
+          type: data
+          VNFC: TOS-VNF1-VM
+          local_iface_name: VF0
+        VNFC: 
+        - name: TOS-VNF1-VM
+          VNFC image: $OS_TEST_IMAGE_PATH_LINUXDATA
+          numas:
+          - paired-threads: 2
+            paired-threads-id: [ [0,2], [1,3] ]
+            memory: 2
+            interfaces:
+            - name:  PF0
+              vpci: '0000:00:11.0'
+              dedicated: 'yes'
+              bandwidth: 10 Gbps
+              mac_address: '20:33:45:56:77:44'
+            - name:  VF0
+              vpci:  '0000:00:12.0'
+              dedicated: 'no'
+              bandwidth: 1 Gbps
+              mac_address: '20:33:45:56:77:45'
+          bridge-ifaces:
+          - name: eth0
+            vpci: '0000:00:09.0'
+            bandwidth: 1 Mbps
+            mac_address: '20:33:45:56:77:46'
+            model: e1000
+       "`
+    vnf=`echo $result |gawk '{print $1}'`
+    ! is_valid_uuid $vnf && echo FAIL && echo "    $result" && $_exit 1
+    echo $vnf
+ 
+    printf "%-50s" "Creating VNF 'dataplaneVNF_2VMs': "
+    result=`openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF_2VMs.yaml "--image-path=$OS_TEST_IMAGE_PATH_LINUXDATA,$OS_TEST_IMAGE_PATH_LINUXDATA"`
+    vnf=`echo $result |gawk '{print $1}'`
+    ! is_valid_uuid $vnf && echo FAIL && echo "    $result" && $_exit 1
+    echo $vnf
+ 
+    printf "%-50s" "Creating VNF 'dataplaneVNF3.yaml': "
+    result=`openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF3.yaml "--image-path=$OS_TEST_IMAGE_PATH_LINUXDATA"`
+    vnf=`echo $result |gawk '{print $1}'`
+    ! is_valid_uuid $vnf && echo FAIL && echo "    $result" && $_exit 1
+    echo $vnf
 
-    openmano vnf-create $DIRmano/vnfs/examples/linux.yaml "--image-path=$OS_TEST_IMAGE_PATH_LINUX"  || ! echo "fail" >&2 || $_exit 1
-    #openmano vnf-create $DIRmano/vnfs/examples/linux.yaml "--image-path=$OS_TEST_IMAGE_PATH_CIRROS" "--name=cirros"
-    #openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF1.yaml "--image-path=$OS_TEST_IMAGE_PATH_LINUX"  || ! echo "fail" >&2 || $_exit 1
-    #openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF2.yaml "--image-path=$OS_TEST_IMAGE_PATH_LINUXDATA" || ! echo "fail" >&2 || $_exit 1
-    openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF_2VMs.yaml "--image-path=$OS_TEST_IMAGE_PATH_LINUXDATA,$OS_TEST_IMAGE_PATH_LINUXDATA" || ! echo "fail" >&2 || $_exit 1
-    openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF3.yaml "--image-path=$OS_TEST_IMAGE_PATH_LINUXDATA"  || ! echo "fail" >&2 || $_exit 1
+    for sce in simple complex2
+    do
+      printf "%-50s" "Creating scenario '$sce':"
+      result=`openmano scenario-create $DIRmano/scenarios/examples/${sce}.yaml`
+      scenario=`echo $result |gawk '{print $1}'`
+      ! is_valid_uuid $scenario && echo FAIL && echo "    $result" &&  $_exit 1
+      echo $scenario
+    done
 
-    echo "Adding particular configuration - Scenarios"
-    openmano scenario-create $DIRmano/scenarios/examples/simple.yaml  || ! echo "fail" >&2 || $_exit 1
-    openmano scenario-create $DIRmano/scenarios/examples/complex2.yaml || ! echo "fail" >&2 || $_exit 1
-
-    echo "Adding particular configuration - Scenario instances"
-    openmano scenario-deploy simple simple-instance   || ! echo "fail" >&2 || $_exit 1
-    openmano scenario-deploy complex2 complex2-instance || ! echo "fail" >&2 || $_exit 1
+    for sce in simple complex2
+    do 
+      printf "%-50s" "Deploying scenario '$sce':"
+      result=`openmano scenario-deploy $sce ${sce}-instance`
+      instance=`echo $result |gawk '{print $1}'`
+      ! is_valid_uuid $instance && echo FAIL && echo "    $result" && $_exit 1
+      echo $instance
+    done
 
     echo
     echo DONE

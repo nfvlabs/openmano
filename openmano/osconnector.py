@@ -190,10 +190,10 @@ class osconnector():
             return 1, user.id
         except ksExceptions.ConnectionError, e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except ksExceptions.ClientException, e: #TODO remove
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -211,13 +211,13 @@ class osconnector():
             return 1, user_id
         except ksExceptions.ConnectionError, e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except ksExceptions.NotFound, e:
             error_value=-HTTP_Not_Found
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except ksExceptions.ClientException, e: #TODO remove
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -236,10 +236,10 @@ class osconnector():
             return 1, tenant.id
         except ksExceptions.ConnectionError, e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except ksExceptions.ClientException, e: #TODO remove
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -258,10 +258,10 @@ class osconnector():
             return 1, tenant_id
         except ksExceptions.ConnectionError, e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except ksExceptions.ClientException, e: #TODO remove
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -314,10 +314,10 @@ class osconnector():
             return 1, new_net["network"]["id"]
         except neExceptions.ConnectionFailed, e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except (ksExceptions.ClientException, neExceptions.NeutronException), e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -345,10 +345,10 @@ class osconnector():
             return 1, net_list
         except neClient.exceptions.ConnectionFailed, e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except (ksExceptions.ClientException, neExceptions.NeutronException), e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -386,18 +386,18 @@ class osconnector():
                 try:
                     self.neutron.delete_port(p["id"])
                 except Exception, e:
-                    print "Error deleting port: " + str(type(e))[6:-1] + ": "+  str(e)
+                    print "Error deleting port: " + type(e).__name__ + ": "+  str(e)
             self.neutron.delete_network(net_id)
             return 1, net_id
         except neClient.exceptions.ConnectionFailed, e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         except neExceptions.NetworkNotFoundClient, e:
             error_value=-HTTP_Not_Found
-            error_text= str(type(e))[6:-1] + ": "+  str(e.args[0])
+            error_text= type(e).__name__ + ": "+  str(e.args[0])
         except (ksExceptions.ClientException, neExceptions.NeutronException), e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -419,7 +419,7 @@ class osconnector():
             error_text= "flavor instance %s not found" % flavor_id
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -495,7 +495,7 @@ class osconnector():
             #except nvExceptions.BadRequest, e:
             except (ksExceptions.ClientException, nvExceptions.ClientException), e:
                 error_value=-HTTP_Bad_Request
-                error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
@@ -521,7 +521,7 @@ class osconnector():
             #except nvExceptions.BadRequest, e:
             except (ksExceptions.ClientException, nvExceptions.ClientException), e:
                 error_value=-HTTP_Bad_Request
-                error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
         if self.debug:
             print "delete_tenant_flavor " + error_text
@@ -584,19 +584,19 @@ class osconnector():
                 return 1, new_image.id
             except nvExceptions.Conflict, e:
                 error_value=-HTTP_Conflict
-                error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
             except (HTTPException, gl1Exceptions.HTTPException, gl1Exceptions.CommunicationError), e:
                 error_value=-HTTP_Bad_Request
-                error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 continue
             except IOError, e:  #can not open the file
                 error_value=-HTTP_Bad_Request
-                error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
             except (ksExceptions.ClientException, nvExceptions.ClientException), e:
                 error_value=-HTTP_Bad_Request
-                error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
@@ -622,7 +622,7 @@ class osconnector():
             #except nvExceptions.BadRequest, e:
             except (ksExceptions.ClientException, nvExceptions.ClientException), e: #TODO remove
                 error_value=-HTTP_Bad_Request
-                error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
         if self.debug:
             print "delete_tenant_image " + error_text
@@ -664,10 +664,12 @@ class osconnector():
                 else: #VF
                     port_dict={
                          "network_id": net["net_id"],
-                         "name": net["name"],
+                         "name": net.get("name"),
                          "binding:vnic_type": "direct", 
                          "admin_state_up": True
                     }
+                    if not port_dict["name"]:
+                        port_dict["name"] = name
                     if net.get("mac_address"):
                         port_dict["mac_address"]=net["mac_address"]
                     #TODO: manage having SRIOV without vlan tag
@@ -691,7 +693,7 @@ class osconnector():
 #            error_text= "vm instance %s not found" % vm_id
         except (ksExceptions.ClientException, nvExceptions.ClientException, ConnectionError), e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -712,7 +714,7 @@ class osconnector():
             error_text= "vm instance %s not found" % vm_id
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -735,7 +737,7 @@ class osconnector():
             error_text= (str(e) if len(e.args)==0 else str(e.args[0]))
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -842,7 +844,7 @@ class osconnector():
             error_text= (str(e) if len(e.args)==0 else str(e.args[0]))
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -866,7 +868,7 @@ class osconnector():
             error_text= (str(e) if len(e.args)==0 else str(e.args[0]))
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -895,7 +897,7 @@ class osconnector():
             error_text= (str(e) if len(e.args)==0 else str(e.args[0]))
         except (ksExceptions.ClientException, nvExceptions.ClientException), e:
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
@@ -918,7 +920,7 @@ class osconnector():
             return 0, "image with location '%s' not found" % path
         except (ksExceptions.ClientException, nvExceptions.ClientException), e: #TODO remove
             error_value=-HTTP_Bad_Request
-            error_text= str(type(e))[6:-1] + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         if self.debug:
             print "get_image_id_from_path " + error_text
         #if reaching here is because an exception

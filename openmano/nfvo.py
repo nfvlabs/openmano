@@ -29,7 +29,7 @@ __date__ ="$16-sep-2014 22:05:01$"
 
 import vimconnector
 import osconnector
-import json
+#import json
 import yaml
 import os
 from utils import auxiliary_functions as af
@@ -111,13 +111,13 @@ def get_vim(mydb, nfvo_tenant=None, datacenter_id=None, datacenter_name=None, vi
         return result, content
     elif result==0:
         print "nfvo.get_vim not found a valid VIM with the input params " + str(WHERE_dict)
-        return -HTTP_Not_Found, "datacenter not found for " +  json.dumps(WHERE_dict)
+        return -HTTP_Not_Found, "datacenter not found for " +  str(WHERE_dict)
     #print content
     vim_dict={}
     for vim in content:
         extra={'vim_tenants_uuid': vim.get('vim_tenants_uuid')}
         if vim["config"] != None:
-            extra.update(json.loads(vim["config"]))
+            extra.update(yaml.load(vim["config"]))
         if vim["type"]=="openvim":
             vim_dict[ vim['datacenter_id'] ] = vimconnector.vimconnector(
                             uuid=vim['datacenter_id'], name=vim['datacenter_name'],
@@ -304,7 +304,7 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
     if 'extended' in flavor_dict and flavor_dict['extended']==None:
         del flavor_dict['extended']
     if 'extended' in flavor_dict:
-        temp_flavor_dict['extended']=json.dumps(flavor_dict['extended'])
+        temp_flavor_dict['extended']=yaml.safe_dump(flavor_dict['extended'],default_flow_style=True,width=256)
 
     #look if flavor exist
     if only_create_at_vim:
@@ -328,7 +328,7 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
                     image_metadata_dict = device('image metadata', None)
                     image_metadata_str = None
                     if image_metadata_dict != None: 
-                        image_metadata_str = json.dumps(image_metadata_dict)
+                        image_metadata_str = yaml.safe_dump(image_metadata_dict,default_flow_style=True,width=256)
                     image_dict['metadata']=image_metadata_str
                     res, image_id = create_or_use_image(mydb, vims, image_dict, rollback_list)
                     if res < 0:
@@ -383,7 +383,7 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
                 image_metadata_dict = device.get('image metadata', None)
                 image_metadata_str = None
                 if image_metadata_dict != None: 
-                    image_metadata_str = json.dumps(image_metadata_dict)
+                    image_metadata_str = yaml.safe_dump(image_metadata_dict,default_flow_style=True,width=256)
                 image_dict['metadata']=image_metadata_str
                 r,image_vim_id=create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vim=True)
                 if r<0:
@@ -532,7 +532,7 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
             image_metadata_dict = vnfc.get('image metadata', None)
             image_metadata_str = None
             if image_metadata_dict is not None: 
-                image_metadata_str = json.dumps(image_metadata_dict)
+                image_metadata_str = yaml.safe_dump(image_metadata_dict,default_flow_style=True,width=256)
             image_dict['metadata']=image_metadata_str
             #print "create_or_use_image", mydb, vims, image_dict, rollback_list
             res, image_id = create_or_use_image(mydb, vims, image_dict, rollback_list)
@@ -552,7 +552,7 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
     vnf_descriptor_filename = global_config['vnf_repository'] + "/" + vnf_name + ".vnfd"
     if not os.path.exists(vnf_descriptor_filename):
         f = file(vnf_descriptor_filename, "w")
-        f.write(json.dumps(vnf_descriptor, indent=4) + os.linesep)
+        yaml.safe_dump(vnf_descriptor, stream=f, indent=4, explicit_start=True, default_flow_style=False) 
         f.close()
 
     # Step 8. Adding the VNF to the NFVO DB
@@ -692,7 +692,7 @@ def get_hosts(mydb, nfvo_tenant_id):
     if result < 0:
         return result, hosts
     print '==================='
-    print 'hosts '+ json.dumps(hosts, indent=4)
+    print 'hosts '+ yaml.safe_dump(hosts, indent=4, default_flow_style=False)
 
     datacenter = {'Datacenters': [ {'name':myvim['name'],'servers':[]} ] }
     for host in hosts:
@@ -1098,7 +1098,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                 print "start_scenario error getting flavor", flavor_dict
                 return res, flavor_dict
             if flavor_dict['extended']!=None:
-                flavor_dict['extended']= json.loads(flavor_dict['extended'])
+                flavor_dict['extended']= yaml.load(flavor_dict['extended'])
             res, flavor_id = create_or_use_flavor(mydb, vims, flavor_dict, [], True)                
             if res < 0:
                 print "start_scenario error adding flavor to VIM", flavor_dict
@@ -1156,8 +1156,8 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                 myVMDict['networks'].append(netDict)
             print ">>>>>>>>>>>>>>>>>>>>>>>>>>>"
             print myVMDict['name']
-            print "networks", json.dumps(myVMDict['networks'], indent=4)
-            print "interfaces", json.dumps(vm['interfaces'], indent=4)
+            print "networks", yaml.safe_dump(myVMDict['networks'], indent=4, default_flow_style=False)
+            print "interfaces", yaml.safe_dump(vm['interfaces'], indent=4, default_flow_style=False)
             print ">>>>>>>>>>>>>>>>>>>>>>>>>>>"
             result, vm_id = myvim.new_tenant_vminstance(myVMDict['name'],myVMDict['description'],myVMDict.get('start', None),
                     myVMDict['imageRef'],myVMDict['flavorRef'],myVMDict['networks'])
@@ -1180,7 +1180,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
     
     print "==================Deployment done=========="
     scenarioDict['vim_tenants_uuid'] = vim_tenants_uuid
-    print json.dumps(scenarioDict, indent=4)
+    print yaml.safe_dump(scenarioDict, indent=4, default_flow_style=False)
     #r,c = mydb.new_instance_scenario_as_a_whole(nfvo_tenant,scenarioDict['name'],scenarioDict)
     result,c = mydb.new_instance_scenario_as_a_whole(nfvo_tenant,instance_scenario_name, instance_scenario_description, scenarioDict)
     if result <0:
@@ -1201,7 +1201,7 @@ def delete_instance(mydb,nfvo_tenant,instance_id):
     elif result == 0:
         print "delete_instance error. Instance not found"
         return result, instanceDict
-    print json.dumps(instanceDict, indent=4)
+    print yaml.safe_dump(instanceDict, indent=4, default_flow_style=False)
     
     print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
     result, vims = get_vim(mydb, nfvo_tenant, instanceDict['datacenter_id'])
@@ -1407,7 +1407,7 @@ def delete_tenant(mydb, tenant):
 
 def new_datacenter(mydb, datacenter_descriptor):
     if "config" in datacenter_descriptor:
-        datacenter_descriptor["config"]=json.dumps(datacenter_descriptor["config"])
+        datacenter_descriptor["config"]=yaml.safe_dump(datacenter_descriptor["config"],default_flow_style=True,width=256)
     result, datacenter_id = mydb.new_row("datacenters", datacenter_descriptor, None, add_uuid=True, log=True)
     if result < 0:
         return result, datacenter_id
@@ -1424,8 +1424,8 @@ def edit_datacenter(mydb, datacenter_id, datacenter_descriptor):
     if "config" in datacenter_descriptor:
         if datacenter_descriptor['config']!=None:
             try:
-                new_config_dict = json.dumps(datacenter_descriptor["config"])
-                config_dict = json.dumps(content["config"])
+                new_config_dict = datacenter_descriptor["config"]
+                config_dict = yaml.load(content["config"])
                 config_dict.update(new_config_dict)
                 #delete null fields
                 for k in config_dict:
@@ -1433,10 +1433,8 @@ def edit_datacenter(mydb, datacenter_id, datacenter_descriptor):
                         del config_dict[k]
             except Exception,e:
                 return -HTTP_Bad_Request, "Bad format at datacenter:config " + str(e)
-        datacenter_descriptor["config"]= json.dumps(config_dict) if len(config_dict)>0 else None
+        datacenter_descriptor["config"]= yaml.safe_dump(config_dict,default_flow_style=True,width=256) if len(config_dict)>0 else None
     result, content = mydb.update_rows('datacenters', datacenter_descriptor, where)
-
-    result, content = mydb.new_row("datacenters", datacenter_descriptor, None, add_uuid=True, log=True)
     if result < 0:
         return result, datacenter_id
     return 200, datacenter_id
