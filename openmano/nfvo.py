@@ -27,8 +27,7 @@ NFVO engine, implementing all the methods for the creation, deletion and managem
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$16-sep-2014 22:05:01$"
 
-import vimconnector
-import osconnector
+import imp
 #import json
 import yaml
 import os
@@ -37,6 +36,10 @@ from nfvo_db import HTTP_Unauthorized, HTTP_Bad_Request, HTTP_Internal_Server_Er
     HTTP_Conflict
 
 global global_config
+global vimconn_imported
+
+vimconn_imported={} #dictionary with VIM type as key, loaded module as value
+
 
 def get_flavorlist(mydb, vnf_id, nfvo_tenant=None):
     '''Obtain flavorList
@@ -118,24 +121,34 @@ def get_vim(mydb, nfvo_tenant=None, datacenter_id=None, datacenter_name=None, vi
         extra={'vim_tenants_uuid': vim.get('vim_tenants_uuid')}
         if vim["config"] != None:
             extra.update(yaml.load(vim["config"]))
-        if vim["type"]=="openvim":
-            vim_dict[ vim['datacenter_id'] ] = vimconnector.vimconnector(
+        if vim["type"] not in vimconn_imported:
+            module_info=None
+            try:
+                module = "vimconn_" + vim["type"]
+                module_info = imp.find_module(module)
+                vim_conn = imp.load_module(vim["type"], *module_info)
+                vimconn_imported[vim["type"]] = vim_conn
+            except (IOError, ImportError) as e:
+                if module_info and module_info[0]:
+                    file.close(module_info[0])
+                print "Cannot open VIM module '%s.py'; %s: %s" % ( module, type(e).__name__, str(e))
+                return -HTTP_Bad_Request, "Unknown vim type %s" % vim["type"]
+
+        try:
+            tenant=vim.get('vim_tenant_id')
+            if not tenant:
+                tenant=vim.get('vim_tenant_name')
+            #if not tenant:
+            #    return -HTTP_Bad_Request, "You must provide a valid tenant name or uuid for VIM  %s" % ( vim["type"])
+            vim_dict[ vim['datacenter_id'] ] = vimconn_imported[ vim["type"] ].vimconnector(
                             uuid=vim['datacenter_id'], name=vim['datacenter_name'],
-                            tenant=vim.get('vim_tenant_id'), 
+                            tenant=tenant, 
                             url=vim['vim_url'], url_admin=vim['vim_url_admin'], 
                             user=vim.get('user'), passwd=vim.get('passwd'),
                             config=extra
                     )
-        elif vim["type"]=="openstack":
-            vim_dict[ vim['datacenter_id'] ] = osconnector.osconnector(
-                            uuid=vim['datacenter_id'], name=vim['datacenter_name'],
-                            tenant=vim.get('vim_tenant_name'), 
-                            url=vim['vim_url'], url_admin=vim['vim_url_admin'], 
-                            user=vim.get('user'),passwd=vim.get('passwd'),
-                            config=extra
-                    )
-        else:
-            return -HTTP_Internal_Server_Error, "Unknown vim type %s" % vim["type"]
+        except Exception as e:
+            return -HTTP_Internal_Server_Error, "Error at VIM  %s; %s: %s" % ( vim["type"], type(e).__name__, str(e))
     return len(vim_dict), vim_dict
 
 def rollback(mydb,  vims, rollback_list):
@@ -325,7 +338,7 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
                     if "image" not in device:
                         continue
                     image_dict={'location':device['image'], 'name':flavor_dict['name']+str(dev_nb)+"-img", 'description':flavor_dict.get('description')}
-                    image_metadata_dict = device('image metadata', None)
+                    image_metadata_dict = device.get('image metadata', None)
                     image_metadata_str = None
                     if image_metadata_dict != None: 
                         image_metadata_str = yaml.safe_dump(image_metadata_dict,default_flow_style=True,width=256)
@@ -371,10 +384,11 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
                 dev={}
                 dev.update(device)
                 devices_original.append(dev)
-                if 'image' in dev:
-                    del dev['image']
-                if 'image metadata' in dev:
-                    del dev['image metadata']
+                if 'image' in device:
+                    del device['image']
+                if 'image metadata' in device:
+                    del device['image metadata']
+            dev_nb=0
             for index in range(0,len(devices_original)) :
                 device=devices_original[index]
                 if "image" not in device:
@@ -385,12 +399,19 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
                 if image_metadata_dict != None: 
                     image_metadata_str = yaml.safe_dump(image_metadata_dict,default_flow_style=True,width=256)
                 image_dict['metadata']=image_metadata_str
+                r,image_mano_id=create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vim=False)
+                if r<0:
+                    print "Error creating device image for flavor: %s." %image_mano_id
+                    error=True
+                    break
+                image_dict["uuid"]=image_mano_id
                 r,image_vim_id=create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vim=True)
                 if r<0:
                     print "Error creating device image for flavor at VIM: %s." %image_vim_id
                     error=True
                     break
                 flavor_dict["extended"]["devices"][index]['imageRef']=image_vim_id
+                dev_nb += 1
         if error:
             continue
         if res_db>0:
@@ -1111,8 +1132,12 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             myVMDict['networks'] = []
             for iface in vm['interfaces']:
                 netDict = {}
+                if iface['type']=="data":
+                    netDict['type'] = iface['model']
+                elif "model" in iface and iface["model"]!=None:
+                    netDict['model']=iface['model']
+                #TODO in future, remove this because mac_address will not be set, and the type of PV,VF is obtained from iterface table model
                 #discover type of interface looking at flavor
-                #TODO in future, move this information to database interfaces table
                 for numa in flavor_dict.get('extended',{}).get('numas',[]):
                     for flavor_iface in numa.get('interfaces',[]):
                         if flavor_iface.get('name') == iface['internal_name']:
@@ -1121,11 +1146,11 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                             elif flavor_iface['dedicated'] == 'no':
                                 netDict['type']="VF"    #siov
                             elif flavor_iface['dedicated'] == 'yes:sriov':
-                                netDict['type']="VF not shared"   #sriov but only one sriov on the PF
+                                netDict['type']="VFnotShared"   #sriov but only one sriov on the PF
                             netDict["mac_address"] = flavor_iface.get("mac_address")
                             break;
                 netDict["use"]=iface['type']
-                if netDict["use"]=="data" and not "type" in netDict:
+                if netDict["use"]=="data" and not netDict.get("type"):
                     #print "netDict", netDict
                     #print "iface", iface
                     e_text = "Cannot determine the interface type PF or VF of VNF '%s' VM '%s' iface '%s'" %(sce_vnf['name'], vm['name'], iface['internal_name'])
@@ -1139,8 +1164,6 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                 if "vpci" in iface and iface["vpci"] is not None:
                     netDict['vpci'] = iface['vpci']
                 netDict['name'] = iface['internal_name']
-                if "model" in iface and iface["model"]!=None:
-                    netDict['model']=iface['model']
                 if iface['net_id'] is None:
                     for vnf_iface in sce_vnf["interfaces"]:
                         print iface
@@ -1348,7 +1371,7 @@ def instance_action(mydb,nfvo_tenant,instance_id, action_dict):
     elif result == 0:
         print "instance_action error. Instance not found"
         return -HTTP_Not_Found, "instance %s not found" % instance_id
-    #print json.dumps(instanceDict, indent=4)
+    #print yaml.safe_dump(instanceDict, indent=4, default_flow_style=False)
 
     print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
     result, vims = get_vim(mydb, nfvo_tenant, instanceDict['datacenter_id'])
@@ -1367,7 +1390,8 @@ def instance_action(mydb,nfvo_tenant,instance_id, action_dict):
     for sce_vnf in instanceDict['vnfs']:
         for vm in sce_vnf['vms']:
             if not action_over_all:
-                if sce_vnf['uuid'] not in input_vnfs and vm['uuid'] not in input_vms:
+                if sce_vnf['uuid'] not in input_vnfs and sce_vnf['vnf_name'] not in input_vnfs and \
+                    vm['uuid'] not in input_vms and vm['name'] not in input_vms:
                     continue
             result, vm_id = myvim.action_tenant_vminstance(vm['vim_vm_id'],action_dict)
             if vm_result < 0:

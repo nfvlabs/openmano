@@ -514,6 +514,34 @@ def instance_scenario_delete(args):
         print content['error']['description']
     return result
 
+def instance_scenario_action(args):
+    #print "instance-scenario-action", args
+    action={}
+    action[ args.action ] = None
+    if args.vnf:
+        action["vnfs"] = args.vnf
+    if args.vm:
+        action["vms"] = args.vm
+    
+    headers_req = {'content-type': 'application/json'}
+    payload_req = json.dumps(action, indent=4)
+    URLrequest = "http://%s:%s/openmano/%s/instances/%s/action" %(mano_host, mano_port, mano_tenant, args.name)
+    mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
+    #print mano_response
+    result = 0 if mano_response.status_code==200 else mano_response.status_code
+    content = mano_response.json()
+    #print json.dumps(content, indent=4)
+    if mano_response.status_code == 200:
+        if args.verbose:
+            print yaml.safe_dump(content, indent=4, default_flow_style=False)
+            return result
+        for uuid,c in content.iteritems():
+            print "%s %s %s" %(uuid.ljust(38), c['name'].ljust(20),c['description'].ljust(20))
+    else:
+        print content['error']['description']
+    return result
+
+
 def instance_vnf_list(args):
     print "instance-vnf-list"
     return 0
@@ -798,6 +826,16 @@ if __name__=="__main__":
     instance_scenario_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
     instance_scenario_delete_parser.set_defaults(func=instance_scenario_delete)
     
+    instance_scenario_action_parser = subparsers.add_parser('instance-scenario-action', help="invoke an action over part or the whole scenario instance")
+    instance_scenario_action_parser.add_argument("name", action="store", help="name or uuid of the scenario instance")
+    instance_scenario_action_parser.add_argument("action", action="store", type=str, \
+            choices=["start","pause","resume","shutoff","shutdown","forceOff","rebuild","reboot"],\
+            help="action to send")
+    instance_scenario_action_parser.add_argument("--vnf", action="append", help="VNF to act on (can use several entries)")
+    instance_scenario_action_parser.add_argument("--vm", action="append", help="VM to act on (can use several entries)")
+    instance_scenario_action_parser.add_argument('--verbose', '-v', action='count')
+    instance_scenario_action_parser.set_defaults(func=instance_scenario_action)
+
     #instance_scenario_status_parser = subparsers.add_parser('instance-scenario-status', help="show the status of a scenario instance")
     #instance_scenario_status_parser.add_argument("name", action="store", help="name or uuid of the scenario instance")
     #instance_scenario_status_parser.set_defaults(func=instance_scenario_status)

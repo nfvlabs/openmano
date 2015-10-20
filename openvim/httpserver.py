@@ -1944,8 +1944,8 @@ def http_put_port_id(port_id):
         new_net = port_dict['net_id']
         if old_net != new_net:
             
+            if new_net is not None: nets.append(new_net) #put first the new net, so that new openflow rules are created before removing the old ones 
             if old_net is not None: nets.append(old_net)
-            if new_net is not None: nets.append(new_net)
             if port['type'] == 'instance:bridge':
                 bottle.abort(HTTP_Forbidden, "bridge interfaces cannot be attached to a different net")
                 return

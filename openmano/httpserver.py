@@ -37,7 +37,7 @@ import datetime
 
 from jsonschema import validate as js_v, exceptions as js_e
 from openmano_schemas import vnfd_schema_v01, vnfd_schema_v02, \
-                            scenario_new_schema, scenario_edit_schema, \
+                            nsd_schema_v01, nsd_schema_v02, scenario_edit_schema, \
                             scenario_action_schema, instance_scenario_action_schema, \
                             tenant_schema, tenant_edit_schema,\
                             datacenter_schema, datacenter_edit_schema, datacenter_action_schema, datacenter_associate_schema
@@ -699,8 +699,9 @@ def http_options_deploy(path):
 def http_post_deploy(tenant_id):
     '''post topology deploy.'''
     print "http_post_deploy by tenant " + tenant_id 
-    http_content,_ = format_in( scenario_new_schema )
-    #r = af.remove_extra_items(http_content, scenario_new_schema)
+
+    http_content, used_schema = format_in( nsd_schema_v01, ("version",), {"v0.2": nsd_schema_v02})
+    #r = af.remove_extra_items(http_content, used_schema)
     #if r is not None: print "http_post_deploy: Warning: remove extra items ", r
     print "http_post_deploy input: ",  http_content
     
@@ -732,9 +733,9 @@ def http_post_verify(tenant_id):
 def http_post_scenarios(tenant_id):
     '''add a scenario into the catalogue. Creates the scenario and its internal structure in the OPENMANO DB'''
     print "http_post_scenarios by tenant " + tenant_id 
-    http_content,_ = format_in( scenario_new_schema )
-    #r = af.remove_extra_items(http_content, scenario_new_schema)
-    #if r is not None: print "http_post_deploy: Warning: remove extra items ", r
+    http_content, used_schema = format_in( nsd_schema_v01, ("version",), {"v0.2": nsd_schema_v02})
+    #r = af.remove_extra_items(http_content, used_schema)
+    #if r is not None: print "http_post_scenarios: Warning: remove extra items ", r
     print "http_post_scenarios input: ",  http_content
     
     result, data = nfvo.new_scenario(mydb, tenant_id, http_content)
@@ -977,6 +978,7 @@ def http_post_instance_scenario_action(tenant_id, instance_id):
     if result < 0:
         print "http_get_instance_id error %d %s" % (-result, data)
         bottle.abort(-result, data)
+    instance_id = data["uuid"]
     
     result, data = nfvo.instance_action(mydb, tenant_id, instance_id, http_content)
     if result < 0:

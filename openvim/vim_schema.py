@@ -472,7 +472,7 @@ networks_schema={
             "uuid":id_schema,
             "mac_address": mac_schema,
             "model": {"type":"string", "enum":["virtio","e1000","ne2k_pci","pcnet","rtl8139"]},
-            "type": {"type":"string", "enum":["virtual","PF","VF","VF not shared"]}
+            "type": {"type":"string", "enum":["virtual","PF","VF","VFnotShared"]}
         },
         "additionalProperties": False,
         "required": ["uuid"]

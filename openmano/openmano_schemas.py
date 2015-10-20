@@ -125,7 +125,7 @@ tenant_edit_schema = {
 datacenter_schema_properties={
                 "name": name_schema,
                 "description": description_schema,
-                "type": {"type":"string","enum":["openvim","openstack"]},
+                "type": name_schema, #currently "openvim" or "openstack", can be enlarge with plugins
                 "vim_url": description_schema,
                 "vim_url_admin": description_schema,
                 "config": {
@@ -220,239 +220,6 @@ datacenter_associate_schema={
         }
     },
     "required": ["datacenter"],
-    "additionalProperties": False
-}
-                             
-host_schema = {
-    "type":"object",
-    "properties":{
-        "id":id_schema,
-        "name": name_schema,
-    },
-    "required": ["id"]
-}
-image_schema = {
-    "type":"object",
-    "properties":{
-        "id":id_schema,
-        "name": name_schema,
-    },
-    "required": ["id","name"]
-}
-server_schema = {
-    "type":"object",
-    "properties":{
-        "id":id_schema,
-        "name": name_schema,
-    },
-    "required": ["id","name"]
-}
-new_host_response_schema = {
-    "title":"host response information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "host": host_schema
-    },
-    "required": ["host"],
-    "additionalProperties": False
-}
-
-get_images_response_schema = {
-    "title":"openvim images response information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "images":{
-            "type":"array",
-            "items": image_schema,
-        }
-    },
-    "required": ["images"],
-    "additionalProperties": False
-}
-
-get_hosts_response_schema = {
-    "title":"openvim hosts response information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "hosts":{
-            "type":"array",
-            "items": host_schema,
-        }
-    },
-    "required": ["hosts"],
-    "additionalProperties": False
-}
-
-get_host_detail_response_schema = new_host_response_schema # TODO: Content is not parsed yet
-
-get_server_response_schema = {
-    "title":"openvim server response information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "servers":{
-            "type":"array",
-            "items": server_schema,
-        }
-    },
-    "required": ["servers"],
-    "additionalProperties": False
-}
-
-new_tenant_response_schema = {
-    "title":"tenant response information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "tenant":{
-            "type":"object",
-            "properties":{
-                "id":id_schema,
-                "name": nameshort_schema,
-                "description":description_schema,
-                "enabled":{"type" : "boolean"}
-            },
-            "required": ["id"]
-        }
-    },
-    "required": ["tenant"],
-    "additionalProperties": False
-}
-
-new_network_response_schema = {
-    "title":"network response information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "network":{
-            "type":"object",
-            "properties":{
-                "id":id_schema,
-                "name":name_schema,
-                "type":{"type":"string", "enum":["bridge_man","bridge_data","data", "ptp"]},
-                "shared":{"type":"boolean"},
-                "tenant_id":id_schema,
-                "admin_state_up":{"type":"boolean"},
-                "vlan":vlan1000_schema
-            },
-            "required": ["id"]
-        }
-    },
-    "required": ["network"],
-    "additionalProperties": False
-}
-
-# get_network_response_schema = {
-#     "title":"get network response information schema",
-#     "$schema": "http://json-schema.org/draft-04/schema#",
-#     "type":"object",
-#     "properties":{
-#         "network":{
-#             "type":"object",
-#             "properties":{
-#                 "id":id_schema,
-#                 "name":name_schema,
-#                 "type":{"type":"string", "enum":["bridge_man","bridge_data","data", "ptp"]},
-#                 "shared":{"type":"boolean"},
-#                 "tenant_id":id_schema,
-#                 "admin_state_up":{"type":"boolean"},
-#                 "vlan":vlan1000_schema
-#             },
-#             "required": ["id"]
-#         }
-#     },
-#     "required": ["network"],
-#     "additionalProperties": False
-# }
-
-
-new_port_response_schema = {
-    "title":"port response information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "port":{
-            "type":"object",
-            "properties":{
-                "id":id_schema,
-            },
-            "required": ["id"]
-        }
-    },
-    "required": ["port"],
-    "additionalProperties": False
-}
-
-get_flavor_response_schema = {
-    "title":"openvim flavors response information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "flavor":{
-            "type":"object",
-            "properties":{
-                "id":   id_schema,
-                "name": name_schema,
-                "extended": {"type":"object"},
-            },
-            "required": ["id", "name"],
-        }
-    },
-    "required": ["flavor"],
-    "additionalProperties": False
-}
-
-new_flavor_response_schema = {
-    "title":"flavor response information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "flavor":{
-            "type":"object",
-            "properties":{
-                "id":id_schema,
-            },
-            "required": ["id"]
-        }
-    },
-    "required": ["flavor"],
-    "additionalProperties": False
-}
-
-new_image_response_schema = {
-    "title":"image response information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "image":{
-            "type":"object",
-            "properties":{
-                "id":id_schema,
-            },
-            "required": ["id"]
-        }
-    },
-    "required": ["image"],
-    "additionalProperties": False
-}
-
-new_vminstance_response_schema = {
-    "title":"server response information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "server":{
-            "type":"object",
-            "properties":{
-                "id":id_schema,
-            },
-            "required": ["id"]
-        }
-    },
-    "required": ["server"],
     "additionalProperties": False
 }
 
@@ -636,34 +403,13 @@ vnfd_schema_v02 = {
     "additionalProperties": False
 }
 
-vnfd_schema = vnfd_schema_v01
+#vnfd_schema = vnfd_schema_v01
 #{
 #    "title":"vnfd information schema v0.2",
 #    "$schema": "http://json-schema.org/draft-04/schema#",
 #    "oneOf": [vnfd_schema_v01, vnfd_schema_v02]
 #}
 
-get_processor_rankings_response_schema = {
-    "title":"processor rankings information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "type":"object",
-    "properties":{
-        "rankings":{
-            "type":"array",
-            "items":{
-                "type":"object",
-                "properties":{
-                    "model": description_schema,
-                    "value": integer0_schema
-                },
-                "additionalProperties": False,
-                "required": ["model","value"]
-            }
-        },
-        "additionalProperties": False,
-        "required": ["rankings"]
-    }
-}
 
 
 nsd_schema_v01 = {
@@ -732,12 +478,12 @@ nsd_schema_v02 = {
     "additionalProperties": False
 }
 
-scenario_new_schema = {
-    "title":"new scenario information schema",
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    #"oneOf": [nsd_schema_v01, nsd_schema_v02]
-    "oneOf": [nsd_schema_v01]
-}
+#scenario_new_schema = {
+#    "title":"new scenario information schema",
+#    "$schema": "http://json-schema.org/draft-04/schema#",
+#    #"oneOf": [nsd_schema_v01, nsd_schema_v02]
+#    "oneOf": [nsd_schema_v01]
+#}
 
 scenario_edit_schema = {
     "title":"edit scenario information schema",

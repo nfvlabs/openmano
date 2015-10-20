@@ -136,6 +136,13 @@ openmano scenario-deploy complex complex-instance || ! echo "fail" >&2 || $_exit
 openmano scenario-deploy complex2 complex2-instance || ! echo "fail" >&2 || $_exit 1
 
 echo
+echo "Check virtual machines are deployed"
+vms_error=`openvim vm-list | grep ERROR | wc -l`
+vms=`openvim vm-list | wc -l`
+[[ $vms -ne 8 ]]       &&  echo "WARNING: $vms VMs created, must be 8 VMs" >&2 && $_exit 1
+[[ $vms_error -gt 0 ]] &&  echo "WARNING: $vms_error VMs with ERROR" >&2       && $_exit 1
+
+echo
 echo DONE
 #echo "Listing VNFs"
 #openmano vnf-list

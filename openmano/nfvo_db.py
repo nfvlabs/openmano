@@ -590,7 +590,7 @@ class nfvo_db():
                     print cmd
                     self.cur.execute(cmd)
                     #insert tenant
-                    cmd= "INSERT INTO datacenters SET "
+                    cmd= "INSERT INTO datacenters SET " +\
                         ",".join(map(self.__tuple2db_format_set, datacenter_dict.iteritems() ))
                     print cmd
                     self.cur.execute(cmd)
@@ -786,6 +786,7 @@ class nfvo_db():
                                 dataifacesDict[vm['name']][dataiface['name']] = {}
                                 dataifacesDict[vm['name']][dataiface['name']]['vpci'] = dataiface['vpci']
                                 dataifacesDict[vm['name']][dataiface['name']]['bw'] = dataiface['bandwidth']
+                                dataifacesDict[vm['name']][dataiface['name']]['model'] = "PF" if dataiface['dedicated']=="yes" else ("VF"  if dataiface['dedicated']=="no" else "VFnotShared")
     
                     #Collect the bridge interfaces of each VM/VNFC under the 'bridge-ifaces' field
                     bridgeInterfacesDict = {}
@@ -826,11 +827,12 @@ class nfvo_db():
                                 ifaceItem["net_id"] = net_id
                                 ifaceItem["type"] = net['type']
                                 if ifaceItem ["type"] == "data":
-                                    ifaceItem["vpci"] = dataifacesDict[element['VNFC']][element['local_iface_name']]['vpci'] 
-                                    ifaceItem["bw"] = dataifacesDict[element['VNFC']][element['local_iface_name']]['bw']
+                                    ifaceItem["vpci"] =  dataifacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['vpci'] 
+                                    ifaceItem["bw"] =    dataifacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['bw']
+                                    ifaceItem["model"] = dataifacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['model']
                                 else:
-                                    ifaceItem["vpci"] = bridgeInterfacesDict[element['VNFC']][element['local_iface_name']]['vpci'] 
-                                    ifaceItem["bw"] = bridgeInterfacesDict[element['VNFC']][element['local_iface_name']]['bw']
+                                    ifaceItem["vpci"] =  bridgeInterfacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['vpci'] 
+                                    ifaceItem["bw"] =    bridgeInterfacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['bw']
                                     ifaceItem["model"] = bridgeInterfacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['model']
                                 internalconnList.append(ifaceItem)
                             
@@ -854,12 +856,13 @@ class nfvo_db():
                         myIfaceDict["external_name"] = iface['name']
                         myIfaceDict["type"] = iface['type']
                         if iface["type"] == "data":
-                            myIfaceDict["vpci"] = dataifacesDict[iface['VNFC']][iface['local_iface_name']]['vpci']
-                            myIfaceDict["bw"] = dataifacesDict[iface['VNFC']][iface['local_iface_name']]['bw']
+                            myIfaceDict["vpci"]  = dataifacesDict[ iface['VNFC'] ][ iface['local_iface_name'] ]['vpci']
+                            myIfaceDict["bw"]    = dataifacesDict[ iface['VNFC'] ][ iface['local_iface_name'] ]['bw']
+                            myIfaceDict["model"] = dataifacesDict[ iface['VNFC'] ][ iface['local_iface_name'] ]['model']
                         else:
-                            myIfaceDict["vpci"] = bridgeInterfacesDict[iface['VNFC']][iface['local_iface_name']]['vpci']
-                            myIfaceDict["bw"] = bridgeInterfacesDict[iface['VNFC']][iface['local_iface_name']]['bw']
-                            myIfaceDict["model"] = bridgeInterfacesDict[iface['VNFC']][iface['local_iface_name']]['model']
+                            myIfaceDict["vpci"]  = bridgeInterfacesDict[ iface['VNFC'] ][ iface['local_iface_name'] ]['vpci']
+                            myIfaceDict["bw"]    = bridgeInterfacesDict[ iface['VNFC'] ][ iface['local_iface_name'] ]['bw']
+                            myIfaceDict["model"] = bridgeInterfacesDict[ iface['VNFC'] ][ iface['local_iface_name'] ]['model']
                         print "Iface name: %s" % iface['name']
                         result, iface_id = self.new_interface(myIfaceDict,nfvo_tenant,vnf_id)
                         if result < 0:

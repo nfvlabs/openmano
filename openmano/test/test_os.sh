@@ -122,7 +122,6 @@ then
     openmano scenario-delete -f simple       || echo "fail"
     openmano scenario-delete -f complex2     || echo "fail"
     openmano vnf-delete -f linux             || echo "fail"
-    openmano vnf-delete -f linux             || echo "fail"
     openmano vnf-delete -f dataplaneVNF_2VMs || echo "fail"
     openmano vnf-delete -f dataplaneVNF3     || echo "fail"
     openmano vnf-delete -f TOS-VNF1          || echo "fail"

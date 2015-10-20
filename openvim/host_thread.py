@@ -664,7 +664,7 @@ class host_thread(threading.Thread):
         return self.tab()
     
     def get_file_info(self, path):
-        command = 'ls -l --time-style=+%Y-%m-%dT%H:%M:%S ' + path
+        command = 'ls -lL --time-style=+%Y-%m-%dT%H:%M:%S ' + path
         print self.name, ': command:', command
         (_, stdout, _) = self.ssh_conn.exec_command(command)
         content = stdout.read()
@@ -1603,7 +1603,7 @@ def create_server(server, db, db_lock, only_of_ports):
                     if dataplane_iface['name'] == control_iface.get("name"):
                         if (dataplane_iface['dedicated'] == "yes" and control_iface["type"] != "PF") or \
                             (dataplane_iface['dedicated'] == "no" and control_iface["type"] != "VF") or \
-                            (dataplane_iface['dedicated'] == "yes:sriov" and control_iface["type"] != "VF not shared") :
+                            (dataplane_iface['dedicated'] == "yes:sriov" and control_iface["type"] != "VFnotShared") :
                                 return -1, "Error at field netwoks: mismatch at interface '%s' from flavor 'dedicated=%s' and networks 'type=%s'" % \
                                     (control_iface.get("name"), dataplane_iface['dedicated'], control_iface["type"])
                         dataplane_iface['uuid'] = control_iface['net_id']

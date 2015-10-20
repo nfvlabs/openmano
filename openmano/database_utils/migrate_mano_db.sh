@@ -157,6 +157,7 @@ DATABASE_TARGET_VER_NUM=0
 [ $OPENMANO_VER_NUM -ge 2002 ] && DATABASE_TARGET_VER_NUM=1   #0.2.2 =>  1
 [ $OPENMANO_VER_NUM -ge 2005 ] && DATABASE_TARGET_VER_NUM=2   #0.2.5 =>  2
 [ $OPENMANO_VER_NUM -ge 3003 ] && DATABASE_TARGET_VER_NUM=3   #0.3.3 =>  3
+[ $OPENMANO_VER_NUM -ge 3005 ] && DATABASE_TARGET_VER_NUM=4   #0.3.5 =>  4
 #TODO ... put next versions here
 
 
@@ -333,6 +334,27 @@ function downgrade_from_3(){
     echo "DELETE FROM schema_version WHERE version_int='3';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 
+function upgrade_to_4(){
+    echo "    upgrade database from version 0.3 to version 0.4"
+    echo "      Enlarge graph field at tables 'sce_vnfs', 'sce_nets'"
+    for table in sce_vnfs sce_nets
+    do
+        echo "ALTER TABLE $table CHANGE COLUMN graph graph VARCHAR(2000) NULL DEFAULT NULL AFTER modified_at;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    done
+    echo "ALTER TABLE datacenters CHANGE COLUMN type type VARCHAR(36) NOT NULL DEFAULT 'openvim' AFTER description;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (4, '0.4', '0.3.5', 'enlarge graph field at sce_vnfs/nets', '2015-10-20');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+
+function downgrade_from_4(){
+    echo "    upgrade database from version 0.4 to version 0.3"
+    echo "      Shorten back graph field at tables 'sce_vnfs', 'sce_nets'"
+    for table in sce_vnfs sce_nets
+    do
+        echo "ALTER TABLE $table CHANGE COLUMN graph graph VARCHAR(2000) NULL DEFAULT NULL AFTER modified_at;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    done
+    echo "ALTER TABLE datacenters CHANGE COLUMN type type ENUM('openvim','openstack') NOT NULL DEFAULT 'openvim' AFTER description;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int='4';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
 
 
 #TODO ... put funtions here
