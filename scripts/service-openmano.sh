@@ -27,11 +27,13 @@
 DIRNAME=$(readlink -f ${BASH_SOURCE[0]})
 DIRNAME=$(dirname $DIRNAME )
 DIR_OM=$(dirname $DIRNAME )
-FLD=$(dirname ${DIR_OM})/floodlight-0.90
+#[[ -z $FLOODLIGHT_PATH ]] && FLOODLIGHT_PATH=$(dirname ${DIR_OM})/floodlight-1.1
+[[ -z $FLOODLIGHT_PATH ]] && FLOODLIGHT_PATH=$(dirname ${DIR_OM})/floodlight-0.90
 
 function usage(){
-    echo -e "Usage: $0 [floodlight] [openvim] [openmano] start|stop|restart|status"
-    echo -e "  Launch|Removes|Restart openmano components (by default all) on a screen"
+    echo -e "Usage: $0 [floodlight/flow] [openvim/vim] [openmano/mano] start|stop|restart|status"
+    echo -e "  Launch|Removes|Restart|Getstatus openmano components (by default all) on a screen"
+    echo -e "  Set floodlight path with shell var \$FLOODLIGHT_PATH (../../floodlight-0.90 if mising)"
 }
 
 function kill_pid(){
@@ -62,8 +64,7 @@ do
     #note flow that it must be the first element, because openvim relay on this
     
     #if none of above, reach this line because a param is incorrect
-    echo "Unknown param '$param'" >&2
-    usage >&2
+    echo "Unknown param '$param' type $0 --help" >&2
     exit -1
 done
 
@@ -75,7 +76,7 @@ done
  
 for om_component in $om_list
 do
-    [ "${om_component}" == "flow" ] && om_cmd="floodlight.jar" && om_name="floodlight" && om_dir=$FLD
+    [ "${om_component}" == "flow" ] && om_cmd="floodlight.jar" && om_name="floodlight" && om_dir=$FLOODLIGHT_PATH
     [ "${om_component}" == "vim" ]  && om_cmd="openvimd.py"    && om_name="openvim   " && om_dir=$(readlink -f ${DIR_OM}/openvim)
     [ "${om_component}" == "mano" ] && om_cmd="openmanod.py"   && om_name="openmano  " && om_dir=$(readlink -f ${DIR_OM}/openmano)
     #obtain PID of program
@@ -136,7 +137,8 @@ do
         fi
         #launch command to screen
         #[ "${om_component}" != "flow" ] && screen -S ${om_component} -p 0 -X stuff "cd ${DIR_OM}/open${om_component}\n" && sleep 1
-        [ "${om_component}" == "flow" ] && screen -S flow -p 0 -X stuff "java  -Dlogback.configurationFile=${DIRNAME}/flow-logback.xml -jar ./target/floodlight.jar -cf ${DIRNAME}/flow.properties\n" && sleep 5
+        [ "${om_component}" == "flow" ] && screen -S flow -p 0 -X stuff "java  -Dlogback.configurationFile=${DIRNAME}/flow-logback.xml -jar ./target/floodlight.jar -cf ${DIRNAME}/flow.properties_v0.9\n" && sleep 5
+        #[ "${om_component}" == "flow" ] && screen -S flow -p 0 -X stuff "java  -Dlogback.configurationFile=${DIRNAME}/flow-logback.xml -jar ./target/floodlight.jar -cf ${DIRNAME}/flow.properties_v1.1\n" && sleep 5
         [ "${om_component}" != "flow" ] && screen -S ${om_component} -p 0 -X stuff "./${om_cmd}\n"
         #check if is running
         [[ -n $logfile ]] && timeout=120 #2 minute

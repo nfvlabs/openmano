@@ -200,12 +200,14 @@ echo "Installing FloodLight requires Java, that takes a while to download"
 read -e -p "Do you agree on download and install FloodLight from http://www.projectfloodlight.org upon the owner license? (y/N)" KK
 if [ "$KK" == "y" -o   "$KK" == "yes" ]
 then
-
+  #floodlight 0.9
     echo "downloading v0.90 from the oficial page"
     su $SUDO_USER -c 'wget https://github.com/floodlight/floodlight/archive/v0.90.tar.gz'
     su $SUDO_USER -c 'tar xvzf v0.90.tar.gz'
-    #wget http://floodlight-download.projectfloodlight.org/files/floodlight-source-0.90.tar.gz'
-    #su $SUDO_USER -c 'tar xvzf floodlight-source-0.90.tar.gz'
+  #floodlight 1.1
+    #echo "downloading v1.1 from the oficial page"
+    #su $SUDO_USER -c 'wget https://github.com/floodlight/floodlight/archive/v1.1.tar.gz'
+    #su $SUDO_USER -c 'tar xvzf v01.1.tar.gz'
     
     #Install Java JDK and Ant packages at the VM 
     [ "$_DISTRO" == "Ubuntu" ] && install_packets "build-essential default-jdk ant python-dev" #TODO revise if packets are needed apart from ant
@@ -219,6 +221,7 @@ then
 
     #Compile floodlight
     pushd ./floodlight-0.90
+    #pushd ./floodlight-1.1
     su $SUDO_USER -c 'ant'
     popd
     OPENFLOW_INSTALED="FloodLight, "
