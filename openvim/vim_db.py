@@ -475,16 +475,42 @@ class vim_db():
                         #under Error 2014: Commands out of sync; you can't run this command now
                         #self.cur.close()   
                         #self.cur = self.con.cursor(mdb.cursors.DictCursor)
-                        cmd="SELECT Mbps, pci, status, Mbps_consumed, switch_port, switch_dpid, mac, source_name, sriovs-1 as sriovs\
-                            FROM(SELECT * FROM resources_port WHERE numa_id=%d AND id=root_id) as A\
-                            INNER JOIN(SELECT root_id, count(pci) as sriovs, sum(Mbps_used) as Mbps_consumed\
-                            FROM resources_port WHERE numa_id=%d GROUP BY root_id) as B ON A.id = B.root_id;" % (numa['id'], numa['id'])
+                        cmd="SELECT Mbps, pci, status, Mbps_used, instance_id, if(id=root_id,'PF','VF') as type_,\
+                             switch_port, switch_dpid, mac, source_name\
+                             FROM resources_port WHERE numa_id=%d ORDER BY root_id, type_ DESC" %  (numa['id'])
                         self.logger.debug(cmd)
                         self.cur.execute(cmd)
-                        numa['interfaces'] = self.cur.fetchall()
-                        for iface in numa['interfaces']: 
-                            iface['Mbps_consumed'] = int(iface['Mbps_consumed']) #change to a Normal format
-                            if iface['status'] == 'ok': del iface['status']
+                        ifaces = self.cur.fetchall()
+                        #The SQL query will ensure to have SRIOV interfaces from a port first
+                        sriovs=[]
+                        Mpbs_consumed = 0
+                        numa['interfaces'] = []
+                        for iface in ifaces:
+                            if not iface["instance_id"]:
+                                del iface["instance_id"]
+                            if iface['status'] == 'ok':
+                                del iface['status']
+                            Mpbs_consumed += int(iface["Mbps_used"])
+                            del iface["Mbps_used"]
+                            if iface["type_"]=='PF':
+                                if not iface["switch_dpid"]:
+                                    del iface["switch_dpid"]
+                                if not iface["switch_port"]:
+                                    del iface["switch_port"]
+                                if sriovs:
+                                    iface["sriovs"] = sriovs
+                                if Mpbs_consumed:
+                                    iface["Mpbs_consumed"] = Mpbs_consumed
+                                del iface["type_"]
+                                numa['interfaces'].append(iface)
+                                sriovs=[]
+                                Mpbs_consumed = 0
+                            else: #VF, SRIOV
+                                del iface["switch_port"]
+                                del iface["switch_dpid"]
+                                del iface["type_"]
+                                del iface["Mbps"]
+                                sriovs.append(iface)
 
                         #delete internal field
                         del numa['id']
