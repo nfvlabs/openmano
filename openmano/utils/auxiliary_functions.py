@@ -72,9 +72,11 @@ def remove_extra_items(data, schema):
             a= remove_extra_items(d, schema['items'])
             if a is not None: deleted.append(a)
     elif type(data) is dict:
+        #TODO deal with patternProperties
+        if 'properties' not in schema:
+            return None
         for k in data.keys():
-            #TODO deal with patternProperties
-            if 'properties' not in schema or k not in schema['properties'].keys():
+            if k not in schema['properties'].keys():
                 del data[k]
                 deleted.append(k)
             else:

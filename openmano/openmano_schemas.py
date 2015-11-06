@@ -128,13 +128,7 @@ datacenter_schema_properties={
                 "type": name_schema, #currently "openvim" or "openstack", can be enlarge with plugins
                 "vim_url": description_schema,
                 "vim_url_admin": description_schema,
-                "config": {
-                    "type":"object",
-                    "properties":{
-                        "network_vlan_ranges": {"type": "string"}
-                    },
-                    "additionalProperties": False
-                }
+                "config": { "type":"object" }
             }
 
 datacenter_schema = {

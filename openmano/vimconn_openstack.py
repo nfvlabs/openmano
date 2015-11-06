@@ -262,10 +262,10 @@ class vimconnector(vimconn.vimconnector):
             self._reload_connection()
             network_dict = {'name': net_name, 'admin_state_up': True}
             if net_type=="data" or net_type=="ptp":
-                if self.config.get('network_vlan_ranges') == None:
-                    return -vimconn.HTTP_Bad_Request, "You must provide a 'network_vlan_ranges' at config value before creating sriov network "
+                if self.config.get('dataplane_physical_net') == None:
+                    return -vimconn.HTTP_Bad_Request, "You must provide a 'dataplane_physical_net' at config value before creating sriov network "
                     
-                network_dict["provider:physical_network"] = self.config['network_vlan_ranges'] #"physnet_sriov" #TODO physical
+                network_dict["provider:physical_network"] = self.config['dataplane_physical_net'] #"physnet_sriov" #TODO physical
                 network_dict["provider:network_type"]     = "vlan"
                 if vlan!=None:
                     network_dict["provider:network_type"] = vlan
@@ -445,6 +445,13 @@ class vimconnector(vimconn.vimconnector):
                             elif 'threads' in numa:
                                 vcpus = numa['threads']
                                 numa_properties["hw:cpu_policy"] = "isolated"
+                            for interface in numa.get("interfaces",() ):
+                                if interface["dedicated"]=="yes":
+                                    error_value=-vimconn.HTTP_Bad_Request
+                                    error_text= "Passthrough interfaces are not supported for the openstack connector"
+                                    break
+                                #TODO, add the key 'pci_passthrough:alias"="<label at config>:<number ifaces>"' when a way to connect it is available
+                                
                 #create flavor                 
                 new_flavor=self.nova.flavors.create(name, 
                                 ram, 
@@ -463,7 +470,7 @@ class vimconnector(vimconn.vimconnector):
                     continue
                 break
             #except nvExceptions.BadRequest, e:
-            except (ksExceptions.ClientException, nvExceptions.ClientException), e:
+            except (ksExceptions.ClientException, nvExceptions.ClientException, ConnectionError), e:
                 error_value=-vimconn.HTTP_Bad_Request
                 error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
                 break
