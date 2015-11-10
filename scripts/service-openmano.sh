@@ -137,7 +137,7 @@ do
         fi
         #launch command to screen
         #[ "${om_component}" != "flow" ] && screen -S ${om_component} -p 0 -X stuff "cd ${DIR_OM}/open${om_component}\n" && sleep 1
-        [ "${om_component}" == "flow" ] && screen -S flow -p 0 -X stuff "java  -Dlogback.configurationFile=${DIRNAME}/flow-logback.xml -jar ./target/floodlight.jar -cf ${DIRNAME}/flow.properties_v0.9\n" && sleep 5
+        [ "${om_component}" == "flow" ] && screen -S flow -p 0 -X stuff "java  -Dlogback.configurationFile=${DIRNAME}/flow-logback.xml -jar ./target/floodlight.jar -cf ${DIRNAME}/flow.properties_v0.9\n"
         #[ "${om_component}" == "flow" ] && screen -S flow -p 0 -X stuff "java  -Dlogback.configurationFile=${DIRNAME}/flow-logback.xml -jar ./target/floodlight.jar -cf ${DIRNAME}/flow.properties_v1.1\n" && sleep 5
         [ "${om_component}" != "flow" ] && screen -S ${om_component} -p 0 -X stuff "./${om_cmd}\n"
         #check if is running
@@ -148,11 +148,13 @@ do
            #check if is running
            #echo timeout $timeout
            #if !  ps -f -U $USER -u $USER | grep -v grep | grep -q ${om_cmd}
+           log_lines=0
+           [[ -n $logfile ]] && log_lines=`head ${logfile}.0 | wc -l`
            component_id=`ps -o pid,cmd -U $USER -u $USER | grep -v grep | grep ${om_cmd} | awk '{print $1}'`
            if [[ -z $component_id ]]
-           then
-               echo -n "ERROR, it has exited."
-               break
+           then #process not started or finished
+               [[ $log_lines -ge 2 ]] &&  echo -n "ERROR, it has exited." && break
+               #started because writted serveral lines at log so report error
            fi
            [[ -n $logfile ]] && [[ ${om_component} == flow ]] && grep -q "Listening for switch connections" ${logfile}.0 && sleep 1 && break
            [[ -n $logfile ]] && [[ ${om_component} != flow ]] && grep -q "open${om_component}d ready" ${logfile}.0 && break

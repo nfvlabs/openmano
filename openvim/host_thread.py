@@ -497,7 +497,7 @@ class host_thread(threading.Thread):
             #If image contains 'GRAPH' include graphics
             #if 'GRAPH' in image:
             text += self.tab() + "<graphics type='vnc' port='-1' autoport='yes' listen='127.0.0.1'>" +\
-                self.inc_tab() + "<listen type='address' address='127.0.0.1'/>" +\
+                self.inc_tab() + "<listen type='address' address='0.0.0.0'/>" +\
                 self.dec_tab() + "</graphics>"
 
         vd_index = 'a'

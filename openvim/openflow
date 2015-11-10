@@ -224,17 +224,15 @@ def config(args):
     print "OF_CONTROLLER_TYPE: %s" %(of_controller_type)
     if of_controller_module or (of_controller_type!="floodlight" and of_controller_type!="opendaylight"):
         print "OF_CONTROLLER_MODULE: %s" %(of_controller_module)
-    if of_controller_user or of_controller_type=="opendaylight":
-        print "OF_CONTROLLER_USER: %s" %(of_controller_user)
-    if of_controller_password or of_controller_type=="opendaylight":
-        print "OF_CONTROLLER_PASSWORD: %s" %(of_controller_password)
+    print "OF_CONTROLLER_USER: %s" %(of_controller_user)
+    print "OF_CONTROLLER_PASSWORD: %s" %(of_controller_password)
     #print "OF_CONTROLLER_VERSION: %s" %(of_controller_version)
     print "OF_CONTROLLER_IP: %s" %(of_controller_ip)
     print "OF_CONTROLLER_PORT: %s" %(of_controller_port)
     print "OF_CONTROLLER_DPID: %s" %(of_controller_dpid)
     return
 
-version="0.7"
+version="0.8"
 global vim_host
 global vim_admin_port
 global of_controller_type

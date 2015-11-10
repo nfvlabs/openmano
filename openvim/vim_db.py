@@ -387,6 +387,15 @@ class vim_db():
                 if "'" in v: 
                     data[k] = data[k].replace("'","_")
     
+    def _update_rows_internal(self, table, UPDATE, WHERE={}):
+        cmd= "UPDATE " + table +" SET " + \
+            ",".join(map(lambda x: str(x)+'='+ self.__data2db_format(UPDATE[x]),   UPDATE.keys() ));
+        if WHERE:
+            cmd += " WHERE " + " and ".join(map(lambda x: str(x)+ (' is Null' if WHERE[x] is None else"='"+str(WHERE[x])+"'" ),  WHERE.keys() ))
+        self.logger.debug(cmd)
+        self.cur.execute(cmd) 
+        nb_rows = self.cur.rowcount
+        return nb_rows, None
 
     def update_rows(self, table, UPDATE, WHERE={}, log=False):
         ''' Update one or several rows into a table.
@@ -556,18 +565,29 @@ class vim_db():
                     self.cur = self.con.cursor()
 
                     #update table host
-                    numa_list = host_dict.pop('numas', [])                    
-                    if len(host_dict)>0:
-                        cmd= "UPDATE hosts SET " + \
-                            ",".join(map(lambda x: str(x)+ ('=Null' if host_dict[x] is None else "='"+ str(host_dict[x]) +"'"  ),   host_dict.keys() )) + \
-                            " WHERE uuid='" + host_id +"'"
-                        self.logger.debug(cmd)
-                        self.cur.execute(cmd) 
+                    numa_list = host_dict.pop('numas', () )                    
+                    if host_dict:
+                        self._update_rows_internal("hosts", host_dict, {"uuid": host_id})
+                        
+                    where = {"host_id": host_id} 
                     for numa_dict in numa_list:
-                        cmd= "UPDATE numas SET admin_state_up='" + str(numa_dict['admin_state_up']) + \
-                            "' WHERE host_id='" + host_id +"' AND numa_socket='"+ str(numa_dict['numa_socket']) + "'"
-                        self.logger.debug(cmd)
-                        self.cur.execute(cmd) 
+                        where["numa_socket"] = str(numa_dict.pop('numa_socket'))
+                        interface_list = numa_dict.pop('interfaces', () )
+                        if numa_dict:
+                            self._update_rows_internal("numas", numa_dict, where)
+                        for interface in interface_list:
+                            source_name = str(interface.pop("source_name") )
+                            if interface:
+                            #get interface id from resources_port
+                                cmd= "SELECT rp.id as id FROM resources_port as rp join numas as n on n.id=rp.numa_id join hosts as h on h.uuid=n.host_id " +\
+                                    "WHERE host_id='%s' and rp.source_name='%s'" %(host_id, source_name)
+                                self.logger.debug(cmd)
+                                self.cur.execute(cmd)
+                                row = self.cur.fetchone()
+                                if self.cur.rowcount<=0:
+                                    return -HTTP_Bad_Request, "Interface source_name='%s' from numa_socket='%s' not found" % (source_name, str(where["numa_socket"]))
+                                interface_id = row[0]
+                                self._update_rows_internal("resources_port", interface, {"root_id": interface_id})
                 return self.get_host(host_id)
             except (mdb.Error, AttributeError) as e:
                 r,c = self.format_error(e, "edit_host", cmd)

@@ -329,9 +329,21 @@ host_edit_schema={
                         "type": "object",
                         "properties":{
                             "numa_socket": integer0_schema,
-                            "admin_state_up":{"type":"boolean"}
+                            "admin_state_up":{"type":"boolean"},
+                            "interfaces":{
+                                "type":"array", 
+                                "items":{
+                                    "type": "object",
+                                    "properties":{
+                                        "source_name": nameshort_schema,
+                                        "switch_dpid": nameshort_schema,
+                                        "switch_port": nameshort_schema,
+                                    },
+                                    "required": ["source_name"],
+                                }
+                            }
                         }, 
-                        "required": ["numa_socket", "admin_state_up"],
+                        "required": ["numa_socket"],
                         "additionalProperties": False,
                     }
                 }
