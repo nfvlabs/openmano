@@ -1,0 +1,30 @@
+---
+name:            complex2
+description:     Complex network scenario consisting of 2 VNFs interconnected
+topology: 
+  nodes: 
+    VNF2vms:                        # vnf/net name in the scenario
+      type:      VNF                # VNF, network, external_network (if it is a datacenter network)
+      VNF model: dataplaneVNF_2VMs  # VNF name as introduced in OPENMANO DB
+    VNF3:
+      type:      VNF
+      VNF model: dataplaneVNF3
+    default: 
+      type:      external_network # Datacenter net
+      model:     default
+  connections: 
+    dataconn1:
+      nodes: 
+      -   VNF2vms: in
+      -   VNF3:    data0
+    dataconn2:
+      nodes: 
+      -   VNF2vms: out
+      -   VNF3:    data1
+    mngmt-net:
+      nodes: 
+      -   default: null
+      -   VNF2vms: control0
+      -   VNF2vms: control1
+      -   VNF3:    mgmt
+
