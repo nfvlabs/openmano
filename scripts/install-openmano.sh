@@ -170,7 +170,7 @@ echo '
 su $SUDO_USER -c 'git clone https://github.com/nfvlabs/openmano.git openmano'
 #su $SUDO_USER -c 'pushd openmano; git checkout -b v0.3 origin/v0.3; popd'
 pushd openmano
-su $SUDO_USER -c 'git checkout v0.3'
+su $SUDO_USER -c 'git checkout v0.4'
 popd
 
 echo '
@@ -292,7 +292,10 @@ echo '
 su $SUDO_USER -c 'mkdir -p ~/bin'
 rm -f /home/${SUDO_USER}/bin/openvim
 rm -f /home/${SUDO_USER}/bin/openmano
+rm -f /home/${SUDO_USER}/bin/openflow
+rm -f /home/${SUDO_USER}/bin/service-openmano
 ln -s ${PWD}/openmano/openvim/openvim   /home/${SUDO_USER}/bin/openvim
+ln -s ${PWD}/openmano/openvim/openflow  /home/${SUDO_USER}/bin/openflow
 ln -s ${PWD}/openmano/openmano/openmano /home/${SUDO_USER}/bin/openmano
 ln -s ${PWD}/openmano/scripts/service-openmano.sh  /home/${SUDO_USER}/bin/service-openmano
 
@@ -312,7 +315,7 @@ su $SUDO_USER -c 'activate-global-python-argcomplete --dest=/home/${USER}/.bash_
 if ! grep -q bash_completion.d/python-argcomplete.sh /home/${SUDO_USER}/.bashrc
 then
     echo "    inserting .bash_completion.d/python-argcomplete.sh execution at .bashrc"
-    su $SUDO_USER -c 'echo ". .bash_completion.d/python-argcomplete.sh" >> ~/.bashrc'
+    su $SUDO_USER -c 'echo ". /home/${USER}/.bash_completion.d/python-argcomplete.sh" >> ~/.bashrc'
 fi
 
 echo
