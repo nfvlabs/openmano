@@ -40,6 +40,7 @@ class OF_conn():
     ''' Openflow Connector for Floodlight.
          No MAC learning is used
         version 0.9 or 1.X is autodetected
+        version 1.X is in progress, not finished!!!
     '''
     def __init__(self, params):
         ''' Constructor. 
@@ -275,7 +276,7 @@ class OF_conn():
                 if self.version == None:
                     if 'dpid' in info[0] and 'ports' in info[0]:
                         self._set_version("0.9")
-                    elif 'switchDPID' in info[0] and 'ports' in info[0]:
+                    elif 'switchDPID' in info[0]:
                         self._set_version("1.X")
                     else:
                         return -1, "unexpected openflow response, Wrong version?"
@@ -289,7 +290,25 @@ class OF_conn():
                 #print self.name, ": get_of_controller_info ERROR", text 
                 return -1, text
             else:
-                for port in info[index]["ports"]:
+                if self.version[0]=="0":
+                    ports = info[index]["ports"]
+                else: #version 1.X
+                    of_response = requests.get(self.url+"/wm/core/switch/%s/port-desc/json" %self.dpid, headers=self.headers)
+                    #print vim_response.status_code
+                    error_text = "Openflow response %d: %s" % (of_response.status_code, of_response.text)
+                    if of_response.status_code != 200:
+                        self.logger.warning("obtain_port_correspondence " + error_text)
+                        return -1 , error_text
+                    self.logger.debug("obtain_port_correspondence " + error_text)
+                    info = of_response.json()
+                    if type(info) != dict:
+                        return -1, "unexpected openflow port-desc response, not a dict. Wrong version?"
+                    if "portDesc" not in info:
+                        return -1, "unexpected openflow port-desc response, 'portDesc' not found. Wrong version?"
+                    if type(info["portDesc"]) != list and type(info["portDesc"]) != tuple:
+                        return -1, "unexpected openflow port-desc response at 'portDesc', not a list. Wrong version?"
+                    ports = info["portDesc"]
+                for port in ports:
                     self.pp2ofi[ str(port["name"]) ] = str(port["portNumber"] )
                     self.ofi2pp[ port["portNumber"]] = str(port["name"]) 
             #print self.name, ": get_of_controller_info ports:", self.pp2ofi
