@@ -34,6 +34,7 @@ import os
 from utils import auxiliary_functions as af
 from nfvo_db import HTTP_Unauthorized, HTTP_Bad_Request, HTTP_Internal_Server_Error, HTTP_Not_Found,\
     HTTP_Conflict
+import cliproxy_thread as cli
 
 global global_config
 global vimconn_imported
@@ -1393,18 +1394,61 @@ def instance_action(mydb,nfvo_tenant,instance_id, action_dict):
                 if sce_vnf['uuid'] not in input_vnfs and sce_vnf['vnf_name'] not in input_vnfs and \
                     vm['uuid'] not in input_vms and vm['name'] not in input_vms:
                     continue
-            result, vm_id = myvim.action_tenant_vminstance(vm['vim_vm_id'],action_dict)
-            if vm_result < 0:
-                vm_result[ vm['uuid'] ] = {"vim_result": -result, "description": vm_id}
+            result, data = myvim.action_tenant_vminstance(vm['vim_vm_id'], action_dict)
+            if result < 0:
+                vm_result[ vm['uuid'] ] = {"vim_result": -result, "name":vm['name'], "description": data}
                 vm_error+=1
             else:
-                vm_result[ vm['uuid'] ] = {"vim_result": result, "description": "ok", "name":vm['name']}
-                vm_ok +=1
+                if "console" in action_dict:
+                    if data["server"]=="127.0.0.1" or data["server"]=="localhost":
+                        vm_result[ vm['uuid'] ] = {"vim_result": -HTTP_Unauthorized,
+                                                   "description": "this console is only reachable by local interface",
+                                                   "name":vm['name']
+                                                }
+                        vm_error+=1
+                        continue
+                    #print "console data", data
+                    r2, cli_thread = create_or_use_cli_proxy_thread(data["server"], data["port"])
+                    if r2<0:
+                        vm_result[ vm['uuid'] ] = {"vim_result": -r2, "name":vm['name'], "description": cli_thread}
+                    else:
+                        vm_result[ vm['uuid'] ] = {"vim_result": result,
+                                                   "description": "%s//%s:%d/%s" %(data["protocol"], cli_thread.host, cli_thread.port, data["suffix"]),
+                                                   "name":vm['name']
+                                                }
+                        vm_ok +=1
+                else:
+                    vm_result[ vm['uuid'] ] = {"vim_result": result, "description": "ok", "name":vm['name']}
+                    vm_ok +=1
 
     if vm_ok==0: #all goes wrong
         return 1, vm_result
     else:
         return 1, vm_result
+    
+def create_or_use_cli_proxy_thread(proxy_server, proxy_port):
+    #look for a non-used port
+    cli_thread_key = proxy_server + ":" + str(proxy_port)
+    if cli_thread_key in global_config["cli_thread"]:
+        global_config["cli_thread"][cli_thread_key].start_timeout()
+        return 1, global_config["cli_thread"][cli_thread_key]
+    
+    for port in  global_config["console_port_iterator"]():
+        print "create_or_use_cli_proxy_thread() port:", port
+        if port in global_config["cli_ports"]:
+            continue
+        try:
+            clithread = cli.CliProxyThread(global_config['http_host'], port, proxy_server, proxy_port)
+            clithread.start()
+            global_config["cli_thread"][cli_thread_key] = clithread
+            global_config["cli_ports"][port] = cli_thread_key
+            return 1, clithread
+        except cli.CliProxyExceptionPortUsed as e:
+            #port used, try with onoher
+            continue
+        except cli.CliProxyException as e:
+            return -1, str(e)
+    return -1, "Not found any free 'http_console_ports'"
 
 def check_tenant(mydb, tenant_id):
     '''check that tenant exists at database'''

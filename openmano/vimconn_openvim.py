@@ -1087,6 +1087,9 @@ class vimconnector(vimconn.vimconnector):
         headers_req = {'content-type': 'application/json'}
         
         try:
+            if "console" in action_dict:
+                return -vimconn.HTTP_Service_Unavailable, "getting console is not available at openvim"
+            
             vim_response = requests.post(self.url+'/'+self.tenant+'/servers/'+vm_id+"/action", headers = headers_req, data=json.dumps(action_dict) )
         except requests.exceptions.RequestException, e:
             print "action_tenant_vminstance Exception: ", e.args

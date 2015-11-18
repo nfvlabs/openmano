@@ -698,6 +698,67 @@ class vimconnector(vimconn.vimconnector):
             print "get_tenant_vminstance " + error_text
         return error_value, error_text        
                 
+    def get_tenant_vminstance_console(self,vm_id, console_type="vnc"):
+        '''
+        Get a console for the virtual machine
+        Params:
+            vm_id: uuid of the VM
+            console_type, can be:
+                "novnc" (by default), "xvpvnc" for VNC types, 
+                "rdp-html5" for RDP types, "spice-html5" for SPICE types
+        Returns <0, text on error, for example not available
+                1, URL/text with the console parameters
+        '''
+        if self.debug:
+            print "osconnector: Getting VM CONSOLE from VIM"
+        try:
+            self._reload_connection()
+            server = self.nova.servers.find(id=vm_id)
+            if console_type == None or console_type == "novnc":
+                console_dict = server.get_vnc_console("novnc")
+            elif console_type == "xvpvnc":
+                console_dict = server.get_vnc_console(console_type)
+            elif console_type == "rdp-html5":
+                console_dict = server.get_rdp_console(console_type)
+            elif console_type == "spice-html5":
+                console_dict = server.get_spice_console(console_type)
+            else:
+                return -vimconn.HTTP_Bad_Request, "console type '%s' not allowed" % console_type
+            
+            console_dict1 = console_dict.get("console")
+            if console_dict1:
+                console_url = console_dict1.get("url")
+                if console_url:
+                    #parse console_url
+                    protocol_index = console_url.find("//")
+                    suffix_index = console_url[protocol_index+2:].find("/") + protocol_index+2
+                    port_index = console_url[protocol_index+2:suffix_index].find(":") + protocol_index+2
+                    if protocol_index < 0 or port_index<0 or suffix_index<0:
+                        return -vimconn.HTTP_Internal_Server_Error, "Unexpected response from VIM"
+                    console_dict={"protocol": console_url[0:protocol_index],
+                                  "server":   console_url[protocol_index+2:port_index], 
+                                  "port":     console_url[port_index:suffix_index], 
+                                  "suffix":   console_url[suffix_index+1:] 
+                                  }
+                    protocol_index += 2
+                    return 1, console_dict
+            return -vimconn.HTTP_Internal_Server_Error, "Unexpected response from VIM"
+            
+            #TODO parse input and translate to VIM format (openmano_schemas.new_vminstance_response_schema)
+            return 1, {"server": server.to_dict()}
+        except nvExceptions.NotFound, e:
+            error_value=-vimconn.HTTP_Not_Found
+            error_text= "vm instance %s not found" % vm_id
+        except (ksExceptions.ClientException, nvExceptions.ClientException, nvExceptions.BadRequest), e:
+            error_value=-vimconn.HTTP_Bad_Request
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+        #TODO insert exception vimconn.HTTP_Unauthorized
+        #if reaching here is because an exception
+        if self.debug:
+            print "get_tenant_vminstance " + error_text
+        return error_value, error_text        
+
+
     def delete_tenant_vminstance(self, vm_id):
         '''Removes a VM instance from VIM
         Returns >0, the instance identifier
@@ -815,6 +876,39 @@ class vimconnector(vimconn.vimconnector):
                 server.rebuild(server.image['id'])
             elif "reboot" in action_dict:
                 server.reboot() #reboot_type='SOFT'
+            elif "console" in action_dict:
+                console_type = action_dict["console"]
+                if console_type == None or console_type == "novnc":
+                    console_dict = server.get_vnc_console("novnc")
+                elif console_type == "xvpvnc":
+                    console_dict = server.get_vnc_console(console_type)
+                elif console_type == "rdp-html5":
+                    console_dict = server.get_rdp_console(console_type)
+                elif console_type == "spice-html5":
+                    console_dict = server.get_spice_console(console_type)
+                else:
+                    return -vimconn.HTTP_Bad_Request, "console type '%s' not allowed" % console_type
+                
+                try:
+                    console_url = console_dict["console"]["url"]
+                    #parse console_url
+                    protocol_index = console_url.find("//")
+                    suffix_index = console_url[protocol_index+2:].find("/") + protocol_index+2
+                    port_index = console_url[protocol_index+2:suffix_index].find(":") + protocol_index+2
+                    if protocol_index < 0 or port_index<0 or suffix_index<0:
+                        print "action_tenant_vminstance, console: response", str(console_dict)
+                        return -vimconn.HTTP_Internal_Server_Error, "Unexpected response from VIM"
+                    console_dict2={"protocol": console_url[0:protocol_index],
+                                  "server":   console_url[protocol_index+2 : port_index], 
+                                  "port":     int(console_url[port_index+1 : suffix_index]), 
+                                  "suffix":   console_url[suffix_index+1:] 
+                                  }
+                    protocol_index += 2
+                    return 1, console_dict2               
+                except:
+                    print "action_tenant_vminstance, console: response", str(console_dict)
+                    return -vimconn.HTTP_Internal_Server_Error, "Unexpected response from VIM"
+            
             return 1, vm_id
         except nvExceptions.NotFound, e:
             error_value=-vimconn.HTTP_Not_Found

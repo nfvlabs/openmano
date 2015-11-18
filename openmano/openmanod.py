@@ -89,6 +89,26 @@ def load_configuration(configuration_file):
                 
     return (True, config)
 
+def console_port_iterator():
+    '''this iterator deals with the http_console_ports 
+    returning the ports one by one
+    '''
+    index = 0
+    while index < len(global_config["http_console_ports"]):
+        port = global_config["http_console_ports"][index]
+        #print "ports -> ", port
+        if type(port) is int:
+            yield port
+        else: #this is dictionary with from to keys
+            port2 = port["from"]
+            #print "ports -> ", port, port2
+            while port2 <= port["to"]:
+                print "ports -> ", port, port2
+                yield port2
+                port2 += 1
+        index += 1
+    
+    
 def usage():
     print "Usage: ", sys.argv[0], "[options]"
     print "      -v|--version: prints current version"
@@ -158,6 +178,9 @@ if __name__=="__main__":
                 print "Error '%s'. Ensure the path 'vnf_repository' is properly set at %s" %(e.args[1], config_file)
                 exit(-1)
         
+        global_config["console_port_iterator"] = console_port_iterator
+        global_config["cli_thread"]={}
+        global_config["cli_ports"]={}
         # Initialize DB connection
         mydb = nfvo_db.nfvo_db();
         if mydb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
@@ -192,7 +215,9 @@ if __name__=="__main__":
         #if 'http_admin_port' in global_config: 
         #    httpthreadadmin.join()
         while True:
-            time.sleep(86400)      
+            time.sleep(86400)
+        for thread in global_config["cli_thread"]:
+            thread.terminate = True
 
     except (KeyboardInterrupt, SystemExit):
         print 'Exiting openmanod'

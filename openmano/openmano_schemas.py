@@ -80,7 +80,14 @@ config_schema = {
         "vim_name": nameshort_schema,
         "vim_tenant_name": nameshort_schema,
         "mano_tenant_name": nameshort_schema,
-        "mano_tenant_id": id_schema
+        "mano_tenant_id": id_schema, 
+        "http_console_ports": {
+            "type": "array", 
+            "items": {"OneOf" : [
+                port_schema, 
+                {"type":"object", "properties":{"from": port_schema, "to": port_schema}, "required": ["from","to"]} 
+            ]}
+        },
     },
     "required": ['db_host', 'db_user', 'db_passwd', 'db_name'],
     "additionalProperties": False
@@ -579,6 +586,7 @@ instance_scenario_action_schema = {
         "reboot":{
             "type": ["object","null"],
         },
+        "console": {"type": ["string", "null"], "enum": ["novnc", "xvpvnc", "rdp-html5", "spice-html5", None]},
         "vnfs":{"type": "array", "items":{"type":"string"}},
         "vms":{"type": "array", "items":{"type":"string"}}
     },
