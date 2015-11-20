@@ -169,12 +169,16 @@ def format_in(default_schema, version_fields=None, version_dict_schema=None):
     '''
     #print "HEADERS :" + str(bottle.request.headers.items())
     try:
+        error_text = "Invalid header format "
         format_type = bottle.request.headers.get('Content-Type', 'application/json')
         if 'application/json' in format_type:
-            client_data = bottle.request.json
+            error_text = "Invalid json format "
+            #Use the json decoder instead of bottle decoder because it informs about the location of error formats with a ValueError exception
+            client_data = json.load(bottle.request.body)
+            #client_data = bottle.request.json()
         elif 'application/yaml' in format_type:
+            error_text = "Invalid yaml format "
             client_data = yaml.load(bottle.request.body)
-            print json.dumps(client_data, indent=4) # ALF borrar
         elif 'application/xml' in format_type:
             bottle.abort(501, "Content-Type: application/xml not supported yet.")
         else:
@@ -186,6 +190,7 @@ def format_in(default_schema, version_fields=None, version_dict_schema=None):
         #    return
 
         #look for the client provider version
+        error_text = "Invalid content "
         client_version = None
         used_schema = None
         if version_fields != None:
@@ -208,21 +213,15 @@ def format_in(default_schema, version_fields=None, version_dict_schema=None):
             
         js_v(client_data, used_schema)
         return client_data, used_schema
-    except yaml.YAMLError, exc:
-        print "validate_in error, yaml exception ", exc
-        error_pos = ""
-        if hasattr(exc, 'problem_mark'):
-            mark = exc.problem_mark
-            error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
-        bottle.abort(HTTP_Bad_Request, "Content error: Failed to parse Content-Type" + error_pos)
-    except ValueError, exc:
-        print "validate_in error, ValueError exception ", exc
-        bottle.abort(HTTP_Bad_Request, str(exc))
-    except js_e.ValidationError, exc:
+    except (ValueError, yaml.YAMLError) as exc:
+        error_text += str(exc)
+        print error_text 
+        bottle.abort(HTTP_Bad_Request, error_text)
+    except js_e.ValidationError as exc:
         print "validate_in error, jsonschema exception ", exc.message, "at", exc.path
         error_pos = ""
         if len(exc.path)>0: error_pos=" at " + ":".join(map(json.dumps, exc.path))
-        bottle.abort(HTTP_Bad_Request, "invalid format " + exc.message + error_pos)
+        bottle.abort(HTTP_Bad_Request, error_text + exc.message + error_pos)
     #except:
     #    bottle.abort(HTTP_Bad_Request, "Content error: Failed to parse Content-Type",  error_pos)
     #    raise
@@ -428,7 +427,7 @@ def http_get_datacenter_id(tenant_id, datacenter_id):
     print content
     if content[0]['config'] != None:
         try:
-            config_dict = json.loads(content[0]['config'])
+            config_dict = yaml.load(content[0]['config'])
             content[0]['config'] = config_dict
         except Exception, e:
             print "Exception '%s' while trying to load config information" % str(e)
@@ -451,8 +450,8 @@ def http_post_datacenters():
     else:
         return http_get_datacenter_id('any', data)
 
-@bottle.route(url_base + '/datacenters/<datacenter_id>', method='PUT')
-def http_edit_datacenter_id(datacenter_id):
+@bottle.route(url_base + '/datacenters/<datacenter_id_name>', method='PUT')
+def http_edit_datacenter_id(datacenter_id_name):
     '''edit datacenter details, can use both uuid or name'''
     #parse input data
     http_content,_ = format_in( datacenter_edit_schema )
@@ -460,10 +459,10 @@ def http_edit_datacenter_id(datacenter_id):
     if r is not None: print "http_edit_datacenter_id: Warning: remove extra items ", r
     
     
-    result, data = nfvo.edit_datacenter(mydb, datacenter_id, http_content['datacenter'])
+    result, datacenter_id = nfvo.edit_datacenter(mydb, datacenter_id_name, http_content['datacenter'])
     if result < 0:
-        print "http_edit_datacenter_id error %d %s" % (-result, data)
-        bottle.abort(-result, data)
+        print "http_edit_datacenter_id error %d %s" % (-result, datacenter_id)
+        bottle.abort(-result, datacenter_id)
     else:
         return http_get_datacenter_id('any', datacenter_id)
 

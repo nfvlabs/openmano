@@ -299,24 +299,32 @@ def vim_create(url, payload):
         return -1, " Exception POST at '"+url+"' " + str(e.message)
     return 1, vim_response.json()
 
-def parse_yaml_json(text):
-    if '\t' in text: #try parse in json format, because yaml does not admit tabs
+def parse_yaml_json(text, file_name=None):
+    parser_json=None
+    if file_name:
+        if file_name[-5:]=='.yaml' or file_name[-4:]=='.yml':
+            parser_json = False
+        elif file_name[-5:]=='.json':
+            parser_json = True
+    if parser_json==None:
+        parser_json=True if '\t' in text else False
+            
+    if parser_json: #try parse in json format, because yaml does not admit tabs
         try:
             data = json.loads(text) 
             return 0, data
-        except:
-            error_pos="TODO: get error position"
-            return -1, "Error json format at "+error_pos
+        except Exception as e:
+            return -1, "Error json format: " + str(e)
     #try to parse in yaml format
     try:
         data = yaml.load(text)
         return 0, data
-    except yaml.YAMLError, exc:
+    except yaml.YAMLError as exc:
         error_pos = ""
         if hasattr(exc, 'problem_mark'):
             mark = exc.problem_mark
-            error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
-        return -1, " Error yaml/json format error at " + error_pos
+            error_pos = " at line:%s column:%s" % (mark.line+1, mark.column+1)
+        return -1, " Error yaml format error" + error_pos
 
 def change_string(text, var_list):
     '''
@@ -432,7 +440,7 @@ def load_file(file_, parse=False):
             return 0, read_data
     except IOError, e:
         return -1, " Error opening file '" + file_ + "': " + e.args[1]
-    return parse_yaml_json(read_data)
+    return parse_yaml_json(read_data, file_)
 
 def load_file_or_yaml(content):
     '''

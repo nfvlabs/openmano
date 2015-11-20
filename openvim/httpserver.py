@@ -267,10 +267,15 @@ def format_out(data):
 
 def format_in(schema):
     try:
+        error_text = "Invalid header format "
         format_type = bottle.request.headers.get('Content-Type', 'application/json')
         if 'application/json' in format_type:
-            client_data = bottle.request.json
+            error_text = "Invalid json format "
+            #Use the json decoder instead of bottle decoder because it informs about the location of error formats with a ValueError exception
+            client_data = json.load(bottle.request.body)
+            #client_data = bottle.request.json()
         elif 'application/yaml' in format_type:
+            error_text = "Invalid yaml format "
             client_data = yaml.load(bottle.request.body)
         elif format_type == 'application/xml':
             bottle.abort(501, "Content-Type: application/xml not supported yet.")
@@ -284,27 +289,20 @@ def format_in(schema):
         #check needed_items
 
         #print "HTTP input data: ", str(client_data)
+        error_text = "Invalid content "
         js_v(client_data, schema)
 
         return client_data
-    except yaml.YAMLError as exc:
-        print "HTTP validate_in error, yaml exception ", exc
-        print "  CONTENT: " + str(bottle.request.body.readlines())
-        error_pos = ""
-        if hasattr(exc, 'problem_mark'):
-            mark = exc.problem_mark
-            error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
-        bottle.abort(HTTP_Bad_Request, "Content error: Failed to parse Content-Type",  error_pos)
-    except ValueError as exc:
-        print "HTTP validate_in error, ValueError exception ", exc
-        print "  CONTENT: " + str(bottle.request.body.readlines())
-        bottle.abort(HTTP_Bad_Request, "invalid format: "+str(exc))
+    except (ValueError, yaml.YAMLError) as exc:
+        error_text += str(exc)
+        print error_text 
+        bottle.abort(HTTP_Bad_Request, error_text)
     except js_e.ValidationError as exc:
         print "HTTP validate_in error, jsonschema exception ", exc.message, "at", exc.path
         print "  CONTENT: " + str(bottle.request.body.readlines())
         error_pos = ""
         if len(exc.path)>0: error_pos=" at '" +  ":".join(map(str, exc.path)) + "'"
-        bottle.abort(HTTP_Bad_Request, "invalid format"+error_pos+": "+exc.message)
+        bottle.abort(HTTP_Bad_Request, error_text + error_pos+": "+exc.message)
     #except:
     #    bottle.abort(HTTP_Bad_Request, "Content error: Failed to parse Content-Type",  error_pos)
     #    raise

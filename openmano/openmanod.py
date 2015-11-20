@@ -179,8 +179,8 @@ if __name__=="__main__":
                 exit(-1)
         
         global_config["console_port_iterator"] = console_port_iterator
-        global_config["cli_thread"]={}
-        global_config["cli_ports"]={}
+        global_config["console_thread"]={}
+        global_config["console_ports"]={}
         # Initialize DB connection
         mydb = nfvo_db.nfvo_db();
         if mydb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
@@ -216,7 +216,7 @@ if __name__=="__main__":
         #    httpthreadadmin.join()
         while True:
             time.sleep(86400)
-        for thread in global_config["cli_thread"]:
+        for thread in global_config["console_thread"]:
             thread.terminate = True
 
     except (KeyboardInterrupt, SystemExit):

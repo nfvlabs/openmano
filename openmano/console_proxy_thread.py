@@ -1,44 +1,60 @@
-#!/usr/bin/python
-# This is a simple port-forward / proxy, written using only the default python
-# library. If you want to make a suggestion or fix something you can contact-me
-# at voorloop_at_gmail.com
-# Distributed over IDC(I Don't Care) license
+# -*- coding: utf-8 -*-
+
+##
+# Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
+# This file is part of openmano
+# All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# For those usages not covered by the Apache License, Version 2.0 please
+# contact with: nfvlabs@tid.es
+##
+
+'''
+Implement like a proxy for TCP/IP in a separated thread.
+It creates two sockets to bypass the TCP/IP packets among the fix console 
+server specified at class construction (console_host, console_port)
+and a client that connect against the (host, port) specified also at construction
+
+                ---------------------           -------------------------------
+                |       OPENMANO     |          |         VIM                  |
+client 1  ----> | ConsoleProxyThread | ------>  |  Console server              |
+client 2  ----> |  (host, port)      | ------>  |(console_host, console_server)|
+   ...           --------------------            ------------------------------
+'''
+__author__="Alfonso Tierno"
+__date__ ="$19-nov-2015 09:07:15$"
+
 import socket
 import select
-import time
-import sys
 import threading
 
-# Changing the buffer_size and delay, you can improve the speed and bandwidth.
-# But when buffer get to high or delay go too down, you can broke things
-buffer_size = 4096
 
-class Forward:
-    def __init__(self):
-        self.forward = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    def start(self, host, port):
-        try:
-            self.forward.connect((host, port))
-            return self.forward
-        except Exception as e:
-            print "Conect to proxy exception", e
-            return False
-
-class CliProxyException(Exception):
+class ConsoleProxyException(Exception):
     '''raise when an exception has found''' 
-class CliProxyExceptionPortUsed(Exception):
+class ConsoleProxyExceptionPortUsed(ConsoleProxyException):
     '''raise when the port is used''' 
 
-class CliProxyThread(threading.Thread):
-    active_delay = 0.0001
-    inactive_delay = 1
+class ConsoleProxyThread(threading.Thread):
+    buffer_size = 4096
+    check_finish = 1 #frequency to check if requested to end in seconds
 
-    def __init__(self, host, port, proxy_host, proxy_port):
+    def __init__(self, host, port, console_host, console_port):
         try:
             threading.Thread.__init__(self)
-            self.proxy_host = proxy_host
-            self.proxy_port = proxy_port
+            self.console_host = console_host
+            self.console_port = console_port
             self.host = host
             self.port = port
             self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -49,17 +65,19 @@ class CliProxyThread(threading.Thread):
             #when inactivity and timeout<time : set timeout=0 and terminate
             #from outside, close class when timeout==0; set timeout=time+120 when adding a new console on this thread
             #set self.timeout = time.time() + 120 at init
-            self.name = "CLIproxy " + proxy_host + ":" + str(proxy_port)
+            self.name = "ConsoleProxy " + console_host + ":" + str(console_port)
             self.input_list = [self.server]
             self.channel = {}
             self.terminate = False #put at True from outside to force termination
         except (socket.error, socket.herror, socket.gaierror, socket.timeout) as e:
-            raise CliProxyException(type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0])) )
+            if e is socket.error and e.errno==98:
+                raise ConsoleProxyExceptionPortUsed("socket.error " + str(e))
+            raise ConsoleProxyException(type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0])) )
         
     def run(self):
         while 1:
             try:
-                inputready, _, _ = select.select(self.input_list, [], [], 1)
+                inputready, _, _ = select.select(self.input_list, [], [], self.check_finish)
             except select.error as e:
                 print self.name, ": Exception on select %s: %s" % (type(e).__name__, str(e) )
                 self.on_terminate()
@@ -78,7 +96,7 @@ class CliProxyThread(threading.Thread):
     def on_terminate(self):
         while self.input_list:
             if self.input_list[0] is self.server:
-                server.close()
+                self.server.close()
                 del self.input_list[0]
             else:
                 self.on_close(self.input_list[0], "Terminating thread")
@@ -95,7 +113,7 @@ class CliProxyThread(threading.Thread):
         #connect
         try:
             forward = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            forward.connect((self.proxy_host, self.proxy_port))
+            forward.connect((self.console_host, self.console_port))
             name = "%s:%d => (%s:%d => %s:%d) => %s:%d" %\
                 (clientsock.getpeername() + clientsock.getsockname()  + forward.getsockname() + forward.getpeername() )
             print self.name, ": new connection " + name
@@ -110,7 +128,7 @@ class CliProxyThread(threading.Thread):
             self.channel[forward] = info
             return True
         except (socket.error, socket.herror, socket.gaierror, socket.timeout) as e:
-            print self.name, ": Exception on_connect to server %s:%d; %s: %s" % (self.proxy_host, self.proxy_port, type(e).__name__, str(e) )
+            print self.name, ": Exception on_connect to server %s:%d; %s: %s" % (self.console_host, self.console_port, type(e).__name__, str(e) )
             print self.name, ": Close client side ", clientaddr
             clientsock.close()
             return False
@@ -147,7 +165,7 @@ class CliProxyThread(threading.Thread):
         info = self.channel[sock]
         peersock = info["serversock"] if sock is info["clientsock"] else info["clientsock"]
         try:
-            data = sock.recv(buffer_size)
+            data = sock.recv(self.buffer_size)
             if len(data) == 0:
                 self.on_close(sock, "peer closed")
             else:
@@ -160,15 +178,6 @@ class CliProxyThread(threading.Thread):
 
         
 
-    def start_timeout(self):
-        self.timeout = time.time() + 120
+    #def start_timeout(self):
+    #    self.timeout = time.time() + 120
         
-        
-if __name__ == '__main__':
-        server = CliProxyThread('', 9999, '10.95.172.129', 6080)
-        try:
-            server.main_loop()
-        except KeyboardInterrupt:
-            print "Ctrl C - Stopping server"
-            sys.exit(1)
-

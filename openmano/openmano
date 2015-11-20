@@ -105,32 +105,28 @@ def _print_verbose(mano_response, verbose_level=0):
     return result
 
 def parser_json_yaml(file_name):
-    #Check config file exists
-    if not os.path.isfile(file_name):
-        return (False, 'Error: file '+file_name+' does not exists.')
     try:
         f = file(file_name, "r")
         text = f.read()
         f.close()
-    except Exception,e:
+    except Exception as e:
         return (False, str(e))
            
     #Read and parse file
-    if file_name[-5:]=='.yaml':
+    if file_name[-5:]=='.yaml' or file_name[-4:]=='.yml' or (file_name[-5:]!='.json' and '\t' not in text):
         try:
             config = yaml.load(text)
-        except yaml.YAMLError, exc:
+        except yaml.YAMLError as exc:
             error_pos = ""
             if hasattr(exc, 'problem_mark'):
                 mark = exc.problem_mark
-                error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
-            return (False, "Error loading file '"+file_name+"'"+error_pos+": content format error: Failed to parse yaml format")
+                error_pos = " at line:%s column:%s" % (mark.line+1, mark.column+1)
+            return (False, "Error loading file '"+file_name+"' yaml format error" + error_pos)
     else: #json
         try:
             config = json.loads(text) 
-        except:
-            error_pos="TODO: get error position"
-            return (False, "Error loading file '"+file_name+"'"+error_pos+": content format error: Failed to parse json format")
+        except Exception as e:
+            return (False, "Error loading file '"+file_name+"' json format error " + str(e) )
 
     return True, config
 
@@ -141,22 +137,25 @@ def _load_file_or_yaml(content):
     if fails trying to parse the 'content' text
     Returns the dictionary once parsed, or print an error and finish the program
     '''
-    r,payload = parser_json_yaml(content)
-    if not r:
-        if "{" in content or ":" in content:
-            #try to parse directly
-            try:
-                payload = yaml.load(content)
-            except yaml.YAMLError, exc:
-                error_pos = ""
-                if hasattr(exc, 'problem_mark'):
-                    mark = exc.problem_mark
-                    error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
-                print "Error loading yaml/json text"+error_pos
-                exit (-1)
-        else:
+    #Check config file exists
+    if os.path.isfile(content):
+        r,payload = parser_json_yaml(content)
+        if not r:
             print payload
+            exit(-1)
+    elif "{" in content or ":" in content:
+        try:
+            payload = yaml.load(content)
+        except yaml.YAMLError as exc:
+            error_pos = ""
+            if hasattr(exc, 'problem_mark'):
+                mark = exc.problem_mark
+                error_pos = " at position: (%s:%s)" % (mark.line+1, mark.column+1)
+            print "Error loading yaml/json text"+error_pos
             exit (-1)
+    else:
+        print "'%s' does not exist as a file ant it is not seem a yaml/json content" % content
+        exit(-1)
     return payload
 
 def vnf_create(args):

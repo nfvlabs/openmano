@@ -34,7 +34,7 @@ import os
 from utils import auxiliary_functions as af
 from nfvo_db import HTTP_Unauthorized, HTTP_Bad_Request, HTTP_Internal_Server_Error, HTTP_Not_Found,\
     HTTP_Conflict
-import cliproxy_thread as cli
+import console_proxy_thread as cli
 
 global global_config
 global vimconn_imported
@@ -1408,12 +1408,12 @@ def instance_action(mydb,nfvo_tenant,instance_id, action_dict):
                         vm_error+=1
                         continue
                     #print "console data", data
-                    r2, cli_thread = create_or_use_cli_proxy_thread(data["server"], data["port"])
+                    r2, console_thread = create_or_use_console_proxy_thread(data["server"], data["port"])
                     if r2<0:
-                        vm_result[ vm['uuid'] ] = {"vim_result": -r2, "name":vm['name'], "description": cli_thread}
+                        vm_result[ vm['uuid'] ] = {"vim_result": -r2, "name":vm['name'], "description": console_thread}
                     else:
                         vm_result[ vm['uuid'] ] = {"vim_result": result,
-                                                   "description": "%s//%s:%d/%s" %(data["protocol"], cli_thread.host, cli_thread.port, data["suffix"]),
+                                                   "description": "%s//%s:%d/%s" %(data["protocol"], console_thread.host, console_thread.port, data["suffix"]),
                                                    "name":vm['name']
                                                 }
                         vm_ok +=1
@@ -1426,27 +1426,27 @@ def instance_action(mydb,nfvo_tenant,instance_id, action_dict):
     else:
         return 1, vm_result
     
-def create_or_use_cli_proxy_thread(proxy_server, proxy_port):
+def create_or_use_console_proxy_thread(console_server, console_port):
     #look for a non-used port
-    cli_thread_key = proxy_server + ":" + str(proxy_port)
-    if cli_thread_key in global_config["cli_thread"]:
-        global_config["cli_thread"][cli_thread_key].start_timeout()
-        return 1, global_config["cli_thread"][cli_thread_key]
+    console_thread_key = console_server + ":" + str(console_port)
+    if console_thread_key in global_config["console_thread"]:
+        #global_config["console_thread"][console_thread_key].start_timeout()
+        return 1, global_config["console_thread"][console_thread_key]
     
     for port in  global_config["console_port_iterator"]():
-        print "create_or_use_cli_proxy_thread() port:", port
-        if port in global_config["cli_ports"]:
+        print "create_or_use_console_proxy_thread() port:", port
+        if port in global_config["console_ports"]:
             continue
         try:
-            clithread = cli.CliProxyThread(global_config['http_host'], port, proxy_server, proxy_port)
+            clithread = cli.ConsoleProxyThread(global_config['http_host'], port, console_server, console_port)
             clithread.start()
-            global_config["cli_thread"][cli_thread_key] = clithread
-            global_config["cli_ports"][port] = cli_thread_key
+            global_config["console_thread"][console_thread_key] = clithread
+            global_config["console_ports"][port] = console_thread_key
             return 1, clithread
-        except cli.CliProxyExceptionPortUsed as e:
+        except cli.ConsoleProxyExceptionPortUsed as e:
             #port used, try with onoher
             continue
-        except cli.CliProxyException as e:
+        except cli.ConsoleProxyException as e:
             return -1, str(e)
     return -1, "Not found any free 'http_console_ports'"
 
@@ -1481,9 +1481,9 @@ def new_datacenter(mydb, datacenter_descriptor):
         return result, datacenter_id
     return 200,datacenter_id
 
-def edit_datacenter(mydb, datacenter_id, datacenter_descriptor):
+def edit_datacenter(mydb, datacenter_id_name, datacenter_descriptor):
     #obtain data, check that only one exist
-    result, content = mydb.get_table_by_uuid_name('datacenters', datacenter_id)
+    result, content = mydb.get_table_by_uuid_name('datacenters', datacenter_id_name)
     if result < 0:
         return result, content
     #edit data 
