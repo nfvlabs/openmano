@@ -628,17 +628,25 @@ class vimconnector(vimconn.vimconnector):
             print "osconnector: Creating VM into VIM"
             print "   image %s  flavor %s   nics=%s" %(image_id, flavor_id,net_list)
         try:
+            metadata=[]
             net_list_vim=[]
             self._reload_connection()
+            metadata_vpci={}
             for net in net_list:
                 if not net.get("net_id"): #skip non connected iface
                     continue
                 if net["type"]=="virtual":
                     net_list_vim.append({'net-id': net["net_id"]})
+                    if "vpci" in net:
+                        metadata_vpci[ net["net_id"] ] = [[ net["vpci"], "" ]]
                 elif net["type"]=="PF":
                     print "new_tenant_vminstance: Warning, can not connect a passthrough interface "
                     #TODO insert this when openstack consider passthrough ports as openstack neutron ports
                 else: #VF
+                    if "vpci" in net:
+                        if "VF" not in metadata_vpci:
+                            metadata_vpci["VF"]=[]
+                        metadata_vpci["VF"].append([ net["vpci"], "" ])
                     port_dict={
                          "network_id": net["net_id"],
                          "name": net.get("name"),
@@ -657,8 +665,12 @@ class vimconnector(vimconn.vimconnector):
                     net["vim_id"] = new_port["port"]["id"]
                     net["ip"] = new_port["port"].get("fixed_ips",[{}])[0].get("ip_address")
                     net_list_vim.append({"port-id": new_port["port"]["id"]})
-            print "name '%s' image_id '%s'flavor_id '%s' net_list_vim '%s' description '%s'"  % (name, image_id, flavor_id, str(net_list_vim), description)
-            server = self.nova.servers.create(name, image_id, flavor_id, nics=net_list_vim) #, description=description)
+            if metadata_vpci:
+                metadata = {"pci_assignement": json.dumps(metadata_vpci)}
+            
+            print "name '%s' image_id '%s'flavor_id '%s' net_list_vim '%s' description '%s' metadata %s"\
+                 % (name, image_id, flavor_id, str(net_list_vim), description, str(metadata))
+            server = self.nova.servers.create(name, image_id, flavor_id, nics=net_list_vim, meta=metadata) #, description=description)
             print "DONE :-)", server
             #TODO parse input and translate to VIM format (openmano_schemas.new_vminstance_response_schema)
             #print server
@@ -668,13 +680,13 @@ class vimconnector(vimconn.vimconnector):
 #        except nvExceptions.NotFound, e:
 #            error_value=-vimconn.HTTP_Not_Found
 #            error_text= "vm instance %s not found" % vm_id
-        except (ksExceptions.ClientException, nvExceptions.ClientException, ConnectionError), e:
+        except (ksExceptions.ClientException, nvExceptions.ClientException, ConnectionError, TypeError), e:
             error_value=-vimconn.HTTP_Bad_Request
             error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception vimconn.HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
-            print "get_tenant_vminstance Exception",e, error_text
+            print "new_tenant_vminstance Exception",e, error_text
         return error_value, error_text    
 
     def get_tenant_vminstance(self,vm_id):

@@ -15,6 +15,7 @@ vnf:
         VNFC image:  /path/to/imagefolder/linux.qcow2
         vcpus: 1          # Only for traditional cloud VMs. Number of virtual CPUs (oversubscription is allowed).
         ram: 1024         # Only for traditional cloud VMs. Memory in MBytes (not from hugepages, oversubscription is allowed)
+        disk: 10
         bridge-ifaces:
         -   name:      eth0
             vpci:      "0000:00:11.0"

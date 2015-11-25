@@ -154,7 +154,7 @@ def _load_file_or_yaml(content):
             print "Error loading yaml/json text"+error_pos
             exit (-1)
     else:
-        print "'%s' does not exist as a file ant it is not seem a yaml/json content" % content
+        print "'%s' is neither a valid file nor a yaml/json content" % content
         exit(-1)
     return payload
 
