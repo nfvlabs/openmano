@@ -29,6 +29,7 @@ __date__ ="$22-jun-2014 11:19:29$"
 
 import vimconn
 import json
+import yaml
 
 from novaclient import client as nClient, exceptions as nvExceptions
 import keystoneclient.v2_0.client as ksClient
@@ -556,7 +557,7 @@ class vimconnector(vimconn.vimconnector):
                 new_image_nova.metadata.setdefault('location',image_dict['location'])
                 metadata_to_load = image_dict.get('metadata')
                 if metadata_to_load:
-                    for k,v in json.loads(metadata_to_load).iteritems():
+                    for k,v in yaml.load(metadata_to_load).iteritems():
                         new_image_nova.metadata.setdefault(k,v)
                 return 1, new_image.id
             except nvExceptions.Conflict, e:

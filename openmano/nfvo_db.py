@@ -943,7 +943,9 @@ class nfvo_db():
                         net.pop('net_id', None)
                         net['scenario_id']=scenario_uuid
                         if "graph" in net:
-                            net["graph"]=yaml.safe_dump(net["graph"],default_flow_style=True,width=256)
+                            #net["graph"]=yaml.safe_dump(net["graph"],default_flow_style=True,width=256)
+                            #TODO, must be json because of the GUI, change to yaml
+                            net["graph"]=json.dumps(net["graph"])
                         r,net_uuid =  self._new_row_internal('sce_nets', net, tenant_id, True, True)
                         if r<0:
                             print 'nfvo_db.new_scenario Error inserting at table sce_vnfs: ' + net_uuid
@@ -958,7 +960,9 @@ class nfvo_db():
                                 'description': vnf['description']
                             }
                         if "graph" in vnf:
-                            INSERT_["graph"]=yaml.safe_dump(vnf["graph"],default_flow_style=True,width=256)
+                            #INSERT_["graph"]=yaml.safe_dump(vnf["graph"],default_flow_style=True,width=256)
+                            #TODO, must be json because of the GUI, change to yaml
+                            INSERT_["graph"]=json.dumps(vnf["graph"])
                         r,scn_vnf_uuid =  self._new_row_internal('sce_vnfs', INSERT_, tenant_id, True, scenario_uuid, True)
                         if r<0:
                             print 'nfvo_db.new_scenario Error inserting at table sce_vnfs: ' + scn_vnf_uuid
@@ -1014,7 +1018,9 @@ class nfvo_db():
                     #sce_nets
                     for node_id, node in nodes.items():
                         if "graph" in node:
-                            node["graph"] = yaml.safe_dump(node["graph"],default_flow_style=True,width=256)
+                            #node["graph"] = yaml.safe_dump(node["graph"],default_flow_style=True,width=256)
+                            #TODO, must be json because of the GUI, change to yaml
+                            node["graph"] = json.dumps(node["graph"])
                         WHERE_={'scenario_id': scenario_uuid, 'uuid': node_id}
                         r,c =  self.__update_rows('sce_nets', node, WHERE_)
                         if r<=0:

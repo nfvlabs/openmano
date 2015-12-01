@@ -57,8 +57,8 @@
 		getScenarioId_js($uuid);
 		echo "</script>\n";
 		echo "<p><b>uuid:</b>        <a id='scenario_uuid'>Loading</a> </p>\n";
-		echo "<p><b>name:</b>        <a id='scenario_name' title='doble click to change' >Loading</a> </p>\n";
-		echo "<p><b>description:</b> <a id='scenario_description' title='doble click to change'>Loading</a> </p>\n";
+		echo "<p><b>name:</b>        <a id='scenario_name' title='double click to change' >Loading</a> </p>\n";
+		echo "<p><b>description:</b> <a id='scenario_description' title='double click to change'>Loading</a> </p>\n";
 		echo "<p><b>created:</b>     <a id='scenario_created'>Loading</a> </p>\n";
 		//echo "<p><b>modified:</b>    <a id='scenario_modified'>Loading</a> </p>\n";
 	}else{

@@ -32,6 +32,7 @@ __date__ ="$26-aug-2014 11:09:29$"
 import vimconn
 import requests
 import json
+import yaml
 from openmano_schemas import id_schema, name_schema, nameshort_schema, description_schema, \
                             vlan1000_schema, integer0_schema
 from jsonschema import validate as js_v, exceptions as js_e
@@ -762,7 +763,7 @@ class vimconnector(vimconn.vimconnector):
         if 'description' in image_dict and image_dict['description'] != None:
             new_image_dict['description'] = image_dict['description']
         if 'metadata' in image_dict and image_dict['metadata'] != None:
-            new_image_dict['metadata'] = json.loads(image_dict['metadata'])
+            new_image_dict['metadata'] = yaml.load(image_dict['metadata'])
         if 'location' in image_dict and image_dict['location'] != None:
             new_image_dict['path'] = image_dict['location']
         payload_req = json.dumps({"image":new_image_dict})
