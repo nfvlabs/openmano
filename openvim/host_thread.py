@@ -320,6 +320,10 @@ class host_thread(threading.Thread):
                     print self.name, ": processing task edit-iface port=%s, old_net=%s, new_net=%s" % (task[1], task[2], task[3])
                     self.edit_iface(task[1], task[2], task[3])
                     break
+                elif task[0] == 'restore-iface':
+                    print self.name, ": processing task restore-iface %s mac=%s" % (task[1], task[2])
+                    self.restore_iface(task[1], task[2])
+                    break
                 else:
                     print self.name, ": unknown task", task
                 
@@ -1018,7 +1022,6 @@ class host_thread(threading.Thread):
             -5: Error while trying to perform action. VM is updated to ERROR
         '''
         server_id = req['uuid']
-            
         conn = None
         new_status = None
         old_status = req['status']
@@ -1211,7 +1214,40 @@ class host_thread(threading.Thread):
             self.db_lock.release()
         if new_status == 'ERROR':
             return -1
-        return 1 
+        return 1
+     
+    
+    def restore_iface(self, name, mac, lib_conn=None):
+        ''' make an ifdown, ifup to restore default parameter of na interface
+            Params:
+                mac: mac address of the interface
+                lib_conn: connection to the libvirt, if None a new connection is created
+            Return 0,None if ok, -1,text if fails
+        ''' 
+        conn=None
+        ret = 0
+        error_text=None
+        if self.test:
+            print self.name, ": restore_iface '%s' %s" % (name, mac)
+            return 0, None
+        try:
+            if not lib_conn:
+                conn = libvirt.open("qemu+ssh://"+self.user+"@"+self.host+"/system")
+            else:
+                conn = lib_conn
+            iface = conn.interfaceLookupByMACString(mac)
+            iface.destroy()
+            iface.create()
+            print self.name, ": restore_iface '%s' %s" % (name, mac)
+        except libvirt.libvirtError as e:   
+            error_text = e.get_error_message()
+            print self.name, ": restore_iface '%s' '%s' libvirt exception: %s" %(name, mac, error_text) 
+            ret=-1
+        finally:
+            if lib_conn is None and conn is not None:
+                conn.close
+        return ret, error_text
+
         
     def create_image(self,dom, req):
         if self.test:

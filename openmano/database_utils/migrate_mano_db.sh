@@ -346,7 +346,7 @@ function upgrade_to_4(){
 }
 
 function downgrade_from_4(){
-    echo "    upgrade database from version 0.4 to version 0.3"
+    echo "    downgrade database from version 0.4 to version 0.3"
     echo "      Shorten back graph field at tables 'sce_vnfs', 'sce_nets'"
     for table in sce_vnfs sce_nets
     do

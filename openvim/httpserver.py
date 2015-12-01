@@ -1329,7 +1329,8 @@ def http_post_server_id(tenant_id):
         print
         if server_start == 'no':
             content['status'] = 'INACTIVE'
-        new_instance_result, new_instance = my.db.new_instance(content, nets)
+        ports_to_free=[]
+        new_instance_result, new_instance = my.db.new_instance(content, nets, ports_to_free)
         if new_instance_result < 0:
             print "Error http_post_servers() :", new_instance_result, new_instance
             bottle.abort(-new_instance_result, new_instance)
@@ -1337,6 +1338,10 @@ def http_post_server_id(tenant_id):
         print
         print "inserted at DB"
         print
+        for port in ports_to_free:
+            r,c = config_dic['host_threads'][ server['host_id'] ].insert_task( 'restore-iface',*port )
+            if r < 0:
+                print ' http_post_servers ERROR RESTORE IFACE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c
         #updata nets
         for net in nets:
             r,c = config_dic['of_thread'].insert_task("update-net", net)
@@ -1484,7 +1489,13 @@ def http_server_action(server_id, tenant_id, action):
     data={'result' : 'in process'}
     if new_status != None and new_status == 'DELETING':
         nets=[]
-        r,c = my.db.delete_instance(server_id, tenant_id, nets, "requested by http")
+        ports_to_free=[]
+        r,c = my.db.delete_instance(server_id, tenant_id, nets, ports_to_free, "requested by http")
+        for port in ports_to_free:
+            r1,c1 = config_dic['host_threads'][ server['host_id'] ].insert_task( 'restore-iface',*port )
+            if r1 < 0:
+                print ' http_post_server_action error at server deletion ERROR resore-iface !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c1
+                data={'result' : 'deleting in process, but ifaces cannot be restored!!!!!'}
         for net in nets:
             r1,c1 = config_dic['of_thread'].insert_task("update-net", net)
             if r1 < 0:

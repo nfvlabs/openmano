@@ -202,7 +202,7 @@ class vim_db():
             or (len(self.net_vlan_usedlist)>0 and self.net_vlan_lastused >= self.net_vlan_usedlist[-1] and len(self.net_vlan_usedlist)==25):
                 r = self.__get_used_net_vlan()
                 if r<0: return r
-                self.logger.debug("new net_vlan_usedlist ", self.net_vlan_usedlist)
+                self.logger.debug("new net_vlan_usedlist %s", str(self.net_vlan_usedlist))
             if self.net_vlan_lastused in self.net_vlan_usedlist:
                 continue
             else:
@@ -1346,7 +1346,7 @@ class vim_db():
                 r,c = self.format_error(e, "get_numas", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
-    def new_instance(self, instance_dict, nets):
+    def new_instance(self, instance_dict, nets, ports_to_free):
         for retry_ in range(0,2):
             cmd=""
             try:
@@ -1443,6 +1443,14 @@ class vim_db():
                                 self.cur.execute(cmd)
                                 if 'uuid' in iface:
                                     nets.append(iface['uuid'])
+                                    
+                                #discover if this port is not used by anyone
+                                cmd = "SELECT source_name, mac FROM ( SELECT root_id, count(instance_id) as used FROM resources_port" \
+                                      " WHERE root_id=(SELECT root_id from resources_port WHERE id='%s')"\
+                                      " GROUP BY root_id ) AS A JOIN resources_port as B ON A.root_id=B.id AND A.used=0" % iface['port_id'] 
+                                self.logger.debug(cmd)
+                                self.cur.execute(cmd)
+                                ports_to_free += self.cur.fetchall()
 
                                 cmd = "UPDATE resources_port SET instance_id='%s', port_id='%s',Mbps_used=%s WHERE id='%s'" \
                                     % (uuid, iface['id'], mbps_, iface['port_id'])
@@ -1479,7 +1487,7 @@ class vim_db():
                 r,c = self.format_error(e, "new_instance", cmd)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
-    def delete_instance(self, instance_id, tenant_id, net_list, logcause="requested by http"):
+    def delete_instance(self, instance_id, tenant_id, net_list, ports_to_free, logcause="requested by http"):
         for retry_ in range(0,2):
             cmd=""
             try:
@@ -1491,9 +1499,9 @@ class vim_db():
                     self.cur.execute(cmd)
                     if self.cur.rowcount == 0 : return 0, "instance %s not found in tenant %s" % (instance_id, tenant_id)
 
-                    #delete bridged ifaces, instace_devices, resources_mem; done by database: FOREIGN KEY DELTETE CASCADE
-
-                    #update resources port, first get nets afected
+                    #delete bridged ifaces, instace_devices, resources_mem; done by database: it is automatic by Database; FOREIGN KEY DELETE CASCADE
+                    
+                    #get nets afected
                     cmd = "SELECT DISTINCT net_id from ports WHERE instance_id = '%s' AND net_id is not Null AND type='instance:data'" % instance_id
                     self.logger.debug(cmd)
                     self.cur.execute(cmd)
@@ -1501,9 +1509,29 @@ class vim_db():
                     for net in net_list__:
                         net_list.append(net[0])
 
+                    #get dataplane interfaces releases by this VM; both PF and VF with no other VF 
+                    cmd="SELECT source_name, mac FROM (SELECT root_id, count(instance_id) as used FROM resources_port WHERE instance_id='%s' GROUP BY root_id ) AS A" % instance_id \
+                        +  " JOIN (SELECT root_id, count(instance_id) as used FROM resources_port GROUP BY root_id) AS B ON A.root_id=B.root_id AND A.used=B.used"\
+                        +  " JOIN resources_port as C ON A.root_id=C.id" 
+#                    cmd = "SELECT DISTINCT root_id FROM resources_port WHERE instance_id = '%s'" % instance_id
+                    self.logger.debug(cmd)
+                    self.cur.execute(cmd)
+                    ports_to_free += self.cur.fetchall()
+
+                    #update resources port
                     cmd = "UPDATE resources_port SET instance_id=Null, port_id=Null, Mbps_used='0' WHERE instance_id = '%s'" % instance_id
                     self.logger.debug(cmd)
                     self.cur.execute(cmd)
+                    
+#                     #filter dataplane ports used by this VM that now are free
+#                     for port in ports_list__:
+#                         cmd = "SELECT mac, count(instance_id) FROM resources_port WHERE root_id = '%s'" % port[0]
+#                         self.logger.debug(cmd)
+#                         self.cur.execute(cmd)
+#                         mac_list__ = self.cur.fetchone()
+#                         if mac_list__ and mac_list__[1]==0:
+#                             ports_to_free.append(mac_list__[0])
+                        
 
                     #update resources core
                     cmd = "UPDATE resources_core SET instance_id=Null, v_thread_id=Null, paired='N' WHERE instance_id = '%s'" % instance_id
