@@ -622,11 +622,11 @@ class host_thread(threading.Thread):
                 #skip not connected interfaces
                 if v.get("net_id") == None:
                     continue
-                text += self.tab() + "<interface type='hostdev' managed='yes'>" + \
-                    self.inc_tab()
+                text += self.tab() + "<interface type='hostdev' managed='yes'>"
+                self.inc_tab()
                 if v.get('mac_address', None) != None:
-                    text+= "<mac address='" +v['mac_address']+ "'/>"
-                    text+= self.tab()+'<source>'
+                    text+= self.tab() + "<mac address='" +v['mac_address']+ "'/>"
+                text+= self.tab()+'<source>'
                 self.inc_tab()
                 text += self.pci2xml(v['source'])
                 text += self.dec_tab()+'</source>'
