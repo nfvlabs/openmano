@@ -24,7 +24,7 @@
 '''
 NFVO engine, implementing all the methods for the creation, deletion and management of vnfs, scenarios and instances
 '''
-__author__="Alfonso Tierno, Gerardo Garcia"
+__author__="Alfonso Tierno, Gerardo Garcia, Pablo Montes"
 __date__ ="$16-sep-2014 22:05:01$"
 
 import imp
@@ -1164,6 +1164,8 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                     netDict["type"]="virtual"
                 if "vpci" in iface and iface["vpci"] is not None:
                     netDict['vpci'] = iface['vpci']
+                if "mac" in iface and iface["mac"] is not None:
+                    netDict['mac_address'] = iface['mac']
                 netDict['name'] = iface['internal_name']
                 if iface['net_id'] is None:
                     for vnf_iface in sce_vnf["interfaces"]:

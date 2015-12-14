@@ -24,7 +24,7 @@
 '''
 NFVO DB engine. It implements all the methods to interact with the Openmano Database
 '''
-__author__="Alfonso Tierno, Gerardo Garcia"
+__author__="Alfonso Tierno, Gerardo Garcia, Pablo Montes"
 __date__ ="$28-aug-2014 10:05:01$"
 
 import MySQLdb as mdb
@@ -797,6 +797,7 @@ class nfvo_db():
                                 af.convert_bandwidth(bridgeiface)
                                 bridgeInterfacesDict[vm['name']][bridgeiface['name']] = {}
                                 bridgeInterfacesDict[vm['name']][bridgeiface['name']]['vpci'] = bridgeiface.get('vpci',None)
+                                bridgeInterfacesDict[vm['name']][bridgeiface['name']]['mac'] = bridgeiface.get('mac_address',None)
                                 bridgeInterfacesDict[vm['name']][bridgeiface['name']]['bw'] = bridgeiface.get('bandwidth', None)
                                 bridgeInterfacesDict[vm['name']][bridgeiface['name']]['model'] = bridgeiface.get('model', None)
                     
@@ -831,7 +832,8 @@ class nfvo_db():
                                     ifaceItem["bw"] =    dataifacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['bw']
                                     ifaceItem["model"] = dataifacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['model']
                                 else:
-                                    ifaceItem["vpci"] =  bridgeInterfacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['vpci'] 
+                                    ifaceItem["vpci"] =  bridgeInterfacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['vpci']
+                                    ifaceItem["mac"] =  bridgeInterfacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['mac_address']
                                     ifaceItem["bw"] =    bridgeInterfacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['bw']
                                     ifaceItem["model"] = bridgeInterfacesDict[ element['VNFC'] ][ element['local_iface_name'] ]['model']
                                 internalconnList.append(ifaceItem)
@@ -863,6 +865,7 @@ class nfvo_db():
                             myIfaceDict["vpci"]  = bridgeInterfacesDict[ iface['VNFC'] ][ iface['local_iface_name'] ]['vpci']
                             myIfaceDict["bw"]    = bridgeInterfacesDict[ iface['VNFC'] ][ iface['local_iface_name'] ]['bw']
                             myIfaceDict["model"] = bridgeInterfacesDict[ iface['VNFC'] ][ iface['local_iface_name'] ]['model']
+                            myIfaceDict["mac"] = bridgeInterfacesDict[ iface['VNFC'] ][ iface['local_iface_name'] ]['mac']
                         print "Iface name: %s" % iface['name']
                         result, iface_id = self.new_interface(myIfaceDict,nfvo_tenant,vnf_id)
                         if result < 0:
@@ -1137,7 +1140,7 @@ class nfvo_db():
                                     vm['vim_flavor_id']=vim_flavor_dict['vim_id']
                                 
                             #interfaces
-                            self.cur.execute("SELECT uuid,internal_name,external_name,net_id,type,vpci,bw,model " +
+                            self.cur.execute("SELECT uuid,internal_name,external_name,net_id,type,vpci,mac,bw,model " +
                                     "FROM interfaces " +
                                     "WHERE vm_id='" + vm['uuid'] +"'"  )
                             vm['interfaces'] = self.cur.fetchall()

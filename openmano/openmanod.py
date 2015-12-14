@@ -31,11 +31,11 @@ network service templates and network service instances.
 
 It loads the configuration file and launches the http_server thread that will listen requests using openmano API.
 '''
-__author__="Alfonso Tierno, Gerardo Garcia"
+__author__="Alfonso Tierno, Gerardo Garcia, Pablo Montes"
 __date__ ="$26-aug-2014 11:09:29$"
-__version__="0.4.0-r441"
-version_date="Nov 2015"
-database_version="0.4"      #expected database schema version
+__version__="0.4.1-r445"
+version_date="Dic 2015"
+database_version="0.5"      #expected database schema version
 
 import httpserver
 import time

@@ -158,6 +158,7 @@ DATABASE_TARGET_VER_NUM=0
 [ $OPENMANO_VER_NUM -ge 2005 ] && DATABASE_TARGET_VER_NUM=2   #0.2.5 =>  2
 [ $OPENMANO_VER_NUM -ge 3003 ] && DATABASE_TARGET_VER_NUM=3   #0.3.3 =>  3
 [ $OPENMANO_VER_NUM -ge 3005 ] && DATABASE_TARGET_VER_NUM=4   #0.3.5 =>  4
+[ $OPENMANO_VER_NUM -ge 4001 ] && DATABASE_TARGET_VER_NUM=5   #0.4.1 =>  5
 #TODO ... put next versions here
 
 
@@ -356,6 +357,19 @@ function downgrade_from_4(){
     echo "DELETE FROM schema_version WHERE version_int='4';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 
+function upgrade_to_5(){
+    echo "    upgrade database from version 0.4 to version 0.5"
+    echo "      Add 'mac' field for bridge interfaces in table 'interfaces'"
+    echo "ALTER TABLE interfaces ADD COLUMN mac CHAR(18) NULL DEFAULT NULL AFTER model;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (5, '0.5', '0.4.1', 'Add mac address for bridge interfaces', '2015-12-14');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+
+function downgrade_from_5(){
+    echo "    downgrade database from version 0.5 to version 0.4"
+    echo "      Remove 'mac' field for bridge interfaces in table 'interfaces'"
+    echo "ALTER TABLE interfaces DROP COLUMN mac;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int='5';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
 
 #TODO ... put funtions here
 
