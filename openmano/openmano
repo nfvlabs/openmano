@@ -28,8 +28,8 @@ openmano client used to interact with openmano-server (openmanod)
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$09-oct-2014 09:09:48$"
-__version__="0.4.0-r440"
-version_date="Nov 2015"
+__version__="0.4.1-r449"
+version_date="Dec 2015"
 
 from argcomplete.completers import FilesCompleter
 import os
@@ -38,6 +38,7 @@ import argcomplete
 import requests
 import json
 import yaml
+import logging
 
 class ArgumentParserError(Exception): pass
 
@@ -191,7 +192,10 @@ def vnf_create(args):
     #print payload_req
         
     URLrequest = "http://%s:%s/openmano/%s/vnfs" %(mano_host, mano_port, mano_tenant)
+    logger.debug("openmano request: %s", payload_req)
     mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
+    logger.debug("openmano response: %s", mano_response.text )
+
     return _print_verbose(mano_response, args.verbose)
 
 def vnf_list(args):
@@ -201,7 +205,7 @@ def vnf_list(args):
     else:
         URLrequest = "http://%s:%s/openmano/%s/vnfs" %(mano_host, mano_port, mano_tenant)
     mano_response = requests.get(URLrequest)
-    #print mano_response
+    logger.debug("openmano response: %s", mano_response.text )
     content = mano_response.json()
     #print json.dumps(content, indent=4)
     if args.verbose==None:
@@ -258,7 +262,7 @@ def vnf_delete(args):
             return 0
     URLrequest = "http://%s:%s/openmano/%s/vnfs/%s" %(mano_host, mano_port, mano_tenant, args.name)
     mano_response = requests.delete(URLrequest)
-    #print mano_response
+    logger.debug("openmano response: %s", mano_response.text )
     result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
@@ -282,7 +286,9 @@ def scenario_create(args):
     #print payload_req
         
     URLrequest = "http://%s:%s/openmano/%s/scenarios" %(mano_host, mano_port, mano_tenant)
+    logger.debug("openmano request: %s", payload_req)
     mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
+    logger.debug("openmano response: %s", mano_response.text )
     return _print_verbose(mano_response, args.verbose)
 
 def scenario_list(args):
@@ -292,7 +298,7 @@ def scenario_list(args):
     else:
         URLrequest = "http://%s:%s/openmano/%s/scenarios" %(mano_host, mano_port, mano_tenant)
     mano_response = requests.get(URLrequest)
-    #print mano_response
+    logger.debug("openmano response: %s", mano_response.text )
     content = mano_response.json()
     #print json.dumps(content, indent=4)
     if args.verbose==None:
@@ -350,7 +356,7 @@ def scenario_delete(args):
             return 0
     URLrequest = "http://%s:%s/openmano/%s/scenarios/%s" %(mano_host, mano_port, mano_tenant, args.name)
     mano_response = requests.delete(URLrequest)
-    #print mano_response
+    logger.debug("openmano response: %s", mano_response.text )
     result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
@@ -380,7 +386,9 @@ def scenario_deploy(args):
     #print payload_req
 
     URLrequest = "http://%s:%s/openmano/%s/scenarios/%s/action" %(mano_host, mano_port, mano_tenant, args.scenario)
+    logger.debug("openmano request: %s", payload_req)
     mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
+    logger.debug("openmano response: %s", mano_response.text )
     if args.verbose==None:
         args.verbose=0
     
@@ -415,7 +423,9 @@ def scenario_verify(args):
     #print payload_req
 
     URLrequest = "http://%s:%s/openmano/%s/scenarios/%s/action" %(mano_host, mano_port, mano_tenant, args.scenario)
+    logger.debug("openmano request: %s", payload_req)
     mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
+    logger.debug("openmano response: %s", mano_response.text )
     
     result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
@@ -433,7 +443,7 @@ def instance_scenario_list(args):
     else:
         URLrequest = "http://%s:%s/openmano/%s/instances" %(mano_host, mano_port, mano_tenant)
     mano_response = requests.get(URLrequest)
-    #print mano_response
+    logger.debug("openmano response: %s", mano_response.text )
     content = mano_response.json()
     #print json.dumps(content, indent=4)
     if args.verbose==None:
@@ -503,7 +513,7 @@ def instance_scenario_delete(args):
             return
     URLrequest = "http://%s:%s/openmano/%s/instances/%s" %(mano_host, mano_port, mano_tenant, args.name)
     mano_response = requests.delete(URLrequest)
-    #print mano_response
+    logger.debug("openmano response: %s", mano_response.text )
     result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
@@ -525,8 +535,9 @@ def instance_scenario_action(args):
     headers_req = {'content-type': 'application/json'}
     payload_req = json.dumps(action, indent=4)
     URLrequest = "http://%s:%s/openmano/%s/instances/%s/action" %(mano_host, mano_port, mano_tenant, args.name)
+    logger.debug("openmano request: %s", payload_req)
     mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
-    #print mano_response
+    logger.debug("openmano response: %s", mano_response.text )
     result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
@@ -559,7 +570,9 @@ def tenant_create(args):
     #print payload_req
         
     URLrequest = "http://%s:%s/openmano/tenants" %(mano_host, mano_port)
+    logger.debug("openmano request: %s", payload_req)
     mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
+    logger.debug("openmano response: %s", mano_response.text )
     return _print_verbose(mano_response, args.verbose)
 
 def tenant_list(args):
@@ -569,6 +582,7 @@ def tenant_list(args):
     else:
         URLrequest = "http://%s:%s/openmano/tenants" %(mano_host, mano_port)
     mano_response = requests.get(URLrequest)
+    logger.debug("openmano response: %s", mano_response.text )
     if args.verbose==None:
         args.verbose=0
     if args.name!=None:
@@ -583,7 +597,7 @@ def tenant_delete(args):
             return 0
     URLrequest = "http://%s:%s/openmano/tenants/%s" %(mano_host, mano_port, args.name)
     mano_response = requests.delete(URLrequest)
-    #print mano_response
+    logger.debug("openmano response: %s", mano_response.text )
     result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
@@ -610,7 +624,9 @@ def datacenter_attach(args):
     #print payload_req
         
     URLrequest = "http://%s:%s/openmano/%s/datacenters/%s" %(mano_host, mano_port, mano_tenant, args.name)
+    logger.debug("openmano request: %s", payload_req)
     mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
+    logger.debug("openmano response: %s", mano_response.text )
     result = _print_verbose(mano_response, args.verbose)
     #provide addional information if error
     if mano_response.status_code != 200:
@@ -624,6 +640,7 @@ def datacenter_detach(args):
     headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
     URLrequest = "http://%s:%s/openmano/%s/datacenters/%s" %(mano_host, mano_port, mano_tenant, args.name)
     mano_response = requests.delete(URLrequest, headers=headers_req)
+    logger.debug("openmano response: %s", mano_response.text )
     content = mano_response.json()
     #print json.dumps(content, indent=4)
     result = 0 if mano_response.status_code==200 else mano_response.status_code
@@ -649,7 +666,9 @@ def datacenter_create(args):
     #print payload_req
         
     URLrequest = "http://%s:%s/openmano/datacenters" %(mano_host, mano_port)
+    logger.debug("openmano request: %s", payload_req)
     mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
+    logger.debug("openmano response: %s", mano_response.text )
     return _print_verbose(mano_response, args.verbose)
 
 def datacenter_delete(args):
@@ -660,7 +679,7 @@ def datacenter_delete(args):
             return 0
     URLrequest = "http://%s:%s/openmano/datacenters/%s" %(mano_host, mano_port, args.name)
     mano_response = requests.delete(URLrequest)
-    #print mano_response
+    logger.debug("openmano response: %s", mano_response.text )
     result = 0 if mano_response.status_code==200 else mano_response.status_code
     content = mano_response.json()
     #print json.dumps(content, indent=4)
@@ -678,6 +697,7 @@ def datacenter_list(args):
     else:
         URLrequest = "http://%s:%s/openmano/%s/datacenters" %(mano_host, mano_port, tenant)
     mano_response = requests.get(URLrequest)
+    logger.debug("openmano response: %s", mano_response.text )
     if args.verbose==None:
         args.verbose=0
     if args.name!=None:
@@ -716,8 +736,9 @@ def datacenter_net_action(args):
                 payload[args.action].update(_load_file_or_yaml(args.file))
 
         payload_req = json.dumps(payload)
-        #print payload_req
+        logger.debug("openmano request: %s", payload_req)
         mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
+        logger.debug("openmano response: %s", mano_response.text )
     return _print_verbose(mano_response, args.verbose)
 
 def element_edit(args):
@@ -735,7 +756,9 @@ def element_edit(args):
             pass
         else:
             return 0
+    logger.debug("openmano request: %s", payload_req)
     mano_response = requests.put(URLrequest, headers=headers_req, data=payload_req)
+    logger.debug("openmano response: %s", mano_response.text )
     if args.verbose==None:
         args.verbose=0
     if args.name!=None:
@@ -768,6 +791,7 @@ if __name__=="__main__":
     vnf_create_parser.add_argument("--description", action="store", help="description of the VNF (if it exists in the VNF descriptor, it is overwritten)")
     vnf_create_parser.add_argument("--image-path", action="store",  help="change image path locations (overwritten)")
     vnf_create_parser.add_argument('--verbose', '-v', action='count')
+    vnf_create_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     vnf_create_parser.set_defaults(func=vnf_create)
 
     vnf_list_parser = subparsers.add_parser('vnf-list', help="lists information about a vnf")
@@ -775,11 +799,13 @@ if __name__=="__main__":
     vnf_list_parser.add_argument('--verbose', '-v', action='count')
     vnf_list_parser.add_argument('--details', action="store_true", help="prints details of the VNF (internal structure)")
     #vnf_list_parser.add_argument('--descriptor', help="prints the VNF descriptor", action="store_true")
+    vnf_list_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     vnf_list_parser.set_defaults(func=vnf_list)
     
     vnf_delete_parser = subparsers.add_parser('vnf-delete', help="deletes a vnf from the catalogue")
     vnf_delete_parser.add_argument("name", action="store", help="name or uuid of the VNF to be deleted")
     vnf_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
+    vnf_delete_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     vnf_delete_parser.set_defaults(func=vnf_delete)
     
     scenario_create_parser = subparsers.add_parser('scenario-create', help="adds a scenario into the OPENMANO DB")
@@ -787,6 +813,7 @@ if __name__=="__main__":
     scenario_create_parser.add_argument("--name", action="store", help="name of the scenario (if it exists in the YAML scenario, it is overwritten)")
     scenario_create_parser.add_argument("--description", action="store", help="description of the scenario (if it exists in the YAML scenario, it is overwritten)")
     scenario_create_parser.add_argument('--verbose', '-v', action='count')
+    scenario_create_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     scenario_create_parser.set_defaults(func=scenario_create)
 
     scenario_list_parser = subparsers.add_parser('scenario-list', help="lists information about a scenario")
@@ -794,11 +821,13 @@ if __name__=="__main__":
     scenario_list_parser.add_argument('--verbose', '-v', action='count')
     scenario_list_parser.add_argument('--details', action="store_true", help="prints details of the scenario (internal structure)")
     #scenario_list_parser.add_argument('--descriptor', help="prints the scenario descriptor", action="store_true")
+    scenario_list_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     scenario_list_parser.set_defaults(func=scenario_list)
     
     scenario_delete_parser = subparsers.add_parser('scenario-delete', help="deletes a scenario from the OPENMANO DB")
     scenario_delete_parser.add_argument("name", action="store", help="name or uuid of the scenario to be deleted")
     scenario_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
+    scenario_delete_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     scenario_delete_parser.set_defaults(func=scenario_delete)
 
     scenario_deploy_parser = subparsers.add_parser('scenario-deploy', help="deploys a scenario")
@@ -808,21 +837,25 @@ if __name__=="__main__":
     scenario_deploy_parser.add_argument("--datacenter", action="store", help="specifies the datacenter. Needed if several datacenters are available")
     scenario_deploy_parser.add_argument("--description", action="store", help="description of the instance")
     scenario_deploy_parser.add_argument('--verbose', '-v', action='count')
+    scenario_deploy_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     scenario_deploy_parser.set_defaults(func=scenario_deploy)
     
     scenario_deploy_parser = subparsers.add_parser('scenario-verify', help="verifies if a scenario can be deployed (deploys it and deletes it)")
     scenario_deploy_parser.add_argument("scenario", action="store", help="name or uuid of the scenario to be verified")
+    scenario_deploy_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     scenario_deploy_parser.set_defaults(func=scenario_verify)
     
     instance_scenario_list_parser = subparsers.add_parser('instance-scenario-list', help="lists information about a scenario instance")
     instance_scenario_list_parser.add_argument("name", nargs='?', help="name of the scenario instance")
     instance_scenario_list_parser.add_argument('--verbose', '-v', action='count')
     instance_scenario_list_parser.add_argument('--details', action="store_true", help="prints details of the scenario instance (internal structure)")
+    instance_scenario_list_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     instance_scenario_list_parser.set_defaults(func=instance_scenario_list)
 
     instance_scenario_delete_parser = subparsers.add_parser('instance-scenario-delete', help="deletes a scenario instance (and deletes all VM and net instances in VIM)")
     instance_scenario_delete_parser.add_argument("name", action="store", help="name or uuid of the scenario instance to be deleted")
     instance_scenario_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
+    instance_scenario_delete_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     instance_scenario_delete_parser.set_defaults(func=instance_scenario_delete)
     
     instance_scenario_action_parser = subparsers.add_parser('instance-scenario-action', help="invoke an action over part or the whole scenario instance")
@@ -834,6 +867,7 @@ if __name__=="__main__":
     instance_scenario_action_parser.add_argument("--vnf", action="append", help="VNF to act on (can use several entries)")
     instance_scenario_action_parser.add_argument("--vm", action="append", help="VM to act on (can use several entries)")
     instance_scenario_action_parser.add_argument('--verbose', '-v', action='count')
+    instance_scenario_action_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     instance_scenario_action_parser.set_defaults(func=instance_scenario_action)
 
     #instance_scenario_status_parser = subparsers.add_parser('instance-scenario-status', help="show the status of a scenario instance")
@@ -844,16 +878,19 @@ if __name__=="__main__":
     tenant_create_parser.add_argument("name", action="store", help="name for the tenant")
     tenant_create_parser.add_argument("--description", action="store", help="description of the tenant")
     tenant_create_parser.add_argument('--verbose', '-v', action='count')
+    tenant_create_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     tenant_create_parser.set_defaults(func=tenant_create)
 
     tenant_delete_parser = subparsers.add_parser('tenant-delete', help="deletes a tenant from the catalogue")
     tenant_delete_parser.add_argument("name", action="store", help="name or uuid of the tenant to be deleted")
     tenant_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
+    tenant_delete_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     tenant_delete_parser.set_defaults(func=tenant_delete)
 
     tenant_list_parser = subparsers.add_parser('tenant-list', help="lists information about a tenant")
     tenant_list_parser.add_argument("name", nargs='?', help="name or uuid of the tenant")
     tenant_list_parser.add_argument('--verbose', '-v', action='count')
+    tenant_list_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     tenant_list_parser.set_defaults(func=tenant_list)
 
     item_list=('tenant','datacenter') #put tenant before so that help appear in order
@@ -863,6 +900,7 @@ if __name__=="__main__":
         element_edit_parser.add_argument("file", help="json/yaml text or file with the changes").completer = FilesCompleter
         element_edit_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
         element_edit_parser.add_argument('--verbose', '-v', action='count')
+        element_edit_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
         element_edit_parser.set_defaults(func=element_edit, element=item + 's')
 
     datacenter_create_parser = subparsers.add_parser('datacenter-create', help="creates a new datacenter")
@@ -873,17 +911,20 @@ if __name__=="__main__":
     datacenter_create_parser.add_argument("--config", action="store", help="aditional configuration in json/yaml format")
     datacenter_create_parser.add_argument("--description", action="store", help="description of the datacenter")
     datacenter_create_parser.add_argument('--verbose', '-v', action='count')
+    datacenter_create_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     datacenter_create_parser.set_defaults(func=datacenter_create)
 
     datacenter_delete_parser = subparsers.add_parser('datacenter-delete', help="deletes a datacenter from the catalogue")
     datacenter_delete_parser.add_argument("name", action="store", help="name or uuid of the datacenter to be deleted")
     datacenter_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
+    datacenter_delete_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     datacenter_delete_parser.set_defaults(func=datacenter_delete)
 
     datacenter_list_parser = subparsers.add_parser('datacenter-list', help="lists information about a datacenter")
     datacenter_list_parser.add_argument("name", nargs='?', help="name or uuid of the datacenter")
     datacenter_list_parser.add_argument('--verbose', '-v', action='count')
     datacenter_list_parser.add_argument("-a", "--all", action="store_true", help="shows all datacenters, not only datacenters attached to tenant")
+    datacenter_list_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     datacenter_list_parser.set_defaults(func=datacenter_list)
 
     datacenter_attach_parser = subparsers.add_parser('datacenter-attach', help="associates a datacenter to the operating tenant")
@@ -893,11 +934,13 @@ if __name__=="__main__":
     datacenter_attach_parser.add_argument("--user", action="store", help="user credentials for the datacenter")
     datacenter_attach_parser.add_argument("--password", action="store", help="password credentials for the datacenter")
     datacenter_attach_parser.add_argument('--verbose', '-v', action='count')
+    datacenter_attach_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     datacenter_attach_parser.set_defaults(func=datacenter_attach)
 
     datacenter_detach_parser = subparsers.add_parser('datacenter-detach', help="removes the association between a datacenter and the operating tenant")
     datacenter_detach_parser.add_argument("name", help="name or uuid of the datacenter")
     datacenter_detach_parser.add_argument('--verbose', '-v', action='count')
+    datacenter_detach_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     datacenter_detach_parser.set_defaults(func=datacenter_detach)
 
     action_dict={'net-update': 'retrieves external networks from datacenter',
@@ -915,12 +958,21 @@ if __name__=="__main__":
         if item!='net-list':
             datacenter_action_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
         datacenter_action_parser.add_argument('--verbose', '-v', action='count')
+        datacenter_action_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
         datacenter_action_parser.set_defaults(func=datacenter_net_action, action=item)
 
     argcomplete.autocomplete(main_parser)
     
     try:
         args = main_parser.parse_args()
+        #logging info
+        level = logging.CRITICAL
+        streamformat = "%(asctime)s %(name)s %(levelname)s: %(message)s"
+        if "debug" in args and args.debug:
+            level = logging.DEBUG
+        logging.basicConfig(format=streamformat, level= level)
+        logger = logging.getLogger('mano')
+        logger.setLevel(level)
         result = args.func(args)
         if result == None:
             result = 0
