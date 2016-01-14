@@ -225,7 +225,12 @@ if __name__=="__main__":
         if len(used_bridge_nets) > 0 :
             logger.info("found used bridge nets: " + ",".join(used_bridge_nets))
     
-        # create connector to the openflow controller
+    # get host list from data base before starting threads
+        r,hosts = db_of.get_table(SELECT=('name','ip_name','user','uuid'), FROM='hosts', WHERE={'status':'ok'})
+        if r<0:
+            logger.error("Cannot get hosts from database %s", hosts)
+            exit(-1)
+    # create connector to the openflow controller
         of_test_mode = False if config_dic['mode']=='normal' or config_dic['mode']=="OF only" else True
 
         if of_test_mode:
@@ -290,18 +295,13 @@ if __name__=="__main__":
         host_develop_mode = True if config_dic['mode']=='development' else False
         host_develop_bridge_iface = config_dic.get('development_bridge', None)
         config_dic['host_threads'] = {}
-        r,c = db_of.get_table(SELECT=('name','ip_name','user','uuid'), FROM='hosts', WHERE={'status':'ok'})
-        if r<0:
-            logger.error("Cannot get hosts from database %s", c)
-            exit(-1)
-        else:
-            for host in c:
-                host['image_path'] = '/opt/VNF/images/openvim'
-                thread = ht.host_thread(name=host['name'], user=host['user'], host=host['ip_name'], db=db_of, db_lock=db_lock,
-                        test=host_test_mode, image_path=config_dic['image_path'], version=config_dic['version'],
-                        host_id=host['uuid'], develop_mode=host_develop_mode, develop_bridge_iface=host_develop_bridge_iface  )
-                thread.start()
-                config_dic['host_threads'][ host['uuid'] ] = thread
+        for host in hosts:
+            host['image_path'] = '/opt/VNF/images/openvim'
+            thread = ht.host_thread(name=host['name'], user=host['user'], host=host['ip_name'], db=db_of, db_lock=db_lock,
+                    test=host_test_mode, image_path=config_dic['image_path'], version=config_dic['version'],
+                    host_id=host['uuid'], develop_mode=host_develop_mode, develop_bridge_iface=host_develop_bridge_iface  )
+            thread.start()
+            config_dic['host_threads'][ host['uuid'] ] = thread
                 
             
         

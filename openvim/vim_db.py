@@ -129,7 +129,7 @@ class vim_db():
                 HTTP error in negative, formatted error text
         ''' 
                 
-        self.logger.error("%s DB Exception %d: %s. Command %s",func, e.args[0], e.args[1], cmd)
+        self.logger.error("%s DB Exception %s. Command %s",func, str(e), cmd)
         if type(e[0]) is str:
             if e[0][-5:] == "'con'": return -HTTP_Internal_Server_Error, "DB Exception, no connection."
             else: raise

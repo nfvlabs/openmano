@@ -105,7 +105,7 @@ class dhcp_thread(threading.Thread):
             return -1, "timeout inserting a task over host " + self.name
 
     def run(self):
-        next_iteration = 0
+        next_iteration = time.time() + 10
         while True:
             self.load_mac_from_db()
             while True:
