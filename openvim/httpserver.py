@@ -1263,6 +1263,7 @@ def http_get_server_id(tenant_id, server_id):
         change_keys_http2db(content, http2db_server, reverse=True)
         if 'extended' in content:
             if 'devices' in content['extended']: change_keys_http2db(content['extended']['devices'], http2db_server, reverse=True)
+            
         data={'server' : content}
         return format_out(data)
     else:
@@ -1347,6 +1348,23 @@ def http_post_server_id(tenant_id):
             r,c = config_dic['of_thread'].insert_task("update-net", net)
             if r < 0:
                 print ':http_post_servers ERROR UPDATING NETS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c
+
+            
+            
+        #look for dhcp ip address 
+        r2, c2 = my.db.get_table(FROM="ports", SELECT=["mac", "net_id"], WHERE={"instance_id": new_instance})
+        if r2 >0 and config_dic.get("dhcp_server"):
+            for iface in c2:
+                dhcp_params = None
+                net_id = iface["net_id"]
+                for bridge in config_dic["bridge_nets"]:
+                    if bridge[3] == net_id:
+                        dhcp_params = bridge[4]
+                        break
+                if dhcp_params:
+                    r,c = config_dic['dhcp_thread'].insert_task("add", iface["mac"])
+                    if r < 0:
+                        print ':http_post_servers ERROR UPDATING DHCP !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c 
         
     #Start server
         
@@ -1490,6 +1508,8 @@ def http_server_action(server_id, tenant_id, action):
     if new_status != None and new_status == 'DELETING':
         nets=[]
         ports_to_free=[]
+        #look for dhcp ip address 
+        r2, c2 = my.db.get_table(FROM="ports", SELECT=["mac", "net_id"], WHERE={"instance_id": server_id})
         r,c = my.db.delete_instance(server_id, tenant_id, nets, ports_to_free, "requested by http")
         for port in ports_to_free:
             r1,c1 = config_dic['host_threads'][ server['host_id'] ].insert_task( 'restore-iface',*port )
@@ -1501,6 +1521,19 @@ def http_server_action(server_id, tenant_id, action):
             if r1 < 0:
                 print ' http_post_server_action error at server deletion ERROR UPDATING NETS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c1
                 data={'result' : 'deleting in process, but openflow rules cannot be deleted!!!!!'}
+        #look for dhcp ip address 
+        if r2 >0 and config_dic.get("dhcp_server"):
+            for iface in c2:
+                dhcp_params = None
+                net_id = iface["net_id"]
+                for bridge in config_dic["bridge_nets"]:
+                    if bridge[3] == net_id:
+                        dhcp_params = bridge[4]
+                        break
+                if dhcp_params:
+                    r,c = config_dic['dhcp_thread'].insert_task("del", iface["mac"])
+                    if r < 0:
+                        print ':http_post_server_action ERROR UPDATING DHCP !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c 
 
     return format_out(data)
 
@@ -1846,7 +1879,7 @@ def http_get_ports():
     my = config_dic['http_threads'][ threading.current_thread().name ]
     select_,where_,limit_ = filter_query_string(bottle.request.query, http2db_port,
             ('id','name','tenant_id','network_id','vpci','mac_address','device_owner','device_id',
-             'binding:switch_port','binding:vlan','bandwidth','status','admin_state_up') )
+             'binding:switch_port','binding:vlan','bandwidth','status','admin_state_up','ip_address') )
     #result, content = my.db.get_ports(where_)
     result, content = my.db.get_table(SELECT=select_, WHERE=where_, FROM='ports',LIMIT=limit_)
     if result < 0:

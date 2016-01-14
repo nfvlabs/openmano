@@ -47,14 +47,11 @@ from vim_schema import localinfo_schema, hostinfo_schema
 class host_thread(threading.Thread):
     def __init__(self, name, host, user, db, db_lock, test, image_path, host_id, version, develop_mode, develop_bridge_iface):
         '''Init a thread.
-        Arguments: thread_info must be a dictionary with:
+        Arguments: 
             'id' number of thead
             'name' name of thread
-            'host' host ip or name to manage
-        Return: add items to thread_info
-            'lock': lock for shared variables, as task queue
-            'queue' : queue of tasks. PUSHed by main thread, and POPed by this thread.
-                Contain a Queue of tuples. Each tuple with two items: string of task, and params
+            'host','user':  host ip or name to manage and user
+            'db', 'db_lock': database class and lock to use it in exclusion
         '''
         threading.Thread.__init__(self)
         self.name = name
@@ -314,16 +311,15 @@ class host_thread(threading.Thread):
                     self.terminate()
                     return 0
                 elif task[0] == 'reload':
-                    print self.name, ": processing task reload"
+                    print self.name, ": processing task reload terminating and relaunching"
+                    self.terminate()
                     break
                 elif task[0] == 'edit-iface':
                     print self.name, ": processing task edit-iface port=%s, old_net=%s, new_net=%s" % (task[1], task[2], task[3])
                     self.edit_iface(task[1], task[2], task[3])
-                    break
                 elif task[0] == 'restore-iface':
                     print self.name, ": processing task restore-iface %s mac=%s" % (task[1], task[2])
                     self.restore_iface(task[1], task[2])
-                    break
                 else:
                     print self.name, ": unknown task", task
                 
@@ -1060,15 +1056,28 @@ class host_thread(threading.Thread):
                 if 'forceOff' in req['action']:
                     if dom == None:
                         print self.name, ": action_on_server(",server_id,") domain not running" 
+                        new_status = 'deleted'
                     else:
                         try:
                             print self.name, ": sending DESTROY to server", server_id 
                             dom.destroy()
+                            new_status = 'deleted'
                         except Exception as e:
                             if "domain is not running" not in e.get_error_message():
                                 print self.name, ": action_on_server(",server_id,") Exception while sending force off:", e.get_error_message()
                                 last_error =  'action_on_server Exception while destroy: ' + e.get_error_message()
                                 new_status = 'ERROR'
+                    if new_status=='deleted':
+                        if server_id in self.server_status:
+                            del self.server_status[server_id]
+                        if req['uuid'] in self.localinfo['server_files']:
+                            for file_ in self.localinfo['server_files'][ req['uuid'] ].values():
+                                try:
+                                    self.delete_file(file_['source file'])
+                                except Exception:
+                                    pass
+                            del self.localinfo['server_files'][ req['uuid'] ]
+                            self.localinfo_dirty = True
                 
                 elif 'terminate' in req['action']:
                     if dom == None:
@@ -1235,6 +1244,10 @@ class host_thread(threading.Thread):
                 conn = libvirt.open("qemu+ssh://"+self.user+"@"+self.host+"/system")
             else:
                 conn = lib_conn
+                
+            #wait to the pending VM deletion
+            #TODO.Revise  self.server_forceoff(True)
+
             iface = conn.interfaceLookupByMACString(mac)
             iface.destroy()
             iface.create()
@@ -1686,4 +1699,3 @@ def create_server(server, db, db_lock, only_of_ports):
     
     return 0, resources
 
-    

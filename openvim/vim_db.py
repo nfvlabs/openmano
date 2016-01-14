@@ -214,6 +214,7 @@ class vim_db():
             'SELECT': [list of fields to retrieve] (by default all)
             'FROM': string of table name (Mandatory)
             'WHERE': dict of key:values, translated to key=value AND ... (Optional)
+            'WHERE_NOT': dict of key:values, translated to key!=value AND ... (Optional)
             'WHERE_OR': dict of key:values, translated to key=value OR ... (Optional)
             'LIMIT': limit of number of rows (Optional)
         Return: a list with dictionarys at each row
@@ -229,6 +230,13 @@ class vim_db():
         if 'WHERE' in sql_dict and len(sql_dict['WHERE']) > 0:
             w=sql_dict['WHERE']
             where_and = " AND ".join(map( lambda x: str(x) + (" is Null" if w[x] is None else "='"+str(w[x])+"'"),  w.keys()) ) 
+        if 'WHERE_NOT' in sql_dict and len(sql_dict['WHERE_NOT']) > 0:
+            w=sql_dict['WHERE_NOT']
+            where_and_not = " AND ".join(map( lambda x: str(x) + (" is not Null" if w[x] is None else "!='"+str(w[x])+"'"),  w.keys()) ) 
+            if where_and:
+                where_and += " AND " + where_and_not
+            else:
+                where_and = where_and_not
         if 'WHERE_OR' in sql_dict and len(sql_dict['WHERE_OR']) > 0:
             w=sql_dict['WHERE_OR']
             where_or =  " OR ".join(map( lambda x: str(x) + (" is Null" if w[x] is None else "='"+str(w[x])+"'"),  w.keys()) )
@@ -1026,7 +1034,7 @@ class vim_db():
                     if self.cur.rowcount == 0 : return 0, "instance '" + str(instance_id) +"'not found."
                     instance = self.cur.fetchone()
                     #get networks
-                    cmd = "SELECT uuid as iface_id, net_id, mac as mac_address, name, Mbps as bandwidth, vpci, model \
+                    cmd = "SELECT uuid as iface_id, net_id, mac as mac_address, ip_address, name, Mbps as bandwidth, vpci, model \
                         FROM ports WHERE type = 'instance:bridge' AND instance_id = '" + instance_id + "'"
                     self.logger.debug(cmd)
                     self.cur.execute(cmd)

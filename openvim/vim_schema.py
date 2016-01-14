@@ -92,6 +92,22 @@ config_schema = {
             },
             "minProperties": 2
         },
+        "dhcp_server": {
+            "type": "object",
+            "properties": {
+                "host" : name_schema,
+                "port" : port_schema,
+                "provider" : {"type": "string", "enum": ["isc-dhcp-server"]},
+                "user" : name_schema,
+                "password" : {"type": "string"},
+                "key" : {"type": "string"},
+                "ifaces" :{
+                    "type": "array", 
+                    "items": name_schema,
+                    "minItems":1
+                },
+            },
+        },
         "log_level": log_level_schema,
         "log_level_db": log_level_schema,
         "log_level_of": log_level_schema,

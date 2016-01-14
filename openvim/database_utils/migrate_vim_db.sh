@@ -158,6 +158,7 @@ DATABASE_TARGET_VER_NUM=0
 [ $OPENVIM_VER_NUM -ge 2003 ] && DATABASE_TARGET_VER_NUM=2   #0.2.03  =>  2
 [ $OPENVIM_VER_NUM -ge 2005 ] && DATABASE_TARGET_VER_NUM=3   #0.2.5   =>  3
 [ $OPENVIM_VER_NUM -ge 3001 ] && DATABASE_TARGET_VER_NUM=4   #0.3.1   =>  4
+[ $OPENVIM_VER_NUM -ge 4001 ] && DATABASE_TARGET_VER_NUM=5   #0.4.1   =>  5
 #TODO ... put next versions here
 
 
@@ -336,6 +337,20 @@ function downgrade_from_4(){
     echo "ALTER TABLE ports CHANGE COLUMN model model VARCHAR(12) NULL DEFAULT NULL AFTER mac;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "ALTER TABLE ports ADD COLUMN vlan_changed SMALLINT(5) NULL DEFAULT NULL COMMENT '!=NULL when original vlan have been changed to match a pmp net with all ports in the same vlan' AFTER switch_port;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "DELETE FROM schema_version WHERE version_int = '4';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+
+
+function upgrade_to_5(){
+    echo "    upgrade database from version 0.4 to version 0.5"
+    echo "     add 'ip_address' to ports'"
+    echo "ALTER TABLE ports ADD COLUMN ip_address VARCHAR(64) NULL DEFAULT NULL AFTER mac;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openvim_ver, comments, date) VALUES (5, '0.5', '0.4.1', 'Add ip_address to ports', '2015-09-04');"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+function downgrade_from_5(){
+    echo "    downgrade database from version 0.5 to version 0.4"
+    echo "     removing 'ip_address' from 'ports'"
+    echo "ALTER TABLE ports DROP COLUMN ip_address;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int = '5';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 #TODO ... put funtions here
 

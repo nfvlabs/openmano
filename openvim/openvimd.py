@@ -30,9 +30,9 @@ and host controllers
 
 __author__="Alfonso Tierno"
 __date__ ="$10-jul-2014 12:07:15$"
-__version__="0.4.0-r442"
-version_date="Nov 2015"
-database_version="0.4"      #expected database schema version
+__version__="0.4.1-r454"
+version_date="Jan 2016"
+database_version="0.5"      #expected database schema version
 
 import httpserver
 from utils import auxiliary_functions as af
@@ -44,6 +44,7 @@ import yaml
 import os
 from jsonschema import validate as js_v, exceptions as js_e
 import host_thread as ht
+import dhcp_thread as dt
 import openflow_thread as oft
 import threading
 from vim_schema import config_schema
@@ -199,6 +200,31 @@ if __name__=="__main__":
         config_dic['db'] = db_of
         config_dic['db_lock'] = db_lock
 
+    #precreate interfaces; [bridge:<host_bridge_name>, VLAN used at Host, uuid of network camping in this bridge, speed in Gbit/s
+        config_dic['bridge_nets']=[]
+        for bridge,vlan_speed in config_dic["bridge_ifaces"].items():
+            #skip 'development_bridge'
+            if config_dic['mode'] == 'development' and config_dic['development_bridge'] == bridge:
+                continue
+            dhcp_param=None
+            if config_dic.get("dhcp_server"):
+                for iface in config_dic["dhcp_server"]["ifaces"]:
+                    if iface==bridge:
+                        dhcp_param = config_dic["dhcp_server"]
+                        break
+            config_dic['bridge_nets'].append( [bridge, vlan_speed[0], vlan_speed[1], None, dhcp_param] )
+        del config_dic["bridge_ifaces"]
+
+        #check if this bridge is already used (present at database) for a network)
+        used_bridge_nets=[]
+        for brnet in config_dic['bridge_nets']:
+            r,c = db_of.get_table(SELECT=('uuid',), FROM='nets',WHERE={'bind': "bridge:"+brnet[0]})
+            if r>0:
+                brnet[3] = c[0]['uuid']
+                used_bridge_nets.append(brnet[0])
+        if len(used_bridge_nets) > 0 :
+            logger.info("found used bridge nets: " + ",".join(used_bridge_nets))
+    
         # create connector to the openflow controller
         of_test_mode = False if config_dic['mode']=='normal' or config_dic['mode']=="OF only" else True
 
@@ -249,26 +275,15 @@ if __name__=="__main__":
             exit()
         thread.start()
         config_dic['of_thread'] = thread
-        
-    #precreate interfaces; [bridge:<host_bridge_name>, VLAN used at Host, uuid of network camping in this bridge, speed in Gbit/s
-        config_dic['bridge_nets']=[]
-        for bridge,vlan_speed in config_dic["bridge_ifaces"].items():
-            #skip 'development_bridge'
-            if config_dic['mode'] == 'development' and config_dic['development_bridge'] == bridge:
-                continue
-            config_dic['bridge_nets'].append( [bridge, vlan_speed[0], vlan_speed[1], None] )
-        del config_dic["bridge_ifaces"]
 
-        #check if this bridge is already used (present at database) for a network)
-        used_bridge_nets=[]
-        for brnet in config_dic['bridge_nets']:
-            r,c = db_of.get_table(SELECT=('uuid',), FROM='nets',WHERE={'bind': "bridge:"+brnet[0]})
-            if r>0:
-                brnet[3] = c[0]['uuid']
-                used_bridge_nets.append(brnet[0])
-        if len(used_bridge_nets) > 0 :
-            logger.info("found used bridge nets: " + ",".join(used_bridge_nets))
-    
+    #create dhcp_server thread
+        host_test_mode = True if config_dic['mode']=='test' or config_dic['mode']=="OF only" else False
+        dhcp_params = config_dic.get("dhcp_server")
+        if dhcp_params:
+            thread = dt.dhcp_thread(dhcp_params=dhcp_params, test=host_test_mode, db=db_of,  db_lock=db_lock, debug=config_dic['log_level_of'])
+            thread.start()
+            config_dic['dhcp_thread'] = thread
+
         
     #Create one thread for each host
         host_test_mode = True if config_dic['mode']=='test' or config_dic['mode']=="OF only" else False
@@ -323,6 +338,8 @@ if __name__=="__main__":
     threads = config_dic.get('host_threads', {})
     if 'of_thread' in config_dic:
         threads['of'] = (config_dic['of_thread'])
+    if 'dhcp_thread' in config_dic:
+        threads['dhcp'] = (config_dic['dhcp_thread'])
     
     for thread in threads.values():
         thread.insert_task("exit")
