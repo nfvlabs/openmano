@@ -101,12 +101,16 @@ config_schema = {
                 "user" : name_schema,
                 "password" : {"type": "string"},
                 "key" : {"type": "string"},
-                "ifaces" :{
+                "bridge_ifaces" :{
                     "type": "array", 
                     "items": name_schema,
-                    "minItems":1
+                },
+                "nets" :{
+                    "type": "array", 
+                    "items": name_schema,
                 },
             },
+            "required": ['host', 'provider', 'user']
         },
         "log_level": log_level_schema,
         "log_level_db": log_level_schema,

@@ -1355,13 +1355,7 @@ def http_post_server_id(tenant_id):
         r2, c2 = my.db.get_table(FROM="ports", SELECT=["mac", "net_id"], WHERE={"instance_id": new_instance})
         if r2 >0 and config_dic.get("dhcp_server"):
             for iface in c2:
-                dhcp_params = None
-                net_id = iface["net_id"]
-                for bridge in config_dic["bridge_nets"]:
-                    if bridge[3] == net_id:
-                        dhcp_params = bridge[4]
-                        break
-                if dhcp_params:
+                if iface["net_id"] in config_dic["dhcp_nets"]:
                     r,c = config_dic['dhcp_thread'].insert_task("add", iface["mac"])
                     if r < 0:
                         print ':http_post_servers ERROR UPDATING DHCP !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c 
@@ -1524,16 +1518,10 @@ def http_server_action(server_id, tenant_id, action):
         #look for dhcp ip address 
         if r2 >0 and config_dic.get("dhcp_server"):
             for iface in c2:
-                dhcp_params = None
-                net_id = iface["net_id"]
-                for bridge in config_dic["bridge_nets"]:
-                    if bridge[3] == net_id:
-                        dhcp_params = bridge[4]
-                        break
-                if dhcp_params:
-                    r,c = config_dic['dhcp_thread'].insert_task("del", iface["mac"])
+                if iface["net_id"] in config_dic["dhcp_nets"]:
+                    r,c = config_dic['dhcp_thread'].insert_task("add", iface["mac"])
                     if r < 0:
-                        print ':http_post_server_action ERROR UPDATING DHCP !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c 
+                        print ':http_post_servers ERROR UPDATING DHCP !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c 
 
     return format_out(data)
 
@@ -1704,6 +1692,10 @@ def http_post_networks():
     if result >= 0:
         if bridge_net!=None:
             bridge_net[3] = content
+        
+        if config_dic.get("dhcp_server"):
+            if network["name"] in config_dic["dhcp_server"].get("nets", () ):
+                config_dic["dhcp_nets"].append(network["name"])
         return http_get_network_id(content)
     else:
         print "http_post_networks error %d %s" % (result, content)
@@ -1764,6 +1756,12 @@ def http_put_network_id(network_id):
             if r  < 0:
                 print "http_put_network_id error while launching openflow rules"
                 bottle.abort(HTTP_Internal_Server_Error, c)
+        if "name" in network:
+            if network_id in config_dic["dhcp_nets"]:
+                config_dic["dhcp_nets"].remove(network_id)
+            if config_dic.get("dhcp_server"):
+                if network["name"] in config_dic["dhcp_server"].get("nets", () ):
+                    config_dic["dhcp_nets"].append(network["name"])
         return http_get_network_id(network_id)
     else:
         bottle.abort(-result, content)
@@ -1785,6 +1783,8 @@ def http_delete_network_id(network_id):
             if brnet[3]==network_id:
                 brnet[3]=None
                 break
+        if network_id in config_dic["dhcp_nets"]:
+            config_dic["dhcp_nets"].remove(network_id)
         data={'result' : content}
         return format_out(data)
     else:

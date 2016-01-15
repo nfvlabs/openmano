@@ -38,7 +38,7 @@ import paramiko
 from jsonschema import validate as js_v, exceptions as js_e
 import libvirt
 from vim_schema import localinfo_schema, hostinfo_schema
-#import math
+import random
 #from logging import Logger
 #import utils.auxiliary_functions as af
 
@@ -827,7 +827,7 @@ class host_thread(threading.Thread):
             
     def launch_server(self, conn, server, rebuild=False, domain=None):
         if self.test:
-            time.sleep(5) #sleep 5 seconds to be make it a bit more real
+            time.sleep(random.randint(20,150)) #sleep random timeto be make it a bit more real
             return 0, 'Success'
 
         server_id = server['uuid']
@@ -1028,14 +1028,14 @@ class host_thread(threading.Thread):
                 new_status = 'deleted'
             elif 'shutoff' in req['action'] or 'shutdown' in req['action'] or 'forceOff' in req['action']:
                 if req['status']!='ERROR':
-                    time.sleep(1)
+                    time.sleep(5)
                     new_status = 'INACTIVE'
             elif 'start' in req['action']  and req['status']!='ERROR':      new_status = 'ACTIVE'
             elif 'resume' in req['action'] and req['status']!='ERROR' and req['status']!='INACTIVE' :     new_status = 'ACTIVE'
             elif 'pause' in req['action']  and req['status']!='ERROR':      new_status = 'PAUSED'
             elif 'reboot' in req['action'] and req['status']!='ERROR':     new_status = 'ACTIVE'
             elif 'rebuild' in req['action']:
-                time.sleep(5)
+                time.sleep(random.randint(20,150))
                 new_status = 'ACTIVE'
             elif 'createImage' in req['action']:
                 time.sleep(5)

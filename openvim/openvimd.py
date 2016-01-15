@@ -30,7 +30,7 @@ and host controllers
 
 __author__="Alfonso Tierno"
 __date__ ="$10-jul-2014 12:07:15$"
-__version__="0.4.1-r454"
+__version__="0.4.1-r455"
 version_date="Jan 2016"
 database_version="0.5"      #expected database schema version
 
@@ -201,29 +201,33 @@ if __name__=="__main__":
         config_dic['db_lock'] = db_lock
 
     #precreate interfaces; [bridge:<host_bridge_name>, VLAN used at Host, uuid of network camping in this bridge, speed in Gbit/s
+        config_dic['dhcp_nets']=[]
         config_dic['bridge_nets']=[]
         for bridge,vlan_speed in config_dic["bridge_ifaces"].items():
             #skip 'development_bridge'
             if config_dic['mode'] == 'development' and config_dic['development_bridge'] == bridge:
                 continue
-            dhcp_param=None
-            if config_dic.get("dhcp_server"):
-                for iface in config_dic["dhcp_server"]["ifaces"]:
-                    if iface==bridge:
-                        dhcp_param = config_dic["dhcp_server"]
-                        break
-            config_dic['bridge_nets'].append( [bridge, vlan_speed[0], vlan_speed[1], None, dhcp_param] )
+            config_dic['bridge_nets'].append( [bridge, vlan_speed[0], vlan_speed[1], None] )
         del config_dic["bridge_ifaces"]
 
         #check if this bridge is already used (present at database) for a network)
         used_bridge_nets=[]
         for brnet in config_dic['bridge_nets']:
-            r,c = db_of.get_table(SELECT=('uuid',), FROM='nets',WHERE={'bind': "bridge:"+brnet[0]})
+            r,nets = db_of.get_table(SELECT=('uuid',), FROM='nets',WHERE={'bind': "bridge:"+brnet[0]})
             if r>0:
-                brnet[3] = c[0]['uuid']
+                brnet[3] = nets[0]['uuid']
                 used_bridge_nets.append(brnet[0])
+                if config_dic.get("dhcp_server"):
+                    if brnet[0] in config_dic["dhcp_server"]["bridge_ifaces"]:
+                        config_dic['dhcp_nets'].append(nets[0]['uuid'])
         if len(used_bridge_nets) > 0 :
             logger.info("found used bridge nets: " + ",".join(used_bridge_nets))
+        #get nets used by dhcp
+        if config_dic.get("dhcp_server"):
+            for net in config_dic["dhcp_server"].get("nets", () ):
+                r,nets = db_of.get_table(SELECT=('uuid',), FROM='nets',WHERE={'name': net})
+                if r>0:
+                    config_dic['dhcp_nets'].append(nets[0]['uuid'])
     
     # get host list from data base before starting threads
         r,hosts = db_of.get_table(SELECT=('name','ip_name','user','uuid'), FROM='hosts', WHERE={'status':'ok'})
@@ -285,7 +289,7 @@ if __name__=="__main__":
         host_test_mode = True if config_dic['mode']=='test' or config_dic['mode']=="OF only" else False
         dhcp_params = config_dic.get("dhcp_server")
         if dhcp_params:
-            thread = dt.dhcp_thread(dhcp_params=dhcp_params, test=host_test_mode, db=db_of,  db_lock=db_lock, debug=config_dic['log_level_of'])
+            thread = dt.dhcp_thread(dhcp_params=dhcp_params, test=host_test_mode, dhcp_nets=config_dic["dhcp_nets"], db=db_of,  db_lock=db_lock, debug=config_dic['log_level_of'])
             thread.start()
             config_dic['dhcp_thread'] = thread
 

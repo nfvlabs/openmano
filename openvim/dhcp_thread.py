@@ -38,7 +38,7 @@ import random
 #TODO: insert a logging system
 
 class dhcp_thread(threading.Thread):
-    def __init__(self, dhcp_params, db, db_lock, test, debug=None):
+    def __init__(self, dhcp_params, db, db_lock, test, dhcp_nets, debug=None):
         '''Init a thread.
         Arguments: thread_info must be a dictionary with:
             'dhcp_params' dhcp server parameters with the following keys:
@@ -54,6 +54,7 @@ class dhcp_thread(threading.Thread):
         self.db = db
         self.db_lock = db_lock
         self.test = test
+        self.dhcp_nets = dhcp_nets
         
         self.server_status = {} #dictionary with pairs server_uuid:server_status 
         self.mac_status ={} #dictionary of mac_address to retrieve information
@@ -82,7 +83,7 @@ class dhcp_thread(threading.Thread):
     def load_mac_from_db(self):
         #TODO get macs to follow from the database
         self.db_lock.acquire()
-        r,c = self.db.get_table(SELECT=('mac','ip_address','bind'),
+        r,c = self.db.get_table(SELECT=('mac','ip_address','nets.uuid as net_id', ),
                                 FROM='ports join nets on ports.net_id=nets.uuid', 
                                 WHERE_NOT={'ports.instance_id': None, 'nets.bind': None})
         self.db_lock.release()
@@ -92,7 +93,7 @@ class dhcp_thread(threading.Thread):
             print self.name, ": Error getting data from database:", c
             return
         for port in c:
-            if port["bind"][:7]=="bridge:" and port["bind"][7:] in self.dhcp_params["ifaces"]:
+            if port["net_id"] in self.dhcp_nets:
                 self.mac_status[ port["mac"] ] = {"ip": port["ip_address"], "next_reading": now, "created": now, "retries":0}
     
     def insert_task(self, task, *aditional):
@@ -155,7 +156,7 @@ class dhcp_thread(threading.Thread):
         next_iteration= now + 40000 # >10 hores
         
         try:
-            print self.name, "Iteration" 
+            #print self.name, "Iteration" 
             #Connect SSH
             if not self.test:
                 self.ssh_connect()
