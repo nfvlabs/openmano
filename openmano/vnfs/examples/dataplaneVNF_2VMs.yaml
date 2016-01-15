@@ -14,12 +14,12 @@ vnf:
             local_iface_name: xe0
     external-connections:
     -   name:              control0
-        type:              bridge
+        type:              mgmt
         VNFC:              VNF_2VMs-VM1
         local_iface_name:  eth0
         description:       control interface VM1
     -   name:              control1
-        type:              bridge
+        type:              mgmt
         VNFC:              VNF_2VMs-VM2
         local_iface_name:  eth0
         description:       control interface VM2

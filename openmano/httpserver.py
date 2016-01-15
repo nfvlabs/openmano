@@ -919,25 +919,15 @@ def http_get_instance_id(tenant_id, instance_id):
         bottle.abort(-result, data)
         return
     
-#     OLD:
-#     qs = bottle.request.query
-#     if type(qs) is not bottle.FormsDict:
-#         print '!!!!!!!!!!!!!!invalid query string not a dictionary'
-#         bottle.abort(HTTP_Internal_Server_Error, "ttpserver.http_get_instance_id(): unexpected query string")
-#     else:
-#         print "Query: %s" %qs.dict
-#         if 'refresh' in qs and qs.get('refresh')=="yes":
-#             print "REFRESH: %s" %qs.get('refresh')
-#             #refresh the instance
-#             r,c = nfvo.refresh_instance(mydb, tenant_id, data)
-#             if r<0:
-#                 print "WARNING: nfvo.refresh_instance couldn't refresh the status of the instance: %s" %c
-#         else:
-#             print "NO REFRESH"
-
     r,c = nfvo.refresh_instance(mydb, tenant_id, data)
     if r<0:
         print "WARNING: nfvo.refresh_instance couldn't refresh the status of the instance: %s" %c
+    #obtain data with results upated
+    result, data = mydb.get_instance_scenario(instance_id, tenant_id)
+    if result < 0:
+        print "http_get_instance_id error %d %s" % (-result, data)
+        bottle.abort(-result, data)
+        return
     print json.dumps(data, indent=4)
     return format_out(data)
 

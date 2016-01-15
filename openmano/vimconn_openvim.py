@@ -37,7 +37,18 @@ from openmano_schemas import id_schema, name_schema, nameshort_schema, descripti
                             vlan1000_schema, integer0_schema
 from jsonschema import validate as js_v, exceptions as js_e
 
-                             
+'''contain the openvim virtual machine status to openmano status'''
+vmStatus2manoFormat={'ACTIVE':'ACTIVE',
+                     'PAUSED':'PAUSED',
+                     'SUSPENDED': 'SUSPENDED',
+                     'INACTIVE':'INACTIVE',
+                     'CREATING':'BUILD',
+                     'ERROR':'ERROR','DELETED':'DELETED'
+                     }
+netStatus2manoFormat={'ACTIVE':'ACTIVE','INACTIVE':'INACTIVE','BUILD':'BUILD','ERROR':'ERROR','DELETED':'DELETED', 'DOWN':'DOWN'
+                     }
+
+
 host_schema = {
     "type":"object",
     "properties":{
@@ -1022,6 +1033,7 @@ class vimconnector(vimconn.vimconnector):
         vms_unrefreshed = []
         nets_unrefreshed = []
         for vm_id in vmDict:
+            vmDict[vm_id]={'error_msg':None, 'vim_info':None}
             print "VIMConnector refresh_tenant_vms and nets: Getting tenant VM instance information from VIM"
             headers_req = {'content-type': 'application/json'}
         
@@ -1031,6 +1043,8 @@ class vimconnector(vimconn.vimconnector):
                 vim_response = requests.get(url, headers = headers_req)
             except requests.exceptions.RequestException, e:
                 print "VIMConnector refresh_tenant_elements. Exception: ", e.args
+                vmDict[vm_id]['status'] = "VIM_ERROR"
+                vmDict[vm_id]['error_msg'] = str(e)
                 vms_unrefreshed.append(vm_id)
                 continue
             #print vim_response
@@ -1040,36 +1054,77 @@ class vimconnector(vimconn.vimconnector):
                 #print json.dumps(vim_response.json(), indent=4)
                 res,http_content = self._format_in(vim_response, new_vminstance_response_schema)
                 if res:
-                    #print json.dumps(http_content, indent=4)
-                    #OLD:
-                    #status = http_content['server']['status']
-                    #if vmDict[vm_id] != status:
-                    #    vmDict[vm_id] = status
-                    #    vms_refreshed.append(vm_id)
-                    #NEW:
-                    vmDict[vm_id] = http_content['server']['status']
-                    #print http_content['server']['hostId']
+                    try:
+                        vmDict[vm_id]['status'] = vmStatus2manoFormat[ http_content['server']['status']  ]
+                        if http_content['server'].get('last_error'):
+                            vmDict[vm_id]['error_msg'] = http_content['server']['last_error']
+                        vmDict[vm_id]["vim_info"] = yaml.safe_dump(http_content['server'])
+                        vmDict[vm_id]["interfaces"]=[]
+                        #get interfaces info
+                        url2 = self.url+'/ports?device_id='+ vm_id
+                        try:
+                            vim_response2 = requests.get(url2, headers = headers_req)
+                            if vim_response.status_code == 200:
+                                client_data = vim_response2.json()
+                                for port in client_data.get("ports"):
+                                    print "VACAport", port
+                                    interface={}
+                                    interface['vim_info']  = yaml.safe_dump(port)
+                                    interface["mac_address"] = port.get("mac_address")
+                                    interface["vim_net_id"] = port["network_id"]
+                                    interface["vim_interface_id"] = port["id"]
+                                    interface["ip_address"] = port.get("ip_address")
+                                    vmDict[vm_id]["interfaces"].append(interface)
+                                
+                        except Exception as e:
+                            print "VIMConnector refresh_tenant_elements. Port get %s: %s", (type(e).__name__, (str(e) if len(e.args)==0 else str(e.args[0])))
+                        
+                    except Exception as e:
+                        vmDict[vm_id]['status'] = "VIM_ERROR"
+                        vmDict[vm_id]['error_msg'] = str(e)
+                        vms_unrefreshed.append(vm_id)
                 else:
+                    vmDict[vm_id]['status'] = "VIM_ERROR"
+                    vmDict[vm_id]['error_msg'] = str(http_content)
                     vms_unrefreshed.append(vm_id)
             else:
                 #print vim_response.text
                 jsonerror = self._format_jsonerror(vim_response)
                 print 'VIMConnector refresh_tenant_vms_and_nets. Error in VIM "%s": not possible to get VM instance. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
-                vms_unrefreshed.append(vm_id)
+                if vim_response.status_code == 404: # HTTP_Not_Found
+                    vmDict[vm_id]['status'] = "DELETED"
+                else:
+                    vmDict[vm_id]['status'] = "VIM_ERROR"
+                    vmDict[vm_id]['error_msg'] = jsonerror
+                    vms_unrefreshed.append(vm_id)
         
         #print "VMs refreshed: %s" % str(vms_refreshed)
         for net_id in netDict:
+            netDict[net_id] = {'error_msg':None, 'vim_info':None}
             print "VIMConnector refresh_tenant_vms_and_nets: Getting tenant network from VIM (tenant: " + str(self.tenant) + "): "
             headers_req = {'content-type': 'application/json'}
             r,c = self.get_tenant_network(net_id)
             if r<0:
                 print "VIMconnector refresh_tenant_network. Error getting net_id '%s' status: %s" % (net_id, c)
                 if r==-vimconn.HTTP_Not_Found:
-                    netDict[net_id] = "DELETED" #TODO check exit status
+                    netDict[net_id]['status'] = "DELETED" #TODO check exit status
                 else:
+                    netDict[net_id]['status'] = "VIM_ERROR"
+                    netDict[net_id]['error_msg'] = c
                     nets_unrefreshed.append(net_id)
             else:
-                netDict[net_id] = c['status']
+                try: 
+                    net_status = netStatus2manoFormat[ c['status'] ]
+                    if net_status == "ACTIVE" and not c['admin_state_up']:
+                        net_status = "DOWN"
+                    netDict[net_id]['status'] = net_status
+                    if c.get('last_error'):
+                        netDict[net_id]['error_msg'] = c['last_error']
+                    netDict[net_id]["vim_info"] = yaml.safe_dump(c)
+                except Exception as e:
+                    netDict[net_id]['status'] = "VIM_ERROR"
+                    netDict[net_id]['error_msg'] = str(e)
+                    nets_unrefreshed.append(net_id)
 
         #print "Nets refreshed: %s" % str(nets_refreshed)
         

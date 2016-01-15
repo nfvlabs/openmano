@@ -159,6 +159,7 @@ DATABASE_TARGET_VER_NUM=0
 [ $OPENMANO_VER_NUM -ge 3003 ] && DATABASE_TARGET_VER_NUM=3   #0.3.3 =>  3
 [ $OPENMANO_VER_NUM -ge 3005 ] && DATABASE_TARGET_VER_NUM=4   #0.3.5 =>  4
 [ $OPENMANO_VER_NUM -ge 4001 ] && DATABASE_TARGET_VER_NUM=5   #0.4.1 =>  5
+[ $OPENMANO_VER_NUM -ge 4002 ] && DATABASE_TARGET_VER_NUM=6   #0.4.2 =>  6
 #TODO ... put next versions here
 
 
@@ -363,12 +364,60 @@ function upgrade_to_5(){
     echo "ALTER TABLE interfaces ADD COLUMN mac CHAR(18) NULL DEFAULT NULL AFTER model;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (5, '0.5', '0.4.1', 'Add mac address for bridge interfaces', '2015-12-14');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
-
 function downgrade_from_5(){
     echo "    downgrade database from version 0.5 to version 0.4"
     echo "      Remove 'mac' field for bridge interfaces in table 'interfaces'"
     echo "ALTER TABLE interfaces DROP COLUMN mac;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "DELETE FROM schema_version WHERE version_int='5';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+
+function upgrade_to_6(){
+    echo "    upgrade database from version 0.5 to version 0.6"
+    echo "      Add 'descriptor' field text to 'vnfd', 'scenarios'"
+    echo "ALTER TABLE vnfs ADD COLUMN descriptor TEXT NULL DEFAULT NULL COMMENT 'Original text descriptor used for create the VNF' AFTER class;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE scenarios ADD COLUMN descriptor TEXT NULL DEFAULT NULL COMMENT 'Original text descriptor used for create the scenario' AFTER modified_at;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Add 'last_error', 'vim_info' to 'instance_vms', 'instance_nets'"
+    echo "ALTER TABLE instance_vms  ADD COLUMN error_msg VARCHAR(1024) NULL DEFAULT NULL AFTER status;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_vms  ADD COLUMN vim_info TEXT NULL DEFAULT NULL AFTER error_msg;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_vms  CHANGE COLUMN status status ENUM('ACTIVE','INACTIVE','BUILD','ERROR','VIM_ERROR','PAUSED','SUSPENDED','DELETED') NOT NULL DEFAULT 'BUILD' AFTER vim_vm_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_nets ADD COLUMN error_msg VARCHAR(1024) NULL DEFAULT NULL AFTER status;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_nets ADD COLUMN vim_info TEXT NULL DEFAULT NULL AFTER error_msg;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_nets CHANGE COLUMN status status ENUM('ACTIVE','DOWN','BUILD','ERROR','VIM_ERROR','INACTIVE','DELETED') NOT NULL DEFAULT 'BUILD' AFTER instance_scenario_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Add 'mac_address', 'ip_address', 'vim_info' to 'instance_interfaces'"
+    echo "ALTER TABLE instance_interfaces ADD COLUMN mac_address VARCHAR(32) NULL DEFAULT NULL AFTER vim_interface_id, ADD COLUMN ip_address VARCHAR(64) NULL DEFAULT NULL AFTER mac_address, ADD COLUMN vim_info TEXT NULL DEFAULT NULL AFTER ip_address;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Add 'sce_vnf_id','datacenter_id','vim_tenant_id' field to 'instance_vnfs'"
+    echo "ALTER TABLE instance_vnfs ADD COLUMN sce_vnf_id VARCHAR(36) NULL DEFAULT NULL AFTER vnf_id, ADD CONSTRAINT FK_instance_vnfs_sce_vnfs FOREIGN KEY (sce_vnf_id) REFERENCES sce_vnfs (uuid) ON UPDATE CASCADE ON DELETE SET NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_vnfs ADD COLUMN vim_tenant_id VARCHAR(36) NULL DEFAULT NULL AFTER sce_vnf_id, ADD CONSTRAINT FK_instance_vnfs_vim_tenants FOREIGN KEY (vim_tenant_id) REFERENCES vim_tenants (uuid) ON UPDATE RESTRICT ON DELETE RESTRICT;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_vnfs ADD COLUMN datacenter_id VARCHAR(36) NULL DEFAULT NULL AFTER vim_tenant_id, ADD CONSTRAINT FK_instance_vnfs_datacenters FOREIGN KEY (datacenter_id) REFERENCES datacenters (uuid) ON UPDATE RESTRICT ON DELETE RESTRICT;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Add 'sce_net_id','net_id','datacenter_id','vim_tenant_id' field to 'instance_nets'"
+    echo "ALTER TABLE instance_nets ADD COLUMN sce_net_id VARCHAR(36) NULL DEFAULT NULL AFTER instance_scenario_id, ADD CONSTRAINT FK_instance_nets_sce_nets FOREIGN KEY (sce_net_id) REFERENCES sce_nets (uuid) ON UPDATE CASCADE ON DELETE SET NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_nets ADD COLUMN net_id VARCHAR(36) NULL DEFAULT NULL AFTER sce_net_id, ADD CONSTRAINT FK_instance_nets_nets FOREIGN KEY (net_id) REFERENCES nets (uuid) ON UPDATE CASCADE ON DELETE SET NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_nets ADD COLUMN vim_tenant_id VARCHAR(36) NULL DEFAULT NULL AFTER net_id, ADD CONSTRAINT FK_instance_nets_vim_tenants FOREIGN KEY (vim_tenant_id) REFERENCES vim_tenants (uuid) ON UPDATE RESTRICT ON DELETE RESTRICT;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_nets ADD COLUMN datacenter_id VARCHAR(36) NULL DEFAULT NULL AFTER vim_tenant_id, ADD CONSTRAINT FK_instance_nets_datacenters FOREIGN KEY (datacenter_id) REFERENCES datacenters (uuid) ON UPDATE RESTRICT ON DELETE RESTRICT;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (6, '0.6', '0.4.2', 'Adding VIM status info', '2015-12-22');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+function downgrade_from_6(){
+    echo "    downgrade database from version 0.6 to version 0.5"
+    echo "      Remove 'descriptor' field from 'vnfd', 'scenarios' tables"
+    echo "ALTER TABLE vnfs      DROP COLUMN descriptor;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE scenarios DROP COLUMN descriptor;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Remove 'last_error', 'vim_info' from 'instance_vms', 'instance_nets'"
+    echo "ALTER TABLE instance_vms  DROP COLUMN error_msg, DROP COLUMN vim_info;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_vms  CHANGE COLUMN status status ENUM('ACTIVE','PAUSED','INACTIVE','CREATING','ERROR','DELETING') NOT NULL DEFAULT 'CREATING' AFTER vim_vm_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_nets DROP COLUMN error_msg, DROP COLUMN vim_info;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_nets CHANGE COLUMN status status ENUM('ACTIVE','DOWN','BUILD','ERROR') NOT NULL DEFAULT 'BUILD' AFTER instance_scenario_id;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Remove 'mac_address', 'ip_address', 'vim_info' from 'instance_interfaces'"
+    echo "ALTER TABLE instance_interfaces DROP COLUMN mac_address, DROP COLUMN ip_address, DROP COLUMN vim_info;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Remove 'sce_vnf_id','datacenter_id','vim_tenant_id' field from 'instance_vnfs'"
+    echo "ALTER TABLE instance_vnfs DROP COLUMN sce_vnf_id, DROP FOREIGN KEY FK_instance_vnfs_sce_vnfs;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_vnfs DROP COLUMN vim_tenant_id, DROP FOREIGN KEY FK_instance_vnfs_vim_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_vnfs DROP COLUMN datacenter_id, DROP FOREIGN KEY FK_instance_vnfs_datacenters;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      Remove 'sce_net_id','net_id','datacenter_id','vim_tenant_id' field from 'instance_nets'"
+    echo "ALTER TABLE instance_nets DROP COLUMN sce_net_id, DROP FOREIGN KEY FK_instance_nets_sce_nets;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_nets DROP COLUMN net_id, DROP FOREIGN KEY FK_instance_nets_nets;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_nets DROP COLUMN vim_tenant_id, DROP FOREIGN KEY FK_instance_nets_vim_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_nets DROP COLUMN datacenter_id, DROP FOREIGN KEY FK_instance_nets_datacenters;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int='6';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 
 #TODO ... put funtions here

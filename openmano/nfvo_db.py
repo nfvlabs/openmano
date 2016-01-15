@@ -1355,24 +1355,35 @@ class nfvo_db():
                     self.cur.execute("SELECT " + select_text + " FROM " + from_text + " WHERE instance_vnfs.instance_scenario_id='"+ instance_dict['uuid'] + "'")
                     instance_dict['vnfs'] = self.cur.fetchall()
                     for vnf in instance_dict['vnfs']:
+                        vnf_manage_iface_list=[]
                         #instance vms
-                        self.cur.execute("SELECT iv.uuid as uuid, vim_vm_id, status, iv.created_at as created_at, name "+
+                        self.cur.execute("SELECT iv.uuid as uuid, vim_vm_id, status, error_msg, vim_info, iv.created_at as created_at, name "+
                                     "FROM instance_vms as iv join vms on iv.vm_id=vms.uuid "+
                                     "WHERE instance_vnf_id='" + vnf['uuid'] +"'"  
                                     )
                         vnf['vms'] = self.cur.fetchall()
                         for vm in vnf['vms']:
+                            vm_manage_iface_list=[]
                             #instance_interfaces
-                            self.cur.execute("SELECT vim_interface_id, instance_net_id, internal_name,external_name " +
-                                    "FROM instance_interfaces as ii join interfaces as i on ii.interface_id=i.uuid " +
-                                    "WHERE instance_vm_id='" + vm['uuid'] +"'"  )
+                            command = "SELECT vim_interface_id, instance_net_id, internal_name,external_name, mac_address, ip_address, vim_info, i.type as type " +\
+                                    "FROM instance_interfaces as ii join interfaces as i on ii.interface_id=i.uuid " +\
+                                    "WHERE instance_vm_id='" + vm['uuid'] + "'"
+                            self.cur.execute(command )
                             vm['interfaces'] = self.cur.fetchall()
+                            for iface in vm['interfaces']:
+                                if iface["type"] == "mgmt" and iface["ip_address"]:
+                                    vnf_manage_iface_list.append(iface["ip_address"])
+                                    vm_manage_iface_list.append(iface["ip_address"])
+                                del iface["type"]
+                            if vm_manage_iface_list: vm["ip_address"] = ",".join(vm_manage_iface_list)
+                        if vnf_manage_iface_list: vnf["ip_address"] = ",".join(vnf_manage_iface_list)
+                        
                     #instance_nets
                     #select_text = "instance_nets.uuid as uuid,sce_nets.name as net_name,instance_nets.vim_net_id as net_id,instance_nets.status as status,instance_nets.external as external" 
                     #from_text = "instance_nets join instance_scenarios on instance_nets.instance_scenario_id=instance_scenarios.uuid " + \
                     #            "join sce_nets on instance_scenarios.scenario_id=sce_nets.scenario_id"
                     #where_text = "instance_nets.instance_scenario_id='"+ instance_dict['uuid'] + "'"
-                    select_text = "uuid,vim_net_id,status,external"
+                    select_text = "uuid,vim_net_id,status,error_msg,vim_info,external"
                     from_text = "instance_nets"
                     where_text = "instance_scenario_id='"+ instance_dict['uuid'] + "'"
     
