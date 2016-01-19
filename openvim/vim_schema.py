@@ -135,7 +135,8 @@ metadata_schema={
         "os_distro": {"type":"string"},
         "os_type": {"type":"string"},
         "os_version": {"type":"string"},
-        "bus": {"type":"string"}
+        "bus": {"type":"string"},
+        "topology": {"type":"string", "enum": ["oneSocket"]}
     }
 }
 

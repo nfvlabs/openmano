@@ -379,6 +379,10 @@ class host_thread(threading.Thread):
         self.xml_level = 0
 
         text = "<domain type='kvm'>"
+    #get topology
+        topo = server_metadata.get('topology', None)
+        if topo == None and 'metadata' in dev_list[0]:
+            topo = dev_list[0]['metadata'].get('topology', None)
     #name
         name = server.get('name','') + "_" + server['uuid']
         name = name[:58]  #qemu impose a length  limit of 59 chars or not start. Using 58
@@ -461,7 +465,7 @@ class host_thread(threading.Thread):
             self.tab()+'<apic/>' +\
             self.tab()+'<pae/>'+ \
             self.dec_tab() +'</features>'
-        if windows_os:
+        if windows_os or topo=="oneSocket":
             text += self.tab() + "<cpu mode='host-model'> <topology sockets='1' cores='%d' threads='1' /> </cpu>"% vcpus
         else:
             text += self.tab() + "<cpu mode='host-model'></cpu>"
