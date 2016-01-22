@@ -1060,28 +1060,15 @@ class host_thread(threading.Thread):
                 if 'forceOff' in req['action']:
                     if dom == None:
                         print self.name, ": action_on_server(",server_id,") domain not running" 
-                        new_status = 'deleted'
                     else:
                         try:
                             print self.name, ": sending DESTROY to server", server_id 
                             dom.destroy()
-                            new_status = 'deleted'
                         except Exception as e:
                             if "domain is not running" not in e.get_error_message():
                                 print self.name, ": action_on_server(",server_id,") Exception while sending force off:", e.get_error_message()
                                 last_error =  'action_on_server Exception while destroy: ' + e.get_error_message()
                                 new_status = 'ERROR'
-                    if new_status=='deleted':
-                        if server_id in self.server_status:
-                            del self.server_status[server_id]
-                        if req['uuid'] in self.localinfo['server_files']:
-                            for file_ in self.localinfo['server_files'][ req['uuid'] ].values():
-                                try:
-                                    self.delete_file(file_['source file'])
-                                except Exception:
-                                    pass
-                            del self.localinfo['server_files'][ req['uuid'] ]
-                            self.localinfo_dirty = True
                 
                 elif 'terminate' in req['action']:
                     if dom == None:
