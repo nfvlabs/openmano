@@ -33,8 +33,8 @@ Manual installation can be done following these [instructions](https://github.co
 - [Openmano NFV descriptors](https://github.com/nfvlabs/openmano/wiki/openmano-descriptors "openmano descriptors")
 - [Openmano usage manual](https://github.com/nfvlabs/openmano/wiki/openmano-usage "openmano usage manual")
 - [Openvim usage manual](https://github.com/nfvlabs/openmano/wiki/openvim-usage  "openvim usage manual")
+- [Openmano API](https://github.com/nfvlabs/openmano/wiki/openmano-api "openmano API")
 - [Openvim API](https://github.com/nfvlabs/openmano/raw/master/docs/openvim-api-0.6.pdf "openvim API")
-- Openmano API (coming soon)
 - [Guidelines for developers](https://github.com/nfvlabs/openmano/wiki/guidelines-for-developers "guidelines for developers")
 
 #License
