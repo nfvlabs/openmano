@@ -160,6 +160,7 @@ DATABASE_TARGET_VER_NUM=0
 [ $OPENMANO_VER_NUM -ge 3005 ] && DATABASE_TARGET_VER_NUM=4   #0.3.5 =>  4
 [ $OPENMANO_VER_NUM -ge 4001 ] && DATABASE_TARGET_VER_NUM=5   #0.4.1 =>  5
 [ $OPENMANO_VER_NUM -ge 4002 ] && DATABASE_TARGET_VER_NUM=6   #0.4.2 =>  6
+[ $OPENMANO_VER_NUM -ge 4003 ] && DATABASE_TARGET_VER_NUM=7   #0.4.3 =>  7
 #TODO ... put next versions here
 
 
@@ -420,6 +421,36 @@ function downgrade_from_6(){
     echo "DELETE FROM schema_version WHERE version_int='6';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 
+function upgrade_to_7(){
+    echo "    upgrade database from version 0.6 to version 0.7"
+    echo "      Change created_at, modified_at from timestamp to unix float at all database"
+    for table in datacenters instance_nets instance_scenarios instance_vms instance_vnfs interfaces nets nfvo_tenants scenarios sce_interfaces sce_nets sce_vnfs tenants_datacenters vim_tenants vms vnfs uuids
+    do
+         echo -en "        $table               \r"
+         echo "ALTER TABLE $table ADD COLUMN created_at_ DOUBLE NOT NULL after created_at;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+         echo "UPDATE $table SET created_at_=unix_timestamp(created_at);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+         echo "ALTER TABLE $table DROP COLUMN created_at, CHANGE COLUMN created_at_ created_at DOUBLE NOT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+         [[ $table == uuids ]] || echo "ALTER TABLE $table CHANGE COLUMN modified_at modified_at DOUBLE NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    done
+    
+    echo "      Add 'descriptor' field text to 'vnfd', 'scenarios'"
+    echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (7, '0.7', '0.4.3', 'Changing created_at time at database', '2016-01-25');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+function downgrade_from_7(){
+    echo "    downgrade database from version 0.7 to version 0.6"
+    echo "      Change back created_at, modified_at from unix float to timestamp at all database"
+    for table in datacenters instance_nets instance_scenarios instance_vms instance_vnfs interfaces nets nfvo_tenants scenarios sce_interfaces sce_nets sce_vnfs tenants_datacenters vim_tenants vms vnfs uuids
+    do
+         echo -en "        $table               \r"
+         echo "ALTER TABLE $table ADD COLUMN created_at_ DOUBLE NOT NULL after created_at;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+         echo "ALTER TABLE $table ADD COLUMN created_at_ TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP after created_at;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+         echo "UPDATE $table SET created_at_=from_unixtime(created_at);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+         echo "ALTER TABLE $table DROP COLUMN created_at, CHANGE COLUMN created_at_ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+         [[ $table == uuids ]] || echo "ALTER TABLE $table CHANGE COLUMN modified_at modified_at TIMESTAMP NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    done
+    echo "      Remove 'descriptor' field from 'vnfd', 'scenarios' tables"
+    echo "DELETE FROM schema_version WHERE version_int='7';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
 #TODO ... put funtions here
 
 

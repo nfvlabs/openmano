@@ -33,7 +33,7 @@ import bottle
 import yaml
 import json
 import threading
-import datetime
+import time
 
 from jsonschema import validate as js_v, exceptions as js_e
 from openmano_schemas import vnfd_schema_v01, vnfd_schema_v02, \
@@ -76,8 +76,8 @@ def convert_datetime2str(var):
     '''
     if type(var) is dict:
         for k,v in var.items():
-            if type(v) is datetime.datetime:
-                var[k]= v.strftime('%Y-%m-%dT%H:%M:%S')
+            if type(v) is float and k in ("created_at", "modified_at"):
+                var[k] = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(v) )
             elif type(v) is dict or type(v) is list or type(v) is tuple: 
                 convert_datetime2str(v)
         if len(var) == 0: return True
@@ -679,6 +679,7 @@ def http_get_hosts(tenant_id, datacenter):
         print "http_post_vnfs error %d %s" % (-result, data)
         bottle.abort(-result, data)
     else:
+        convert_datetime2str(data)
         print json.dumps(data, indent=4)
         return format_out(data)
 
@@ -818,7 +819,7 @@ def http_get_scenarios(tenant_id):
         print "http_get_scenarios error %d %s" % (-result, data)
         bottle.abort(-result, data)
     else:
-        af.convert_datetime2str(data)
+        convert_datetime2str(data)
         af.convert_str2boolean(data, ('public',) )
         scenarios={'scenarios':data}
         print json.dumps(scenarios, indent=4)
@@ -839,6 +840,7 @@ def http_get_scenario_id(tenant_id, scenario_id):
         bottle.abort(-result, content)
     else:
         #print json.dumps(content, indent=4)
+        convert_datetime2str(content)
         data={'scenario' : content}
         return format_out(data)
 
@@ -897,7 +899,7 @@ def http_get_instances(tenant_id):
         print "http_get_instances error %d %s" % (-result, data)
         bottle.abort(-result, data)
     else:
-        af.convert_datetime2str(data)
+        convert_datetime2str(data)
         af.convert_str2boolean(data, ('public',) )
         instances={'instances':data}
         print json.dumps(instances, indent=4)
@@ -928,9 +930,9 @@ def http_get_instance_id(tenant_id, instance_id):
         print "http_get_instance_id error %d %s" % (-result, data)
         bottle.abort(-result, data)
         return
+    convert_datetime2str(data)
     print json.dumps(data, indent=4)
     return format_out(data)
-
 
 @bottle.route(url_base + '/<tenant_id>/instances/<instance_id>', method='DELETE')
 def http_delete_instance_id(tenant_id, instance_id):
