@@ -47,7 +47,7 @@ function getConfig(){
 #openmano server tenant. 
 	#TODO change this to be a choose option in the web
 	#insert one of the tenant uuid of 'openmano tenant-list
-	$mano_tenant='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+	$mano_tenant='3dcd1dca-bb88-11e5-81ee-0800273e724c';
 
 #openvim database server name or ip address, user, password and database name
 	$db_vim_server = 'localhost';

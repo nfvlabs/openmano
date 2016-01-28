@@ -412,7 +412,24 @@ vnfd_schema_v02 = {
 #    "oneOf": [vnfd_schema_v01, vnfd_schema_v02]
 #}
 
-
+graph_schema = {
+    "title":"graphical scenario descriptor information schema",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type":"object",
+    "properties":{
+        "x":      integer0_schema,
+        "y":      integer0_schema,
+        "ifaces": {
+            "type":"object",
+            "properties":{
+                "left": {"type":"array"},
+                "right": {"type":"array"},
+                "bottom": {"type":"array"},
+            }
+        }
+    },
+    "required": ["x","y"]
+}
 
 nsd_schema_v01 = {
     "title":"network scenario descriptor information schema v0.1",
@@ -430,7 +447,9 @@ nsd_schema_v01 = {
                         ".": {
                             "type": "object",
                             "properties":{
-                                "type":{"type":"string", "enum":["VNF", "other_network", "network", "external_network"]}
+                                "type":{"type":"string", "enum":["VNF", "other_network", "network", "external_network"]},
+                                "vnf_id": id_schema,
+                                "graph": graph_schema,
                             },
                             "patternProperties":{
                                 "^(VNF )?model$": {"type": "string"}
@@ -445,7 +464,9 @@ nsd_schema_v01 = {
                         ".": {
                             "type": "object",
                             "properties":{
-                                "nodes":{"oneOf":[{"type":"object", "minProperties":2}, {"type":"array", "minLength":2}]}
+                                "nodes":{"oneOf":[{"type":"object", "minProperties":2}, {"type":"array", "minLength":1}]},
+                                "type": {"type": "string", "enum":["link", "external_network", "dataplane_net", "bridge_net"]},
+                                "graph": graph_schema
                             },
                             "required": ["nodes"]
                         },
@@ -466,17 +487,39 @@ nsd_schema_v02 = {
     "$schema": "http://json-schema.org/draft-04/schema#",
     "type":"object",
     "properties":{
-        "version": {"type": "string", "pattern":"^v0.2$"},
-        "topology":{
+        "schema_version": {"type": "string", "enum": ["0.2"]},
+        "name":name_schema,
+        "description": description_schema,
+        "vnfs": {
             "type":"object",
-            "properties":{
-                "name": name_schema,
+            "patternProperties":{
+                ".": {
+                    "type": "object",
+                    "properties":{
+                        "vnf_id": id_schema,
+                        "graph": graph_schema,
+                        "vnf_model": name_schema,
+                    },
+                }
             },
-            "required": ["name"],
-            "additionalProperties": True
-        }
+            "minProperties": 1
+        },
+        "networks": {
+            "type":"object",
+            "patternProperties":{
+                ".": {
+                    "type": "object",
+                    "properties":{
+                        "interfaces":{"type":"array", "minLength":1},
+                        "type": {"type": "string", "enum":["link", "external_network", "dataplane_net", "bridge_net"]},
+                        "graph": graph_schema
+                    },
+                    "required": ["interfaces"]
+                },
+            }
+        },
     },
-    "required": ["topology", "version"],
+    "required": ["vnfs", "networks","name", "schema_version"],
     "additionalProperties": False
 }
 
@@ -570,6 +613,58 @@ scenario_action_schema = {
     "minProperties": 1,
     "maxProperties": 1,
     "additionalProperties": False
+}
+
+instance_scenario_create_schema = {
+    "title":"instance scenario create information schema v0.1",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type":"object",
+    "properties":{
+        "schema_version": {"type": "string", "enum": ["0.1"]},
+        "instance":{
+            "type":"object",
+            "properties":{
+                "name":name_schema,
+                "description":description_schema,
+                "datacenter": name_schema,
+                "scenario" : name_schema, #can be an UUID or name
+                "action":{"enum": ["deploy","reserve","verify" ]},
+                "connect_mgmt_interfaces": {"oneOff": [{"type":"boolean"}, {"type":"object"}]},# can be true or a dict with datacenter: net_name
+                "vnfs":{             #mapping from scenario to datacenter
+                    "type": "object",
+                    "patternProperties":{
+                        ".": {
+                            "type": "object",
+                            "properties":{
+                                "name":   name_schema,#override vnf name
+                                "datacenter": name_schema,
+                                "metadata": {"type": "object"},
+                                "user_data": {"type": "string"}
+                            }
+                        }
+                    },
+                },
+                "networks":{             #mapping from scenario to datacenter
+                    "type": "object",
+                    "patternProperties":{
+                        ".": {
+                            "type": "object",
+                            "properties":{
+                                "source": {"oneOf":[name_schema,{"type": "null"}]}, #datacenter network to use. Null if must be created as an internal net
+                                "name":   name_schema,#override network name
+                                "datacenter": name_schema,
+                            }
+                        }
+                    },
+                },
+            },
+            "additionalProperties": False,
+            "required": ["scenario", "name"]
+        },
+    },
+    "required": ["instance"],
+    "additionalProperties": False
+    
 }
 
 instance_scenario_action_schema = {

@@ -704,19 +704,17 @@ class nfvo_db():
                         return r,scenario_uuid
                     #sce_nets
                     for net in scenario_dict['nets'].values():
-                        #external=True if str(net['external'])=="True" else False
-                        net.pop('model', None)
-                        #net.pop('type', None)
-                        net.pop('shared', None)
-                        net.pop('uuid', None) #external_net_uuid = 
-                        net.pop('net_id', None)
-                        net['scenario_id']=scenario_uuid
+                        net_dict={'scenario_id': scenario_uuid}
+                        net_dict["name"] = net["name"]
+                        net_dict["type"] = net["type"]
+                        net_dict["description"] = net.get("description")
+                        net_dict["external"] = net.get("external", False)
                         if "graph" in net:
                             #net["graph"]=yaml.safe_dump(net["graph"],default_flow_style=True,width=256)
                             #TODO, must be json because of the GUI, change to yaml
-                            net["graph"]=json.dumps(net["graph"])
+                            net_dict["graph"]=json.dumps(net["graph"])
                         created_time += 0.00001
-                        r,net_uuid =  self._new_row_internal('sce_nets', net, tenant_id, True, None, True, created_time)
+                        r,net_uuid =  self._new_row_internal('sce_nets', net_dict, tenant_id, True, None, True, created_time)
                         if r<0:
                             print 'nfvo_db.new_scenario Error inserting at table sce_vnfs: ' + net_uuid
                             return r, net_uuid
@@ -1015,12 +1013,14 @@ class nfvo_db():
                 with self.con:
                     self.cur = self.con.cursor()
                     #instance_scenarios
+                    vim_tenant_id = scenarioDict['vim_tenants_uuid']
+                    datacenter_id = scenarioDict['datacenter_id']
                     INSERT_={'nfvo_tenant_id': tenant_id,
-                        'vim_tenant_id': scenarioDict['vim_tenants_uuid'],
+                        'vim_tenant_id': vim_tenant_id,
                         'name': instance_scenario_name,
                         'description': instance_scenario_description,
                         'scenario_id' : scenarioDict['uuid'],
-                        'datacenter_id': scenarioDict['datacenter_id']
+                        'datacenter_id': datacenter_id
                     }
                     r,instance_uuid =  self._new_row_internal('instance_scenarios', INSERT_, tenant_id, True, None, True, created_time)
                     if r<0:
@@ -1031,6 +1031,10 @@ class nfvo_db():
                     #instance_nets   #nets interVNF
                     for net in scenarioDict['nets']:
                         INSERT_={'vim_net_id': net['vim_id'], 'external': net['external'], 'instance_scenario_id':instance_uuid } #,  'type': net['type']
+                        INSERT_['datacenter_id'] = net.get('datacenter_id', datacenter_id) 
+                        INSERT_['vim_tenant_id'] = net.get('vim_tenant_id', vim_tenant_id)
+                        if net.get("uuid"):
+                            INSERT_['sce_net_id'] = net['uuid']
                         created_time += 0.00001
                         r,instance_net_uuid =  self._new_row_internal('instance_nets', INSERT_, tenant_id, True, instance_uuid, True, created_time)
                         if r<0:
@@ -1042,6 +1046,10 @@ class nfvo_db():
                     #instance_vnfs
                     for vnf in scenarioDict['vnfs']:
                         INSERT_={'instance_scenario_id': instance_uuid,  'vnf_id': vnf['vnf_id']  }
+                        INSERT_['datacenter_id'] = vnf.get('datacenter_id', datacenter_id) 
+                        INSERT_['vim_tenant_id'] = vnf.get('vim_tenant_id', vim_tenant_id)
+                        if vnf.get("uuid"):
+                            INSERT_['sce_vnf_id'] = vnf['uuid']
                         created_time += 0.00001
                         r,instance_vnf_uuid =  self._new_row_internal('instance_vnfs', INSERT_, tenant_id, True, instance_uuid, True,created_time)
                         if r<0:
@@ -1052,6 +1060,10 @@ class nfvo_db():
                         #instance_nets   #nets intraVNF
                         for net in vnf['nets']:
                             INSERT_={'vim_net_id': net['vim_id'], 'external': 'false', 'instance_scenario_id':instance_uuid  } #,  'type': net['type']
+                            INSERT_['datacenter_id'] = net.get('datacenter_id', datacenter_id) 
+                            INSERT_['vim_tenant_id'] = net.get('vim_tenant_id', vim_tenant_id)
+                            if net.get("uuid"):
+                                INSERT_['net_id'] = net['uuid']
                             created_time += 0.00001
                             r,instance_net_uuid =  self._new_row_internal('instance_nets', INSERT_, tenant_id, True, instance_uuid, True,created_time)
                             if r<0:
@@ -1117,11 +1129,12 @@ class nfvo_db():
                     else:
                         where_list.append( "inst.name='" + instance_id +"'" )
                     where_text = " AND ".join(where_list)
-                    select_text = "inst.uuid as uuid,inst.name as name,inst.scenario_id as scenario_id, datacenter_id, "\
-                                "s.name as scenario_name,inst.nfvo_tenant_id as nfvo_tenant_id," + \
-                                "inst.description as description,inst.created_at as created_at"
-                    from_text = "instance_scenarios as inst join scenarios as s on inst.scenario_id=s.uuid"
-                    self.cur.execute("SELECT " + select_text + " FROM " + from_text + " WHERE "+ where_text)
+                    command = "SELECT inst.uuid as uuid,inst.name as name,inst.scenario_id as scenario_id, datacenter_id" +\
+                                " ,vim_tenant_id, s.name as scenario_name,inst.nfvo_tenant_id as nfvo_tenant_id" + \
+                                " ,inst.description as description,inst.created_at as created_at" +\
+                            " FROM instance_scenarios as inst join scenarios as s on inst.scenario_id=s.uuid"+\
+                            " WHERE " + where_text
+                    self.cur.execute(command)
                     rows = self.cur.fetchall()
                     if self.cur.rowcount==0:
                         return -HTTP_Bad_Request, "No instance found with this criteria " + where_text
@@ -1130,25 +1143,25 @@ class nfvo_db():
                     instance_dict = rows[0]
                     
                     #instance_vnfs
-                    cmd = "SELECT iv.uuid as uuid,iv.vnf_id as vnf_id,v.name as vnf_name" \
-                            " FROM instance_vnfs as iv join vnfs as v on iv.vnf_id=v.uuid"\
-                            "  WHERE iv.instance_scenario_id='%s'" \
-                            " ORDER BY iv.created_at " %instance_dict['uuid']
+                    cmd = "SELECT iv.uuid as uuid,sv.vnf_id as vnf_id,sv.name as vnf_name, sce_vnf_id, datacenter_id, vim_tenant_id"\
+                            " FROM instance_vnfs as iv join sce_vnfs as sv on iv.sce_vnf_id=sv.uuid" \
+                            " WHERE iv.instance_scenario_id='%s'" \
+                            " ORDER BY iv.created_at " % instance_dict['uuid']
                     self.cur.execute(cmd)
                     instance_dict['vnfs'] = self.cur.fetchall()
                     for vnf in instance_dict['vnfs']:
                         vnf_manage_iface_list=[]
                         #instance vms
-                        cmd = "SELECT iv.uuid as uuid, vim_vm_id, status, error_msg, vim_info, iv.created_at as created_at, name"\
-                                " FROM instance_vms as iv join vms on iv.vm_id=vms.uuid"\
+                        cmd = "SELECT iv.uuid as uuid, vim_vm_id, status, error_msg, vim_info, iv.created_at as created_at, name "\
+                                " FROM instance_vms as iv join vms on iv.vm_id=vms.uuid "\
                                 " WHERE instance_vnf_id='%s' ORDER BY iv.created_at" % vnf['uuid']
                         self.cur.execute(cmd)
                         vnf['vms'] = self.cur.fetchall()
                         for vm in vnf['vms']:
                             vm_manage_iface_list=[]
                             #instance_interfaces
-                            cmd = "SELECT vim_interface_id, instance_net_id, internal_name,external_name, mac_address, ip_address, vim_info, i.type as type" \
-                                    " FROM instance_interfaces as ii join interfaces as i on ii.interface_id=i.uuid" \
+                            cmd = "SELECT vim_interface_id, instance_net_id, internal_name,external_name, mac_address, ip_address, vim_info, i.type as type "\
+                                    " FROM instance_interfaces as ii join interfaces as i on ii.interface_id=i.uuid "\
                                     " WHERE instance_vm_id='%s' ORDER BY created_at" % vm['uuid']
                             self.cur.execute(cmd )
                             vm['interfaces'] = self.cur.fetchall()
@@ -1165,10 +1178,9 @@ class nfvo_db():
                     #from_text = "instance_nets join instance_scenarios on instance_nets.instance_scenario_id=instance_scenarios.uuid " + \
                     #            "join sce_nets on instance_scenarios.scenario_id=sce_nets.scenario_id"
                     #where_text = "instance_nets.instance_scenario_id='"+ instance_dict['uuid'] + "'"
-                    cmd = "SELECT uuid,vim_net_id,status,error_msg,vim_info,external"\
-                            " FROM instance_nets"\
+                    cmd = "SELECT uuid,vim_net_id,status,error_msg,vim_info,external, sce_net_id, net_id as vnf_net_id, datacenter_id, vim_tenant_id"\
+                            " FROM instance_nets" \
                             " WHERE instance_scenario_id='%s' ORDER BY created_at" % instance_dict['uuid']
-    
                     self.cur.execute(cmd)
                     instance_dict['nets'] = self.cur.fetchall()
                     

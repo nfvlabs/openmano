@@ -38,7 +38,7 @@ import time
 from jsonschema import validate as js_v, exceptions as js_e
 from openmano_schemas import vnfd_schema_v01, vnfd_schema_v02, \
                             nsd_schema_v01, nsd_schema_v02, scenario_edit_schema, \
-                            scenario_action_schema, instance_scenario_action_schema, \
+                            scenario_action_schema, instance_scenario_action_schema, instance_scenario_create_schema, \
                             tenant_schema, tenant_edit_schema,\
                             datacenter_schema, datacenter_edit_schema, datacenter_action_schema, datacenter_associate_schema
 import nfvo
@@ -733,12 +733,14 @@ def http_post_verify(tenant_id):
 def http_post_scenarios(tenant_id):
     '''add a scenario into the catalogue. Creates the scenario and its internal structure in the OPENMANO DB'''
     print "http_post_scenarios by tenant " + tenant_id 
-    http_content, used_schema = format_in( nsd_schema_v01, ("version",), {"v0.2": nsd_schema_v02})
+    http_content, used_schema = format_in( nsd_schema_v01, ("schema_version",), {"0.2": nsd_schema_v02})
     #r = af.remove_extra_items(http_content, used_schema)
     #if r is not None: print "http_post_scenarios: Warning: remove extra items ", r
     print "http_post_scenarios input: ",  http_content
-    
-    result, data = nfvo.new_scenario(mydb, tenant_id, http_content)
+    if http_content.get("schema_version") == None:
+        result, data = nfvo.new_scenario(mydb, tenant_id, http_content)
+    else:
+        result, data = nfvo.new_scenario_v02(mydb, tenant_id, http_content)
     if result < 0:
         print "http_post_scenarios error %d %s" % (-result, data)
         bottle.abort(-result, data)
@@ -759,7 +761,6 @@ def http_post_scenario_action(tenant_id, scenario_id):
     http_content,_ = format_in( scenario_action_schema )
     r = af.remove_extra_items(http_content, scenario_action_schema)
     if r is not None: print "http_post_scenario_action: Warning: remove extra items ", r
-    
     if "start" in http_content:
         result, data = nfvo.start_scenario(mydb, tenant_id, scenario_id, http_content['start']['instance_name'], \
                     http_content['start'].get('description',http_content['start']['instance_name']),
@@ -879,6 +880,30 @@ def http_put_scenario_id(tenant_id, scenario_id):
         #print json.dumps(data, indent=4)
         #return format_out(data)
         return http_get_scenario_id(tenant_id,data)
+
+
+
+@bottle.route(url_base + '/<tenant_id>/instances', method='POST')
+def http_post_instances(tenant_id):
+    '''take an action over a scenario'''
+    #check valid tenant_id
+    if not nfvo.check_tenant(mydb, tenant_id): 
+        print 'httpserver.http_post_scenario_action() tenant %s not found' % tenant_id
+        bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
+        return
+    #parse input data
+    http_content,used_schema = format_in( instance_scenario_create_schema)
+    r = af.remove_extra_items(http_content, used_schema)
+    if r is not None: print "http_post_instances: Warning: remove extra items ", r
+    result, data = nfvo.create_instance(mydb, tenant_id, http_content["instance"])
+    if result < 0:
+        print "http_post_instances start error %d: %s" % (-result, data)
+        bottle.abort(-result, data)
+    else:
+        return format_out(data)
+
+
+
 
 #
 # INSTANCES

@@ -142,8 +142,9 @@ function getVnfs($echoPhp)
 		}
 	}
 
-	array_push($vnfs, "        'bridge_net':{'type':'network','model': 'bridge_net', 'img':'images/big/bridge_net.png','description':'virtio net','ifaces':{'bottom':[ ['0','v']] }},\n");
-	array_push($vnfs, "        'dataplane_net':{'type':'network','model': 'dataplane_net', 'img':'images/big/dataplane_net.png','description':'dataplane net','ifaces':{'bottom':[ ['0','d']] }},\n");
+	array_push($vnfs, "        'bridge_net':{'type':'network','model': 'bridge_net', 'img':'images/big/bridge_net.png','description':'virtio network','ifaces':{'bottom':[ ['0','v']] }},\n");
+	array_push($vnfs, "        'dataplane_net':{'type':'network','model': 'dataplane_net', 'img':'images/big/dataplane_net.png','description':'dataplane network','ifaces':{'bottom':[ ['0','d']] }},\n");
+	array_push($vnfs, "        'external_net':{'type':'network','model': 'external_net', 'img':'images/big/nube.png','description':'external network','ifaces':{'bottom':[ ['0','d']] }},\n");
 	if ($echoPhp==true){
 		echo "    <p class='lpnode' id='Networks'>\n";
 		echo "      <img id='Networks__' class='minus' src='images/minus_icon.gif' width='16' height='16' style='vertical-align:middle; margin-left:10px;'>\n";

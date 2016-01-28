@@ -34,6 +34,7 @@ import time
 import Queue
 import paramiko
 import random
+import subprocess
 
 #TODO: insert a logging system
 
@@ -158,7 +159,7 @@ class dhcp_thread(threading.Thread):
         try:
             #print self.name, "Iteration" 
             #Connect SSH
-            if not self.test:
+            if not self.test and self.dhcp_params["host"]!="localhost":
                 self.ssh_connect()
             
             for mac_address in self.mac_status:
@@ -168,10 +169,14 @@ class dhcp_thread(threading.Thread):
                     continue
     
                 if not self.test:
-                    command = './get_dhcp_lease.sh ' +  mac_address
                     #print self.name, ': command:', command
-                    (_, stdout, _) = self.ssh_conn.exec_command(command)
-                    content = stdout.read()
+                    if self.dhcp_params["host"]=="localhost":
+                        command = ['./get_dhcp_lease.sh',  mac_address]
+                        content = subprocess.check_output(command)
+                    else:
+                        command = './get_dhcp_lease.sh ' +  mac_address
+                        (_, stdout, _) = self.ssh_conn.exec_command(command)
+                        content = stdout.read()
                 else:
                     if self.mac_status[mac_address]["retries"]>random.randint(10,100): #wait between 10 and 100 seconds to produce a fake IP
                         content = self.get_fake_ip()
