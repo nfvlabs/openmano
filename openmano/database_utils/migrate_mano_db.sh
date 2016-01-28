@@ -424,7 +424,7 @@ function downgrade_from_6(){
 function upgrade_to_7(){
     echo "    upgrade database from version 0.6 to version 0.7"
     echo "      Change created_at, modified_at from timestamp to unix float at all database"
-    for table in datacenters instance_nets instance_scenarios instance_vms instance_vnfs interfaces nets nfvo_tenants scenarios sce_interfaces sce_nets sce_vnfs tenants_datacenters vim_tenants vms vnfs uuids
+    for table in datacenters datacenter_nets instance_nets instance_scenarios instance_vms instance_vnfs interfaces nets nfvo_tenants scenarios sce_interfaces sce_nets sce_vnfs tenants_datacenters vim_tenants vms vnfs uuids
     do
          echo -en "        $table               \r"
          echo "ALTER TABLE $table ADD COLUMN created_at_ DOUBLE NOT NULL after created_at;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
@@ -439,7 +439,7 @@ function upgrade_to_7(){
 function downgrade_from_7(){
     echo "    downgrade database from version 0.7 to version 0.6"
     echo "      Change back created_at, modified_at from unix float to timestamp at all database"
-    for table in datacenters instance_nets instance_scenarios instance_vms instance_vnfs interfaces nets nfvo_tenants scenarios sce_interfaces sce_nets sce_vnfs tenants_datacenters vim_tenants vms vnfs uuids
+    for table in datacenters datacenter_nets instance_nets instance_scenarios instance_vms instance_vnfs interfaces nets nfvo_tenants scenarios sce_interfaces sce_nets sce_vnfs tenants_datacenters vim_tenants vms vnfs uuids
     do
          echo -en "        $table               \r"
          echo "ALTER TABLE $table ADD COLUMN created_at_ DOUBLE NOT NULL after created_at;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
