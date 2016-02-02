@@ -10,20 +10,21 @@
 
 #Releases
 
-Current releases/branches in openmano are the following:
+The relevant releases/branches in openmano are the following:
 
-- v0.3: current stable release for normal use
-- master: development branch intended for contributors, with new features that will be incorporated into the stable release
+- **v0.4**: current stable release for normal use. Supports several datacenters, openstack as a VIM, opendaylight as openflow controller
+- v0.3: old stable release version
+- **master**: development branch intended for contributors, with new features that will be incorporated into the stable release
 
-#Quick installation of current release (v0.3)
+#Quick installation of current release (v0.4)
 
-- Download a VDI Ubuntu Server 14.10 LAMP image from [here](https://virtualboximages.com/Ubuntu+14.10+amd64+LAMP+Server+VirtualBox+VDI+Virtual+Computer "download VM image").
+- Download e.g. a [Ubuntu Server 14.04 LTS](http://virtualboxes.org/images/ubuntu-server) (ubuntu/reverse). Other tested distributions are [Ubuntu Desktop 64bits 14.04.2 LTS](http://sourceforge.net/projects/osboxes/files/vms/vbox/Ubuntu/14.04/14.04.2/Ubuntu_14.04.2-64bit.7z/download) (osboxes/osboxes.org), [CentOS 7](http://sourceforge.net/projects/osboxes/files/vms/vbox/CentOS/CentOS_7-x86_64.7z/download) (osboxes/osboxes.org)
 - Start the VM and execute the following command in a terminal:
 
-        wget https://github.com/nfvlabs/openmano/raw/v0.3/scripts/install-openmano.sh
+        wget https://github.com/nfvlabs/openmano/raw/v0.4/scripts/install-openmano.sh
         chmod +x install-openmano.sh
-        sudo ./install-openmano.sh root adminuser
-        #NOTE: **root adminuser** are the mysql user and password of this VM image
+        #NOTE: you can provide the root user and password of the database.
+        #In case the image does not have a mysql/mariadb it will install
 
 Manual installation can be done following these [instructions](https://github.com/nfvlabs/openmano/wiki/Getting-started#manual-installation). 
 
