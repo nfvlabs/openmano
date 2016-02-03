@@ -34,8 +34,8 @@ __date__ ="$10-jul-2014 12:07:15$"
 path_schema={"type":"string", "pattern":"^(\.(\.?))?(/[^/"":{}\ \(\)]+)+$"}
 port_schema={"type":"integer","minimum":1,"maximun":65534}
 ip_schema={"type":"string","pattern":"^([0-9]{1,3}.){3}[0-9]{1,3}$"}
-name_schema={"type" : "string", "minLength":1, "maxLength":36, "pattern" : "^[^,;()'\"]+$"}
-nameshort_schema={"type" : "string", "minLength":1, "maxLength":24, "pattern" : "^[^,;()'\"]+$"}
+name_schema={"type" : "string", "minLength":1, "maxLength":255, "pattern" : "^[^,;()'\"]+$"}
+nameshort_schema={"type" : "string", "minLength":1, "maxLength":64, "pattern" : "^[^,;()'\"]+$"}
 nametiny_schema={"type" : "string", "minLength":1, "maxLength":12, "pattern" : "^[^,;()'\"]+$"}
 xml_text_schema={"type" : "string", "minLength":1, "maxLength":1000, "pattern" : "^[^']+$"}
 description_schema={"type" : ["string","null"], "maxLength":200, "pattern" : "^[^'\"]+$"}
@@ -48,7 +48,7 @@ integer1_schema={"type":"integer","minimum":1}
 vlan_schema={"type":"integer","minimum":1,"maximun":4095}
 vlan1000_schema={"type":"integer","minimum":1000,"maximun":4095}
 mac_schema={"type":"string", "pattern":"^[0-9a-fA-F][02468aceACE](:[0-9a-fA-F]{2}){5}$"}  #must be unicast LSB bit of MSB byte ==0 
-net_bind_schema={"oneOf":[{"type":"null"},{"type":"string", "pattern":"^(default|((bridge|macvtap):[0-9a-zA-Z\.\-]{1,29})|openflow:[/0-9a-zA-Z\.\-]{1,25}(:vlan)?)$"}]}
+net_bind_schema={"oneOf":[{"type":"null"},{"type":"string", "pattern":"^(default|((bridge|macvtap):[0-9a-zA-Z\.\-]{1,50})|openflow:[/0-9a-zA-Z\.\-]{1,50}(:vlan)?)$"}]}
 yes_no_schema={"type":"string", "enum":["yes", "no"]}
 log_level_schema={"type":"string", "enum":["DEBUG", "INFO", "WARNING","ERROR","CRITICAL"]}
 
@@ -98,12 +98,12 @@ config_schema = {
                 "host" : name_schema,
                 "port" : port_schema,
                 "provider" : {"type": "string", "enum": ["isc-dhcp-server"]},
-                "user" : name_schema,
+                "user" : nameshort_schema,
                 "password" : {"type": "string"},
                 "key" : {"type": "string"},
                 "bridge_ifaces" :{
                     "type": "array", 
-                    "items": name_schema,
+                    "items": nameshort_schema,
                 },
                 "nets" :{
                     "type": "array", 
@@ -151,7 +151,7 @@ tenant_new_schema = {
             "type":"object",
             "properties":{
                 "id":id_schema,
-                "name": name_schema,
+                "name": nameshort_schema,
                 "description":description_schema,
                 "enabled":{"type" : "boolean"}
             },
@@ -170,7 +170,7 @@ tenant_edit_schema = {
             "type":"object",
             "minProperties":1,
             "properties":{
-                "name":name_schema,
+                "name":nameshort_schema,
                 "description":description_schema,
                 "enabled":{"type" : "boolean"}
             },
@@ -186,7 +186,7 @@ interfaces_schema={
     "items":{
         "type":"object",
         "properties":{
-            "name":nameshort_schema,
+            "name":name_schema,
             "dedicated":{"type":"string","enum":["yes","no","yes:sriov"]},
             "bandwidth":bandwidth_schema,
             "vpci":pci_schema,
@@ -499,7 +499,7 @@ networks_schema={
     "items":{
         "type":"object",
         "properties":{
-            "name":nameshort_schema,
+            "name":name_schema,
             "bandwidth":bandwidth_schema,
             "vpci":pci_schema,
             "uuid":id_schema,
@@ -591,7 +591,7 @@ network_new_schema = {
                 "shared":{"type":"boolean"},
                 "tenant_id":id_schema,
                 "admin_state_up":{"type":"boolean"},
-                "provider:vlan":vlan1000_schema,
+                "provider:vlan":vlan_schema,
                 "provider:physical":net_bind_schema
             },
             "required": ["name"]
@@ -613,7 +613,7 @@ network_update_schema = {
                 "shared":{"type":"boolean"},
                 "tenant_id":id_schema,
                 "admin_state_up":{"type":"boolean"},
-                "provider:vlan":vlan1000_schema, 
+                "provider:vlan":vlan_schema, 
                 "bind":net_bind_schema
             },
             "minProperties": 1,
@@ -634,7 +634,7 @@ port_new_schema = {
             "type":"object",
             "properties":{
                 "id":id_schema,
-                "name":name_schema,
+                "name":nameshort_schema,
                 "network_id":{"oneOf":[{"type": "null"}, id_schema ]},
                 "tenant_id":id_schema,
                 "mac_address": {"oneOf":[{"type": "null"}, mac_schema] },
@@ -658,7 +658,7 @@ port_update_schema = {
         "port":{
             "type":"object",
             "properties":{
-                "name":name_schema,
+                "name":nameshort_schema,
                 "network_id":{"anyOf":[{"type":"null"}, id_schema ] }
             },
             "minProperties": 1,

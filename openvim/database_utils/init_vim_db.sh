@@ -34,9 +34,10 @@ GREP=$(which grep)
 DIRNAME=`dirname $0`
 
 function usage(){
-    echo -e "Usage: $0 OPTIONS"
+    echo -e "Usage: $0 OPTIONS [{openvim_version}]"
     echo -e "  Inits openvim database; deletes previous one and loads from ${DBNAME}_structure.sql"
     echo -e "   and data from host_ranking.sql, nets.sql, of_ports_pci_correspondece*.sql"
+    echo -e "  If openvim_version is not provided it tries to get from openvimd.py using relative path"
     echo -e "  OPTIONS"
     echo -e "     -u USER  database user. '$DBUSER' by default. Prompts if DB access fails"
     echo -e "     -p PASS  database password. 'No password' by default. Prompts if DB access fails"
@@ -109,7 +110,7 @@ echo "    loading ${DIRNAME}/vim_db_structure.sql"
 sed -e "s/vim_db/$DBNAME/" ${DIRNAME}/vim_db_structure.sql |  mysql  $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ 
 
 echo "    migrage database version"
-${DIRNAME}/migrate_vim_db.sh $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ -d$DBNAME
+${DIRNAME}/migrate_vim_db.sh $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ -d$DBNAME $1
 
 echo  "    loading ${DIRNAME}/host_ranking.sql"
 mysql $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_  $DBNAME < ${DIRNAME}/host_ranking.sql

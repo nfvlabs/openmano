@@ -159,6 +159,7 @@ DATABASE_TARGET_VER_NUM=0
 [ $OPENVIM_VER_NUM -ge 2005 ] && DATABASE_TARGET_VER_NUM=3   #0.2.5   =>  3
 [ $OPENVIM_VER_NUM -ge 3001 ] && DATABASE_TARGET_VER_NUM=4   #0.3.1   =>  4
 [ $OPENVIM_VER_NUM -ge 4001 ] && DATABASE_TARGET_VER_NUM=5   #0.4.1   =>  5
+[ $OPENVIM_VER_NUM -ge 4002 ] && DATABASE_TARGET_VER_NUM=6   #0.4.2   =>  6
 #TODO ... put next versions here
 
 
@@ -351,6 +352,59 @@ function downgrade_from_5(){
     echo "     removing 'ip_address' from 'ports'"
     echo "ALTER TABLE ports DROP COLUMN ip_address;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "DELETE FROM schema_version WHERE version_int = '5';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+
+function upgrade_to_6(){
+    echo "    upgrade database from version 0.5 to version 0.6"
+    echo "      Change enalarge name, description to 255 at all database"
+    for table in flavors images instances tenants
+    do
+         name_length=255
+         [[ $table == tenants ]] || name_length=64
+         echo -en "        $table               \r"
+         echo "ALTER TABLE $table CHANGE COLUMN name name VARCHAR($name_length) NOT NULL, CHANGE COLUMN description description VARCHAR(255) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    done
+    echo -en "        hosts               \r"
+    echo "ALTER TABLE hosts CHANGE COLUMN name name VARCHAR(255) NOT NULL, CHANGE COLUMN ip_name ip_name VARCHAR(64) NOT NULL, CHANGE COLUMN user user VARCHAR(64) NOT NULL, CHANGE COLUMN password password VARCHAR(64) NULL DEFAULT NULL, CHANGE COLUMN description description VARCHAR(255) NULL DEFAULT NULL, CHANGE COLUMN features features VARCHAR(255) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        nets                \r"
+    echo "ALTER TABLE nets CHANGE COLUMN name name VARCHAR(255) NOT NULL, CHANGE COLUMN last_error last_error VARCHAR(255) NULL DEFAULT NULL, CHANGE COLUMN bind bind VARCHAR(36) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        instances           \r"
+    echo "ALTER TABLE instances CHANGE COLUMN last_error last_error VARCHAR(255) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        ports               \r"
+    echo "ALTER TABLE ports CHANGE COLUMN name name VARCHAR(64) NOT NULL, CHANGE COLUMN switch_port switch_port VARCHAR(64) NULL DEFAULT NULL, CHANGE COLUMN switch_dpid switch_dpid VARCHAR(64) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        of_flows            \r"
+    echo "ALTER TABLE of_flows CHANGE COLUMN name name VARCHAR(64) NOT NULL, CHANGE COLUMN net_id net_id VARCHAR(36) NULL DEFAULT NULL, CHANGE COLUMN actions actions VARCHAR(255) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        of_ports_pci_cor... \r"
+    echo "ALTER TABLE of_ports_pci_correspondence CHANGE COLUMN ip_name ip_name VARCHAR(64) NULL DEFAULT NULL, CHANGE COLUMN switch_port switch_port VARCHAR(64) NULL DEFAULT NULL, CHANGE COLUMN switch_dpid switch_dpid VARCHAR(64) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        resources_port      \r"
+    echo "ALTER TABLE resources_port CHANGE COLUMN source_name source_name VARCHAR(64) NULL DEFAULT NULL, CHANGE COLUMN switch_port switch_port VARCHAR(64) NULL DEFAULT NULL, CHANGE COLUMN switch_dpid switch_dpid VARCHAR(64) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openvim_ver, comments, date) VALUES (6, '0.6', '0.4.2', 'Enlarging name at database', '2016-02-01');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+function downgrade_from_6(){
+    echo "    downgrade database from version 0.6 to version 0.5"
+    echo "      Change back name,description to shorter length at all database"
+    for table in flavors images instances tenants
+    do
+         name_length=50
+         [[ $table == flavors ]] || [[ $table == images ]] || name_length=36 
+         echo -en "        $table               \r"
+         echo "ALTER TABLE $table CHANGE COLUMN name name VARCHAR($name_length) NOT NULL, CHANGE COLUMN description description VARCHAR(100) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    done
+    echo -en "        hosts               \r"
+    echo "ALTER TABLE hosts CHANGE COLUMN name name VARCHAR(36) NOT NULL, CHANGE COLUMN ip_name ip_name VARCHAR(36) NOT NULL, CHANGE COLUMN user user VARCHAR(36) NOT NULL, CHANGE COLUMN password password VARCHAR(36) NULL DEFAULT NULL, CHANGE COLUMN description description VARCHAR(100) NULL DEFAULT NULL, CHANGE COLUMN features features VARCHAR(50) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        nets                \r"
+    echo "ALTER TABLE nets CHANGE COLUMN name name VARCHAR(50) NOT NULL, CHANGE COLUMN last_error last_error VARCHAR(200) NULL DEFAULT NULL, CHANGE COLUMN bind bind VARCHAR(36) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        instances           \r"
+    echo "ALTER TABLE instances CHANGE COLUMN last_error last_error VARCHAR(200) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        ports               \r"
+    echo "ALTER TABLE ports CHANGE COLUMN name name VARCHAR(25) NULL DEFAULT NULL, CHANGE COLUMN switch_port switch_port VARCHAR(24) NULL DEFAULT NULL, CHANGE COLUMN switch_dpid switch_dpid VARCHAR(23) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        of_flows            \r"
+    echo "ALTER TABLE of_flows CHANGE COLUMN name name VARCHAR(50) NULL DEFAULT NULL, CHANGE COLUMN net_id net_id VARCHAR(50) NULL DEFAULT NULL, CHANGE COLUMN actions actions VARCHAR(100) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        of_ports_pci_cor... \r"
+    echo "ALTER TABLE of_ports_pci_correspondence CHANGE COLUMN ip_name ip_name VARCHAR(50) NULL DEFAULT NULL, CHANGE COLUMN switch_port switch_port VARCHAR(24) NULL DEFAULT NULL, CHANGE COLUMN switch_dpid switch_dpid VARCHAR(23) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        resources_port      \r"
+    echo "ALTER TABLE resources_port CHANGE COLUMN source_name source_name VARCHAR(24) NULL DEFAULT NULL, CHANGE COLUMN switch_port switch_port VARCHAR(24) NULL DEFAULT NULL, CHANGE COLUMN switch_dpid switch_dpid VARCHAR(23) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int='6';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 #TODO ... put funtions here
 
