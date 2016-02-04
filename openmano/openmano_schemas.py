@@ -28,10 +28,11 @@ __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$09-oct-2014 09:09:48$"
 
 #Basis schemas
-nameshort_schema={"type" : "string", "minLength":1, "maxLength":24, "pattern" : "^[^,;()'\"]+$"}
-name_schema={"type" : "string", "minLength":1, "maxLength":36, "pattern" : "^[^,;()'\"]+$"}
+passwd_schema={"type" : "string", "minLength":1, "maxLength":60}
+nameshort_schema={"type" : "string", "minLength":1, "maxLength":60, "pattern" : "^[^,;()'\"]+$"}
+name_schema={"type" : "string", "minLength":1, "maxLength":255, "pattern" : "^[^,;()'\"]+$"}
 xml_text_schema={"type" : "string", "minLength":1, "maxLength":1000, "pattern" : "^[^']+$"}
-description_schema={"type" : ["string","null"], "maxLength":200, "pattern" : "^[^'\"]+$"}
+description_schema={"type" : ["string","null"], "maxLength":255, "pattern" : "^[^'\"]+$"}
 id_schema_fake = {"type" : "string", "minLength":2, "maxLength":36 }  #"pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$"
 id_schema = {"type" : "string", "pattern": "^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$"}
 pci_schema={"type":"string", "pattern":"^[0-9a-fA-F]{4}(:[0-9a-fA-F]{2}){2}\.[0-9a-fA-F]$"}
@@ -69,12 +70,12 @@ config_schema = {
     "properties":{
         "http_port": port_schema,
         "http_admin_port": port_schema,
-        "http_host": name_schema,
+        "http_host": nameshort_schema,
         "vnf_repository": path_schema,
-        "db_host": name_schema,
-        "db_user": name_schema,
+        "db_host": nameshort_schema,
+        "db_user": nameshort_schema,
         "db_passwd": {"type":"string"},
-        "db_name": name_schema,
+        "db_name": nameshort_schema,
         # Next fields will disappear once the MANO API includes appropriate primitives
         "vim_url": http_schema,
         "vim_url_admin": http_schema,
@@ -102,7 +103,7 @@ tenant_schema = {
         "tenant":{
             "type":"object",
             "properties":{
-                "name": name_schema,
+                "name": nameshort_schema,
                 "description": description_schema,
             },
             "required": ["name"],
@@ -133,7 +134,7 @@ tenant_edit_schema = {
 datacenter_schema_properties={
                 "name": name_schema,
                 "description": description_schema,
-                "type": name_schema, #currently "openvim" or "openstack", can be enlarge with plugins
+                "type": nameshort_schema, #currently "openvim" or "openstack", can be enlarge with plugins
                 "vim_url": description_schema,
                 "vim_url_admin": description_schema,
                 "config": { "type":"object" }
@@ -213,9 +214,9 @@ datacenter_associate_schema={
             "type":"object",
             "properties":{
                 "vim_tenant": id_schema,
-                "vim_tenant_name": name_schema,
-                "vim_username": name_schema,
-                "vim_password": name_schema,
+                "vim_tenant_name": nameshort_schema,
+                "vim_username": nameshort_schema,
+                "vim_password": nameshort_schema,
             },
 #            "required": ["vim_tenant"],
             "additionalProperties": True
@@ -229,7 +230,7 @@ internal_connection_element_schema = {
     "type":"object",
     "properties":{
         "VNFC": name_schema,
-        "local_iface_name": nameshort_schema
+        "local_iface_name": name_schema
     }
 }
 
@@ -251,7 +252,7 @@ external_connection_schema = {
         "name": name_schema,
         "type":{"type":"string", "enum":["mgmt","bridge","data"]},
         "VNFC": name_schema,
-        "local_iface_name": nameshort_schema ,
+        "local_iface_name": name_schema ,
         "description":description_schema
     },
     "required": ["name", "type", "VNFC", "local_iface_name"],
@@ -263,7 +264,7 @@ interfaces_schema={
     "items":{
         "type":"object",
         "properties":{
-            "name":nameshort_schema,
+            "name":name_schema,
             "dedicated":{"type":"string","enum":["yes","no","yes:sriov"]},
             "bandwidth":bandwidth_schema,
             "vpci":pci_schema,
@@ -279,7 +280,7 @@ bridge_interfaces_schema={
     "items":{
         "type":"object",
         "properties":{
-            "name": nameshort_schema,
+            "name": name_schema,
             "bandwidth":bandwidth_schema,
             "vpci":pci_schema,
             "mac_address": mac_schema,
@@ -334,7 +335,7 @@ vnfc_schema = {
             "type":"object",
             "properties":{
                 "model":description_schema,
-                "features":{"type":"array","items":name_schema}
+                "features":{"type":"array","items":nameshort_schema}
             },
             "required": ["model"],
             "additionalProperties": False
@@ -342,7 +343,7 @@ vnfc_schema = {
         "hypervisor": {
             "type":"object",
             "properties":{
-                "type":name_schema,
+                "type":nameshort_schema,
                 "version":description_schema
             },
         },
@@ -370,7 +371,7 @@ vnfd_schema_v01 = {
             "properties":{
                 "name": name_schema,
                 "description": description_schema,
-                "class": name_schema,
+                "class": nameshort_schema,
                 "public": {"type" : "boolean"},
                 "physical": {"type" : "boolean"},
                 "external-connections": {"type" : "array", "items": external_connection_schema, "minItems":1},

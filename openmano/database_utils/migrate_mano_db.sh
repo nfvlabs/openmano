@@ -161,6 +161,7 @@ DATABASE_TARGET_VER_NUM=0
 [ $OPENMANO_VER_NUM -ge 4001 ] && DATABASE_TARGET_VER_NUM=5   #0.4.1 =>  5
 [ $OPENMANO_VER_NUM -ge 4002 ] && DATABASE_TARGET_VER_NUM=6   #0.4.2 =>  6
 [ $OPENMANO_VER_NUM -ge 4003 ] && DATABASE_TARGET_VER_NUM=7   #0.4.3 =>  7
+[ $OPENMANO_VER_NUM -ge 4032 ] && DATABASE_TARGET_VER_NUM=8   #0.4.32=>  8
 #TODO ... put next versions here
 
 
@@ -450,6 +451,41 @@ function downgrade_from_7(){
     done
     echo "      Remove 'descriptor' field from 'vnfd', 'scenarios' tables"
     echo "DELETE FROM schema_version WHERE version_int='7';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+
+function upgrade_to_8(){
+    echo "    upgrade database from version 0.7 to version 0.8"
+    echo "      Change enalarge name, description to 255 at all database"
+    for table in datacenters datacenter_nets flavors images instance_scenarios nets nfvo_tenants scenarios sce_nets sce_vnfs vms vnfs
+    do
+         echo -en "        $table               \r"
+         echo "ALTER TABLE $table CHANGE COLUMN name name VARCHAR(255) NOT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+         echo "ALTER TABLE $table CHANGE COLUMN description description VARCHAR(255) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    done
+    echo -en "        interfaces           \r"
+    echo "ALTER TABLE interfaces CHANGE COLUMN internal_name internal_name VARCHAR(255) NOT NULL, CHANGE COLUMN external_name external_name VARCHAR(255) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE vim_tenants CHANGE COLUMN vim_tenant_name vim_tenant_name VARCHAR(64) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        vim_tenants          \r"
+    echo "ALTER TABLE vim_tenants CHANGE COLUMN user user VARCHAR(64) NULL DEFAULT NULL, CHANGE COLUMN passwd passwd VARCHAR(64) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (8, '0.8', '0.4.32', 'Enlarging name at database', '2016-02-01');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+function downgrade_from_8(){
+    echo "    downgrade database from version 0.8 to version 0.7"
+    echo "      Change back name,description to shorter length at all database"
+    for table in datacenters datacenter_nets flavors images instance_scenarios nets nfvo_tenants scenarios sce_nets sce_vnfs vms vnfs
+    do
+         name_length=50
+         [[ $table == flavors ]] || [[ $table == images ]] || name_length=36 
+         echo -en "        $table               \r"
+         echo "ALTER TABLE $table CHANGE COLUMN name name VARCHAR($name_length) NOT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+         echo "ALTER TABLE $table CHANGE COLUMN description description VARCHAR(100) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    done
+    echo -en "        interfaces           \r"
+    echo "ALTER TABLE interfaces CHANGE COLUMN internal_name internal_name VARCHAR(25) NOT NULL, CHANGE COLUMN external_name external_name VARCHAR(25) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo -en "        vim_tenants          \r"
+    echo "ALTER TABLE vim_tenants CHANGE COLUMN vim_tenant_name vim_tenant_name VARCHAR(36) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE vim_tenants CHANGE COLUMN user user VARCHAR(36) NULL DEFAULT NULL, CHANGE COLUMN passwd passwd VARCHAR(50) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int='8';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 #TODO ... put funtions here
 

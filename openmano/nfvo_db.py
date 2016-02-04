@@ -1282,7 +1282,6 @@ class nfvo_db():
         #TODO:
         return
 
-
     def update_datacenter_nets(self, datacenter_id, new_net_list=[]):
         ''' Removes the old and adds the new net list at datacenter list for one datacenter.
         Attribute 

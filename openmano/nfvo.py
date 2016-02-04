@@ -1136,7 +1136,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
     for sce_net in scenarioDict['nets']:
         print "Net name: %s. Description: %s" % (sce_net["name"], sce_net["description"])
         
-        myNetName = "%s-%s" % (scenarioDict['name'],sce_net['name'])
+        myNetName = "%s.%s" % (instance_scenario_name, sce_net['name'])
         myNetName = myNetName[0:36] #limit length
         myNetType = sce_net['type']
         myNetDict = {}
@@ -1172,7 +1172,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
         for net in sce_vnf['nets']:
             print "Net name: %s. Description: %s" % (net["name"], net["description"])
             
-            myNetName = "%s-%s" % (scenarioDict['name'],net['name'])
+            myNetName = "%s.%s" % (instance_scenario_name,net['name'])
             myNetName = myNetName[0:36] #limit length
             myNetType = net['type']
             myNetDict = {}
@@ -1207,7 +1207,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             i += 1
             myVMDict = {}
             #myVMDict['name'] = "%s-%s-%s" % (scenarioDict['name'],sce_vnf['name'], vm['name'])
-            myVMDict['name'] = "%s-%s-VM%d" % (scenarioDict['name'],sce_vnf['name'],i)
+            myVMDict['name'] = "%s.%s.%d" % (instance_scenario_name,sce_vnf['name'],i)
             #myVMDict['description'] = vm['description']
             myVMDict['description'] = myVMDict['name'][0:99]
             if not startvms:
