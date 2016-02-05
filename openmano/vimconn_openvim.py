@@ -1052,6 +1052,7 @@ class vimconnector(vimconn.vimconnector):
             if vim_response.status_code == 200:
                 #print vim_response.json()
                 #print json.dumps(vim_response.json(), indent=4)
+                management_ip = False
                 res,http_content = self._format_in(vim_response, new_vminstance_response_schema)
                 if res:
                     try:
@@ -1074,10 +1075,17 @@ class vimconnector(vimconn.vimconnector):
                                     interface["vim_net_id"] = port["network_id"]
                                     interface["vim_interface_id"] = port["id"]
                                     interface["ip_address"] = port.get("ip_address")
+                                    if interface["ip_address"]:
+                                        management_ip = True
+                                    if interface["ip_address"] == "0.0.0.0":
+                                        interface["ip_address"] = None
                                     vmDict[vm_id]["interfaces"].append(interface)
                                 
                         except Exception as e:
                             print "VIMConnector refresh_tenant_elements. Port get %s: %s", (type(e).__name__, (str(e) if len(e.args)==0 else str(e.args[0])))
+
+                        if vmDict[vm_id]['status'] == "ACTIVE" and not management_ip:
+                            vmDict[vm_id]['status'] = "ACTIVE:NoMgmtIP"
                         
                     except Exception as e:
                         vmDict[vm_id]['status'] = "VIM_ERROR"

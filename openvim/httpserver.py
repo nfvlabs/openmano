@@ -1356,9 +1356,10 @@ def http_post_server_id(tenant_id):
         if r2 >0 and config_dic.get("dhcp_server"):
             for iface in c2:
                 if iface["net_id"] in config_dic["dhcp_nets"]:
+                    #print "dhcp insert add task"
                     r,c = config_dic['dhcp_thread'].insert_task("add", iface["mac"])
                     if r < 0:
-                        print ':http_post_servers ERROR UPDATING DHCP !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c 
+                        print ':http_post_servers ERROR UPDATING dhcp_server !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c 
         
     #Start server
         
@@ -1519,9 +1520,10 @@ def http_server_action(server_id, tenant_id, action):
         if r2 >0 and config_dic.get("dhcp_server"):
             for iface in c2:
                 if iface["net_id"] in config_dic["dhcp_nets"]:
-                    r,c = config_dic['dhcp_thread'].insert_task("add", iface["mac"])
+                    r,c = config_dic['dhcp_thread'].insert_task("del", iface["mac"])
+                    #print "dhcp insert del task"
                     if r < 0:
-                        print ':http_post_servers ERROR UPDATING DHCP !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c 
+                        print ':http_post_servers ERROR UPDATING dhcp_server !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!' +  c 
 
     return format_out(data)
 
@@ -1695,7 +1697,7 @@ def http_post_networks():
         
         if config_dic.get("dhcp_server"):
             if network["name"] in config_dic["dhcp_server"].get("nets", () ):
-                config_dic["dhcp_nets"].append(network["name"])
+                config_dic["dhcp_nets"].append(content)
         return http_get_network_id(content)
     else:
         print "http_post_networks error %d %s" % (result, content)
@@ -1761,7 +1763,7 @@ def http_put_network_id(network_id):
                 config_dic["dhcp_nets"].remove(network_id)
             if config_dic.get("dhcp_server"):
                 if network["name"] in config_dic["dhcp_server"].get("nets", () ):
-                    config_dic["dhcp_nets"].append(network["name"])
+                    config_dic["dhcp_nets"].append(network_id)
         return http_get_network_id(network_id)
     else:
         bottle.abort(-result, content)

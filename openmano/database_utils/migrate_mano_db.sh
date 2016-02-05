@@ -162,6 +162,7 @@ DATABASE_TARGET_VER_NUM=0
 [ $OPENMANO_VER_NUM -ge 4002 ] && DATABASE_TARGET_VER_NUM=6   #0.4.2 =>  6
 [ $OPENMANO_VER_NUM -ge 4003 ] && DATABASE_TARGET_VER_NUM=7   #0.4.3 =>  7
 [ $OPENMANO_VER_NUM -ge 4032 ] && DATABASE_TARGET_VER_NUM=8   #0.4.32=>  8
+[ $OPENMANO_VER_NUM -ge 4033 ] && DATABASE_TARGET_VER_NUM=9   #0.4.33=>  9
 #TODO ... put next versions here
 
 
@@ -486,6 +487,18 @@ function downgrade_from_8(){
     echo "ALTER TABLE vim_tenants CHANGE COLUMN vim_tenant_name vim_tenant_name VARCHAR(36) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "ALTER TABLE vim_tenants CHANGE COLUMN user user VARCHAR(36) NULL DEFAULT NULL, CHANGE COLUMN passwd passwd VARCHAR(50) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "DELETE FROM schema_version WHERE version_int='8';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+function upgrade_to_9(){
+    echo "    upgrade database from version 0.8 to version 0.9"
+    echo "      Add more status to 'instance_vms'"
+    echo "ALTER TABLE instance_vms CHANGE COLUMN status status ENUM('ACTIVE:NoMgmtIP','ACTIVE','INACTIVE','BUILD','ERROR','VIM_ERROR','PAUSED','SUSPENDED','DELETED') NOT NULL DEFAULT 'BUILD';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (9, '0.9', '0.4.33', 'Add ACTIVE:NoMgmtIP to instance_vms table', '2016-02-05');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+function downgrade_from_9(){
+    echo "    downgrade database from version 0.9 to version 0.8"
+    echo "      Add more status to 'instance_vms'"
+    echo "ALTER TABLE instance_vms CHANGE COLUMN status status ENUM('ACTIVE','INACTIVE','BUILD','ERROR','VIM_ERROR','PAUSED','SUSPENDED','DELETED') NOT NULL DEFAULT 'BUILD';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int='9';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 #TODO ... put funtions here
 

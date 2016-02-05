@@ -33,6 +33,7 @@ function usage(){
     echo -e "  at 'https://github.com/nfvlabs/openmano/wiki/Getting-started#how-to-use-it'"
     echo -e "  OPTIONS:"
     echo -e "    -f --force : does not prompt for confirmation"
+    echo -e "    -d --delete : delete all the created things"
     echo -e "    -h --help  : shows this help"
 }
 
@@ -46,13 +47,45 @@ function is_valid_uuid(){
 [[ ${BASH_SOURCE[0]} != $0 ]] && _exit="return" || _exit="exit"
 
 #check correct arguments
-[[ -n $1 ]] && [[ $1 != -h ]] && [[ $1 != --help ]] && [[ $1 != -f ]] && [[ $1 != --force ]] && \
-   echo "invalid argument '$1'?" &&  usage >&2 && $_exit 1
-[[ $1 == -h ]] || [[ $1 == --help ]]  && usage && $_exit 0
+force=""
+delete=""
+for argument in $*
+do
+    [[ $argument == -h ]] || [[ $argument == --help ]]   && usage   && $_exit 0
+    [[ $argument == -f ]] || [[ $argument == --force ]]  && force=y && continue
+    [[ $argument == -d ]] || [[ $argument == --delete ]] && delete=y && continue
+    echo "invalid argument '$argument'?  Type -h for help" >&2 && $_exit 1
+done
+
+if [[ $delete == y ]] 
+then
+    [[ $force != y ]] && read -e -p "Proceed with openmano/openvim deletion of items? (y/N)" force
+    [[ $force != y ]] && [[ $force != yes ]] && echo "aborted!" && $_exit
+    for what in instance-scenario scenario vnf datacenter tenant
+    do
+        echo deleting openmano ${what}s
+        for item in `openmano $what-list | awk '/^ *[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12} +/{print $1}'`;
+        do
+            echo -n "$item   "
+            [[ $what != datacenter ]] || openmano $what-detach $item  || ! echo "fail" >&2 || $_exit 1
+            openmano $what-delete -f $item  || ! echo "fail" >&2 || $_exit 1
+        done
+    done
+
+    for what in vm image flavor port net host tenant
+    do
+        echo deleting openvim ${what}s
+        for item in `openvim $what-list | awk '/^ *[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12} +/{print $1}'`;
+        do
+            echo -n "$item   "
+            [[ $what != host ]] || openvim $what-remove -f $item  || ! echo "fail" >&2 || $_exit 1
+            [[ $what == host ]] || openvim $what-delete -f $item  || ! echo "fail" >&2 || $_exit 1
+        done
+    done
+    $_exit 0
+fi
 
 #ask for confirmation if argument is not -f --force
-force=""
-[[ $1 == -f ]] || [[ $1 == --force ]] && force=y
 [[ $force != y ]] && read -e -p "WARNING: openmano and openvim database content will be lost!!!  Continue(y/N)" force
 [[ $force != y ]] && [[ $force != yes ]] && echo "aborted!" && $_exit
 

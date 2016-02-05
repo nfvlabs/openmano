@@ -56,13 +56,14 @@ class dhcp_thread(threading.Thread):
         self.db_lock = db_lock
         self.test = test
         self.dhcp_nets = dhcp_nets
+        self.ssh_conn = None
         
-        self.server_status = {} #dictionary with pairs server_uuid:server_status 
         self.mac_status ={} #dictionary of mac_address to retrieve information
             #ip: None
             #retries: 
-            #next_reading: time for the next trying
-            #created: time where it was added 
+            #next_reading: time for the next trying to check ACTIVE status or IP
+            #created: time when it was added 
+            #active: time when the VM becomes into ACTIVE status
             
         
         self.queueLock = threading.Lock()
@@ -83,6 +84,7 @@ class dhcp_thread(threading.Thread):
         
     def load_mac_from_db(self):
         #TODO get macs to follow from the database
+        print self.name, " load macs from db"
         self.db_lock.acquire()
         r,c = self.db.get_table(SELECT=('mac','ip_address','nets.uuid as net_id', ),
                                 FROM='ports join nets on ports.net_id=nets.uuid', 
@@ -107,6 +109,7 @@ class dhcp_thread(threading.Thread):
             return -1, "timeout inserting a task over host " + self.name
 
     def run(self):
+        print self.name, " starting, nets", self.dhcp_nets 
         next_iteration = time.time() + 10
         while True:
             self.load_mac_from_db()
@@ -144,7 +147,7 @@ class dhcp_thread(threading.Thread):
           
     def terminate(self):
         try:
-            if not self.test:
+            if self.ssh_conn:
                 self.ssh_conn.close()
         except Exception as e:
             text = str(e)
@@ -156,67 +159,109 @@ class dhcp_thread(threading.Thread):
         now = time.time()
         next_iteration= now + 40000 # >10 hores
         
-        try:
-            #print self.name, "Iteration" 
-            #Connect SSH
-            if not self.test and self.dhcp_params["host"]!="localhost":
-                self.ssh_connect()
-            
-            for mac_address in self.mac_status:
-                if now < self.mac_status[mac_address]["next_reading"]:
-                    if self.mac_status[mac_address]["next_reading"] < next_iteration:
-                        next_iteration = self.mac_status[mac_address]["next_reading"]
-                    continue
-    
-                if not self.test:
-                    #print self.name, ': command:', command
-                    if self.dhcp_params["host"]=="localhost":
-                        command = ['./get_dhcp_lease.sh',  mac_address]
-                        content = subprocess.check_output(command)
-                    else:
-                        command = './get_dhcp_lease.sh ' +  mac_address
-                        (_, stdout, _) = self.ssh_conn.exec_command(command)
-                        content = stdout.read()
-                else:
-                    if self.mac_status[mac_address]["retries"]>random.randint(10,100): #wait between 10 and 100 seconds to produce a fake IP
-                        content = self.get_fake_ip()
-                    else:
-                        content = None
-                if content:
-                    self.mac_status[mac_address]["ip"] = content
-                    #modify Database
-                    self.db_lock.acquire()
-                    r,c = self.db.update_rows("ports", {"ip_address": content}, {"mac": mac_address})
-                    self.db_lock.release()
-                    if r<0:
-                        print self.name, ": Database update error:", c
-                    else:
-                        self.mac_status[mac_address]["retries"] = 0
-                        self.mac_status[mac_address]["next_reading"] = (int(now)/3600 +1)* 36000 # 10 hores
-                        print self.name, "mac %s >> %s" % (mac_address, content)
-                        continue
-                #a fail has happen
-                self.mac_status[mac_address]["retries"] +=1
-                #next iteration is every 2sec at the beginning; every 5sec after a minute, every 1min after a 5min
-                if now - self.mac_status[mac_address]["created"] > 60:
-                    self.mac_status[mac_address]["next_reading"] = (int(now)/6 +1)* 6
-                elif now - self.mac_status[mac_address]["created"] > 300:
-                    self.mac_status[mac_address]["next_reading"] = (int(now)/60 +1)* 60
-                else:
-                    self.mac_status[mac_address]["next_reading"] = (int(now)/2 +1)* 2
-                    
+        #print self.name, "Iteration" 
+        for mac_address in self.mac_status:
+            if now < self.mac_status[mac_address]["next_reading"]:
                 if self.mac_status[mac_address]["next_reading"] < next_iteration:
                     next_iteration = self.mac_status[mac_address]["next_reading"]
-            return next_iteration    
-    
-        except paramiko.ssh_exception.SSHException as e:
-            text = e.args[0]
-            print self.name, ": get_ip_from_dhcp: ssh_Exception:", text
-        except Exception as e:
-            text = str(e)
-            print self.name, ": get_ip_from_dhcp: Exception", text
-        return now+5
+                continue
+            
+            if self.mac_status[mac_address].get("active") == None:
+                #check from db if already active
+                self.db_lock.acquire()
+                r,c = self.db.get_table(FROM="ports as p join instances as i on p.instance_id=i.uuid",
+                                        WHERE={"p.mac": mac_address, "i.status": "ACTIVE"})
+                self.db_lock.release()
+                if r>0:
+                    self.mac_status[mac_address]["active"] = now
+                    self.mac_status[mac_address]["next_reading"] = (int(now)/2 +1)* 2
+                    print self.name, "mac %s  VM ACTIVE" % (mac_address)
+                    self.mac_status[mac_address]["retries"] = 0
+                else:
+                    print self.name, "mac %s  VM INACTIVE" % (mac_address)
+                    if now - self.mac_status[mac_address]["created"] > 300:
+                        #modify Database to tell openmano that we can not get dhcp from the machine
+                        if not self.mac_status[mac_address].get("ip"):
+                            self.db_lock.acquire()
+                            r,c = self.db.update_rows("ports", {"ip_address": "0.0.0.0"}, {"mac": mac_address})
+                            self.db_lock.release()
+                            self.mac_status[mac_address]["ip"] = "0.0.0.0"
+                            print self.name, "mac %s >> set to 0.0.0.0 because of timeout" % (mac_address)
+                        self.mac_status[mac_address]["next_reading"] = (int(now)/60 +1)* 60
+                    else:
+                        self.mac_status[mac_address]["next_reading"] = (int(now)/6 +1)* 6
+                if self.mac_status[mac_address]["next_reading"] < next_iteration:
+                    next_iteration = self.mac_status[mac_address]["next_reading"]
+                continue
+            
 
+            if self.test:
+                if self.mac_status[mac_address]["retries"]>random.randint(10,100): #wait between 10 and 100 seconds to produce a fake IP
+                    content = self.get_fake_ip()
+                else:
+                    content = None
+            elif self.dhcp_params["host"]=="localhost":
+                try:
+                    command = ['get_dhcp_lease.sh',  mac_address]
+                    content = subprocess.check_output(command)
+                except Exception as e:
+                    text = str(e)
+                    print self.name, ": get_ip_from_dhcp subprocess Exception", text
+                    content = None
+            else:
+                try:
+                    command = 'get_dhcp_lease.sh ' +  mac_address
+                    (_, stdout, _) = self.ssh_conn.exec_command(command)
+                    content = stdout.read()
+                except paramiko.ssh_exception.SSHException as e:
+                    text = e.args[0]
+                    print self.name, ": get_ip_from_dhcp: ssh_Exception:", text
+                    content = None
+                    self.ssh_conn = None
+                except Exception as e:
+                    text = str(e)
+                    print self.name, ": get_ip_from_dhcp: ssh_Exception:", text
+                    content = None
+                    self.ssh_conn = None
+
+            if content:
+                self.mac_status[mac_address]["ip"] = content
+                #modify Database
+                self.db_lock.acquire()
+                r,c = self.db.update_rows("ports", {"ip_address": content}, {"mac": mac_address})
+                self.db_lock.release()
+                if r<0:
+                    print self.name, ": Database update error:", c
+                else:
+                    self.mac_status[mac_address]["retries"] = 0
+                    self.mac_status[mac_address]["next_reading"] = (int(now)/3600 +1)* 36000 # 10 hores
+                    if self.mac_status[mac_address]["next_reading"] < next_iteration:
+                        next_iteration = self.mac_status[mac_address]["next_reading"]
+                    print self.name, "mac %s >> %s" % (mac_address, content)
+                    continue
+            #a fail has happen
+            self.mac_status[mac_address]["retries"] +=1
+            #next iteration is every 2sec at the beginning; every 5sec after a minute, every 1min after a 5min
+            if now - self.mac_status[mac_address]["active"] > 120:
+                #modify Database to tell openmano that we can not get dhcp from the machine
+                if not self.mac_status[mac_address].get("ip"):
+                    self.db_lock.acquire()
+                    r,c = self.db.update_rows("ports", {"ip_address": "0.0.0.0"}, {"mac": mac_address})
+                    self.db_lock.release()
+                    self.mac_status[mac_address]["ip"] = "0.0.0.0"
+                    print self.name, "mac %s >> set to 0.0.0.0 because of timeout" % (mac_address)
+            
+            if now - self.mac_status[mac_address]["active"] > 60:
+                self.mac_status[mac_address]["next_reading"] = (int(now)/6 +1)* 6
+            elif now - self.mac_status[mac_address]["active"] > 300:
+                self.mac_status[mac_address]["next_reading"] = (int(now)/60 +1)* 60
+            else:
+                self.mac_status[mac_address]["next_reading"] = (int(now)/2 +1)* 2
+                
+            if self.mac_status[mac_address]["next_reading"] < next_iteration:
+                next_iteration = self.mac_status[mac_address]["next_reading"]
+        return next_iteration    
+    
     def get_fake_ip(self):
         fake_ip=   "192.168.%d.%d" % (random.randint(1,254), random.randint(1,254) )
         while True:

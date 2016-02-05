@@ -30,7 +30,7 @@ and host controllers
 
 __author__="Alfonso Tierno"
 __date__ ="$10-jul-2014 12:07:15$"
-__version__="0.4.2-r461"
+__version__="0.4.3-r463"
 version_date="Feb 2016"
 database_version="0.6"      #expected database schema version
 
