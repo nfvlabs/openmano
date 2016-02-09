@@ -178,7 +178,7 @@ class dhcp_thread(threading.Thread):
                     print self.name, "mac %s  VM ACTIVE" % (mac_address)
                     self.mac_status[mac_address]["retries"] = 0
                 else:
-                    print self.name, "mac %s  VM INACTIVE" % (mac_address)
+                    #print self.name, "mac %s  VM INACTIVE" % (mac_address)
                     if now - self.mac_status[mac_address]["created"] > 300:
                         #modify Database to tell openmano that we can not get dhcp from the machine
                         if not self.mac_status[mac_address].get("ip"):
@@ -210,6 +210,8 @@ class dhcp_thread(threading.Thread):
                     content = None
             else:
                 try:
+                    if not self.ssh_conn:
+                        self.ssh_connect()
                     command = 'get_dhcp_lease.sh ' +  mac_address
                     (_, stdout, _) = self.ssh_conn.exec_command(command)
                     content = stdout.read()
@@ -220,7 +222,7 @@ class dhcp_thread(threading.Thread):
                     self.ssh_conn = None
                 except Exception as e:
                     text = str(e)
-                    print self.name, ": get_ip_from_dhcp: ssh_Exception:", text
+                    print self.name, ": get_ip_from_dhcp: Exception:", text
                     content = None
                     self.ssh_conn = None
 
