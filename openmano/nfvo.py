@@ -1137,7 +1137,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
         print "Net name: %s. Description: %s" % (sce_net["name"], sce_net["description"])
         
         myNetName = "%s.%s" % (instance_scenario_name, sce_net['name'])
-        myNetName = myNetName[0:36] #limit length
+        myNetName = myNetName[0:255] #limit length
         myNetType = sce_net['type']
         myNetDict = {}
         myNetDict["name"] = myNetName
@@ -1173,7 +1173,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             print "Net name: %s. Description: %s" % (net["name"], net["description"])
             
             myNetName = "%s.%s" % (instance_scenario_name,net['name'])
-            myNetName = myNetName[0:36] #limit length
+            myNetName = myNetName[0:255] #limit length
             myNetType = net['type']
             myNetDict = {}
             myNetDict["name"] = myNetName
@@ -1212,7 +1212,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             myVMDict['description'] = myVMDict['name'][0:99]
             if not startvms:
                 myVMDict['start'] = "no"
-            myVMDict['name'] = myVMDict['name'][0:36] #limit name length
+            myVMDict['name'] = myVMDict['name'][0:255] #limit name length
             print "VM name: %s. Description: %s" % (myVMDict['name'], myVMDict['name'])
             
             #create image at vim in case it not exist
@@ -1381,7 +1381,7 @@ def create_instance(mydb, nfvo_tenant, instance_dict):
             net_name = descriptor_net.get("name")
             if not net_name:
                 net_name = "%s.%s" %(instance_name, sce_net["name"])
-                net_name = net_name[:36]     #limit length
+                net_name = net_name[:255]     #limit length
             net_type = sce_net['type']
             if not sce_net["external"] or ("source" in descriptor_net and not descriptor_net["source"]):
                 result, network_id = myvim.new_tenant_network(net_name, net_type)
@@ -1421,7 +1421,7 @@ def create_instance(mydb, nfvo_tenant, instance_dict):
                 net_name = descriptor_net.get("name")
                 if not net_name:
                     net_name = "%s.%s" %(instance_name, net["name"])
-                    net_name = net_name[:36]     #limit length
+                    net_name = net_name[:255]     #limit length
                 net_type = net['type']
                 result, network_id = myvim.new_tenant_network(net_name, net_type)
                 if result < 0:
@@ -1446,7 +1446,7 @@ def create_instance(mydb, nfvo_tenant, instance_dict):
                 myVMDict['description'] = myVMDict['name'][0:99]
 #                if not startvms:
 #                    myVMDict['start'] = "no"
-                myVMDict['name'] = myVMDict['name'][0:36] #limit name length
+                myVMDict['name'] = myVMDict['name'][0:255] #limit name length
                 #create image at vim in case it not exist
                 res, image_dict = mydb.get_table_by_uuid_name("images", vm['image_id'])
                 if res<0:
