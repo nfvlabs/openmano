@@ -1698,6 +1698,10 @@ def http_post_networks():
         if config_dic.get("dhcp_server"):
             if network["name"] in config_dic["dhcp_server"].get("nets", () ):
                 config_dic["dhcp_nets"].append(content)
+                print "dhcp_server: add new net", content
+            elif bridge_net != None and bridge_net[0] in config_dic["dhcp_server"].get("bridge_ifaces", () ):
+                config_dic["dhcp_nets"].append(content)
+                print "dhcp_server: add new net", content
         return http_get_network_id(content)
     else:
         print "http_post_networks error %d %s" % (result, content)
@@ -1753,17 +1757,24 @@ def http_put_network_id(network_id):
     #insert in data base
     result, content = my.db.update_rows('nets', network, WHERE={'uuid': network_id}, log=True )
     if result >= 0:
-        if result>0 and nbports>0 and 'admin_state_up' in network and network['admin_state_up'] != network_old[0]['admin_state_up']:
-            r,c = config_dic['of_thread'].insert_task("update-net", network_id)
-            if r  < 0:
-                print "http_put_network_id error while launching openflow rules"
-                bottle.abort(HTTP_Internal_Server_Error, c)
-        if "name" in network:
-            if network_id in config_dic["dhcp_nets"]:
-                config_dic["dhcp_nets"].remove(network_id)
+        if result>0:
+            if nbports>0 and 'admin_state_up' in network and network['admin_state_up'] != network_old[0]['admin_state_up']:
+                r,c = config_dic['of_thread'].insert_task("update-net", network_id)
+                if r  < 0:
+                    print "http_put_network_id error while launching openflow rules"
+                    bottle.abort(HTTP_Internal_Server_Error, c)
             if config_dic.get("dhcp_server"):
-                if network["name"] in config_dic["dhcp_server"].get("nets", () ):
+                if network_id in config_dic["dhcp_nets"]:
+                    config_dic["dhcp_nets"].remove(network_id)
+                    print "dhcp_server: delete net", network_id
+                if network.get("name", network_old["name"]) in config_dic["dhcp_server"].get("nets", () ):
                     config_dic["dhcp_nets"].append(network_id)
+                    print "dhcp_server: add new net", network_id
+                else:
+                    net_bind = network.get("bind", network_old["bind"] )
+                    if net_bind and net_bind[:7]=="bridge:" and net_bind[7:] in config_dic["dhcp_server"].get("bridge_ifaces", () ):
+                        config_dic["dhcp_nets"].append(network_id)
+                        print "dhcp_server: add new net", network_id
         return http_get_network_id(network_id)
     else:
         bottle.abort(-result, content)
@@ -1785,8 +1796,9 @@ def http_delete_network_id(network_id):
             if brnet[3]==network_id:
                 brnet[3]=None
                 break
-        if network_id in config_dic["dhcp_nets"]:
+        if config_dic.get("dhcp_server") and network_id in config_dic["dhcp_nets"]:
             config_dic["dhcp_nets"].remove(network_id)
+            print "dhcp_server: delete net", network_id
         data={'result' : content}
         return format_out(data)
     else:
