@@ -354,6 +354,7 @@ class vimconnector(vimconn.vimconnector):
         net["subnets"] = subnets
         return 1, net
 
+
     def delete_tenant_network(self, net_id):
         '''Deletes a tenant network from VIM'''
         '''Returns the network identifier'''
@@ -646,18 +647,8 @@ class vimconnector(vimconn.vimconnector):
             for net in net_list:
                 if not net.get("net_id"): #skip non connected iface
                     continue
-                port_dict={
-                     "network_id": net["net_id"],
-                     "name": net.get("name"),
-                     "admin_state_up": True
-                }
-                if not port_dict["name"]:
-                    port_dict["name"] = name
-                if net.get("mac_address"):
-                    port_dict["mac_address"]=net["mac_address"]
-                if self.config.get('port_security_enabled') != None and self.config['port_security_enabled'] == False:
-                    port_dict["port_security_enabled"] = False
-                if net["type"] == "virtual":
+                if net["type"]=="virtual":
+                    net_list_vim.append({'net-id': net["net_id"]})
                     if "vpci" in net:
                         metadata_vpci[ net["net_id"] ] = [[ net["vpci"], "" ]]
                 elif net["type"]=="PF":
@@ -668,21 +659,24 @@ class vimconnector(vimconn.vimconnector):
                         if "VF" not in metadata_vpci:
                             metadata_vpci["VF"]=[]
                         metadata_vpci["VF"].append([ net["vpci"], "" ])
-                    port_dict["binding:vnic_type"] = "direct" 
+                    port_dict={
+                         "network_id": net["net_id"],
+                         "name": net.get("name"),
+                         "binding:vnic_type": "direct", 
+                         "admin_state_up": True
+                    }
+                    if not port_dict["name"]:
+                        port_dict["name"] = name
+                    if net.get("mac_address"):
+                        port_dict["mac_address"]=net["mac_address"]
                     #TODO: manage having SRIOV without vlan tag
                     #if net["type"] == "VFnotShared"
                     #    port_dict["vlan"]=0
-                print "ALF"
-                print "ALF"
-                print "ALF-net", net
-                print "ALF-port_dict", port_dict
-                print "ALF"
-                print "ALF"
-                new_port = self.neutron.create_port({"port": port_dict })
-                net["mac_adress"] = new_port["port"]["mac_address"]
-                net["vim_id"] = new_port["port"]["id"]
-                net["ip"] = new_port["port"].get("fixed_ips",[{}])[0].get("ip_address")
-                net_list_vim.append({"port-id": new_port["port"]["id"]})
+                    new_port = self.neutron.create_port({"port": port_dict })
+                    net["mac_adress"] = new_port["port"]["mac_address"]
+                    net["vim_id"] = new_port["port"]["id"]
+                    net["ip"] = new_port["port"].get("fixed_ips",[{}])[0].get("ip_address")
+                    net_list_vim.append({"port-id": new_port["port"]["id"]})
             if metadata_vpci:
                 metadata = {"pci_assignement": json.dumps(metadata_vpci)}
             
@@ -717,6 +711,9 @@ class vimconnector(vimconn.vimconnector):
 #            error_value=-vimconn.HTTP_Not_Found
 #            error_text= "vm instance %s not found" % vm_id
         except (ksExceptions.ClientException, nvExceptions.ClientException, ConnectionError, TypeError) as e:
+            error_value=-vimconn.HTTP_Bad_Request
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+        except neClient.exceptions.ConnectionFailed as e:
             error_value=-vimconn.HTTP_Bad_Request
             error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception vimconn.HTTP_Unauthorized
@@ -816,6 +813,13 @@ class vimconnector(vimconn.vimconnector):
             print "osconnector: Getting VM from VIM"
         try:
             self._reload_connection()
+            #delete VM ports attached to this networks before the virtual machine
+            ports = self.neutron.list_ports(device_id=vm_id)
+            for p in ports['ports']:
+                try:
+                    self.neutron.delete_port(p["id"])
+                except Exception as e:
+                    print "Error deleting port: " + type(e).__name__ + ": "+  str(e)
             self.nova.servers.delete(vm_id)
             return 1, vm_id
         except nvExceptions.NotFound as e:
