@@ -940,7 +940,7 @@ def http_get_instance_id(tenant_id, instance_id):
         return
   
     #obtain data (first time is only to check that the instance exists)
-    result, data = mydb.get_instance_scenario(instance_id, tenant_id)
+    result, data = mydb.get_instance_scenario(instance_id, tenant_id, verbose=True)
     if result < 0:
         print "http_get_instance_id error %d %s" % (-result, data)
         bottle.abort(-result, data)

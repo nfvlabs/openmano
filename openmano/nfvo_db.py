@@ -1112,7 +1112,7 @@ class nfvo_db():
                 r,c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
-    def get_instance_scenario(self, instance_id, nfvo_tenant_id=None):
+    def get_instance_scenario(self, instance_id, nfvo_tenant_id=None, verbose=False):
         '''Obtain the instance information, filtering by one or several of the tenant, uuid or name
         instance_id is the uuid or the name if it is not a valid uuid format
         Only one instance must mutch the filtering or an error is returned
@@ -1169,7 +1169,8 @@ class nfvo_db():
                                 if iface["type"] == "mgmt" and iface["ip_address"]:
                                     vnf_manage_iface_list.append(iface["ip_address"])
                                     vm_manage_iface_list.append(iface["ip_address"])
-                                del iface["type"]
+                                if not verbose:
+                                    del iface["type"]
                             if vm_manage_iface_list: vm["ip_address"] = ",".join(vm_manage_iface_list)
                         if vnf_manage_iface_list: vnf["ip_address"] = ",".join(vnf_manage_iface_list)
                         

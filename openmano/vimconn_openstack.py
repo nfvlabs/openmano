@@ -354,7 +354,6 @@ class vimconnector(vimconn.vimconnector):
         net["subnets"] = subnets
         return 1, net
 
-
     def delete_tenant_network(self, net_id):
         '''Deletes a tenant network from VIM'''
         '''Returns the network identifier'''
@@ -647,8 +646,18 @@ class vimconnector(vimconn.vimconnector):
             for net in net_list:
                 if not net.get("net_id"): #skip non connected iface
                     continue
-                if net["type"]=="virtual":
-                    net_list_vim.append({'net-id': net["net_id"]})
+                port_dict={
+                     "network_id": net["net_id"],
+                     "name": net.get("name"),
+                     "admin_state_up": True
+                }
+                if not port_dict["name"]:
+                    port_dict["name"] = name
+                if net.get("mac_address"):
+                    port_dict["mac_address"]=net["mac_address"]
+                if self.config.get('port_security_enabled') != None and self.config['port_security_enabled'] == False:
+                    port_dict["port_security_enabled"] = False
+                if net["type"] == "virtual":
                     if "vpci" in net:
                         metadata_vpci[ net["net_id"] ] = [[ net["vpci"], "" ]]
                 elif net["type"]=="PF":
@@ -659,24 +668,21 @@ class vimconnector(vimconn.vimconnector):
                         if "VF" not in metadata_vpci:
                             metadata_vpci["VF"]=[]
                         metadata_vpci["VF"].append([ net["vpci"], "" ])
-                    port_dict={
-                         "network_id": net["net_id"],
-                         "name": net.get("name"),
-                         "binding:vnic_type": "direct", 
-                         "admin_state_up": True
-                    }
-                    if not port_dict["name"]:
-                        port_dict["name"] = name
-                    if net.get("mac_address"):
-                        port_dict["mac_address"]=net["mac_address"]
+                    port_dict["binding:vnic_type"] = "direct" 
                     #TODO: manage having SRIOV without vlan tag
                     #if net["type"] == "VFnotShared"
                     #    port_dict["vlan"]=0
-                    new_port = self.neutron.create_port({"port": port_dict })
-                    net["mac_adress"] = new_port["port"]["mac_address"]
-                    net["vim_id"] = new_port["port"]["id"]
-                    net["ip"] = new_port["port"].get("fixed_ips",[{}])[0].get("ip_address")
-                    net_list_vim.append({"port-id": new_port["port"]["id"]})
+                print "ALF"
+                print "ALF"
+                print "ALF-net", net
+                print "ALF-port_dict", port_dict
+                print "ALF"
+                print "ALF"
+                new_port = self.neutron.create_port({"port": port_dict })
+                net["mac_adress"] = new_port["port"]["mac_address"]
+                net["vim_id"] = new_port["port"]["id"]
+                net["ip"] = new_port["port"].get("fixed_ips",[{}])[0].get("ip_address")
+                net_list_vim.append({"port-id": new_port["port"]["id"]})
             if metadata_vpci:
                 metadata = {"pci_assignement": json.dumps(metadata_vpci)}
             

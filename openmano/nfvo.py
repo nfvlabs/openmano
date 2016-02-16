@@ -1634,6 +1634,7 @@ def refresh_instance(mydb, nfvo_tenant, instanceDict, datacenter=None, vim_tenan
     for sce_vnf in instanceDict['vnfs']:
         for vm in sce_vnf['vms']:
             vmDict[vm['vim_vm_id']]=None
+            print "VACA vm", vm
     
     # 2. Getting the status of all nets
     # TODO: update nets inside a vnf
@@ -1654,6 +1655,13 @@ def refresh_instance(mydb, nfvo_tenant, instanceDict, datacenter=None, vim_tenan
         for vm in sce_vnf['vms']:
             vm_id = vm['vim_vm_id']
             interfaces = vmDict[vm_id].pop('interfaces', [])
+            #4.0 look if contain manamgement interface, and if not change status from ACTIVE:NoMgmtIP to ACTIVE
+            has_mgmt_iface = False
+            for iface in vm["interfaces"]:
+                if iface["type"]=="mgmt":
+                    has_mgmt_iface = True
+            if vmDict[vm_id]['status'] == "ACTIVE:NoMgmtIP" and not has_mgmt_iface:
+                    vmDict[vm_id]['status'] = "ACTIVE"
             if vm['status'] != vmDict[vm_id]['status'] or vm.get('error_msg')!=vmDict[vm_id].get('error_msg') or vm.get('vim_info')!=vmDict[vm_id].get('vim_info'):
                 vm['status']    = vmDict[vm_id]['status']
                 vm['error_msg'] = vmDict[vm_id].get('error_msg')
