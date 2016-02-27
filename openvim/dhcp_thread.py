@@ -88,7 +88,7 @@ class dhcp_thread(threading.Thread):
         self.db_lock.acquire()
         r,c = self.db.get_table(SELECT=('mac','ip_address','nets.uuid as net_id', ),
                                 FROM='ports join nets on ports.net_id=nets.uuid', 
-                                WHERE_NOT={'ports.instance_id': None, 'nets.bind': None})
+                                WHERE_NOT={'ports.instance_id': None, 'nets.provider': None})
         self.db_lock.release()
         now = time.time()
         self.mac_status ={}

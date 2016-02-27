@@ -30,9 +30,9 @@ and host controllers
 
 __author__="Alfonso Tierno"
 __date__ ="$10-jul-2014 12:07:15$"
-__version__="0.4.4-r465"
+__version__="0.4.5-r465"
 version_date="Feb 2016"
-database_version="0.6"      #expected database schema version
+database_version="0.7"      #expected database schema version
 
 import httpserver
 from utils import auxiliary_functions as af
@@ -213,7 +213,7 @@ if __name__=="__main__":
         #check if this bridge is already used (present at database) for a network)
         used_bridge_nets=[]
         for brnet in config_dic['bridge_nets']:
-            r,nets = db_of.get_table(SELECT=('uuid',), FROM='nets',WHERE={'bind': "bridge:"+brnet[0]})
+            r,nets = db_of.get_table(SELECT=('uuid',), FROM='nets',WHERE={'provider': "bridge:"+brnet[0]})
             if r>0:
                 brnet[3] = nets[0]['uuid']
                 used_bridge_nets.append(brnet[0])

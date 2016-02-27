@@ -191,52 +191,72 @@ class openflow_thread(threading.Thread):
     def update_of_flows(self, net_id):
         ports=()
         self.db_lock.acquire()
-        result, content = self.db.get_table(FROM='nets', SELECT=('type','admin_state_up', 'vlan', 'bind'),
-                                            WHERE={'uuid':net_id} )
+        select_= ('type','admin_state_up', 'vlan', 'provider', 'bind_net','bind_type','uuid')
+        result, nets = self.db.get_table(FROM='nets', SELECT=select_, WHERE={'uuid':net_id} )
+        #get all the networks binding to this
+        if result > 0:
+            if nets[0]['bind_net']:
+                bind_id = nets[0]['bind_net']
+            else:
+                bind_id = net_id
+            #get our net and all bind_nets
+            result, nets = self.db.get_table(FROM='nets', SELECT=select_,
+                                                WHERE_OR={'bind_net':bind_id, 'uuid':bind_id} )
+            
         self.db_lock.release()
         if result < 0:
-            #print self.name, ": update_of_flows() ERROR getting net", content
-            return -1, "DB error getting net: " + content
-        elif result==0:
+            return -1, "DB error getting net: " + nets
+        #elif result==0:
             #net has been deleted
-            ifaces_nb = 0
-        else:
-            net = content[0]
-        
+        ifaces_nb = 0
+        database_flows = []
+        for net in nets:
+            net_id = net["uuid"]
             if net['admin_state_up'] == 'false':
-                ifaces_nb = 0
+                net['ports'] = ()
             else:
                 self.db_lock.acquire()
-                ifaces_nb, ports = self.db.get_table(
+                nb_ports, net_ports = self.db.get_table(
                         FROM='ports',
                         SELECT=('switch_port','vlan','uuid','mac','type','model'),
                         WHERE={'net_id':net_id, 'admin_state_up':'true', 'status':'ACTIVE'} )
                 self.db_lock.release()
-                if ifaces_nb < 0:
+                if nb_ports < 0:
                     #print self.name, ": update_of_flows() ERROR getting ports", ports
-                    return -1, "DB error getting ports: "+ ports
+                    return -1, "DB error getting ports from net '%s': %s" % (net_id, net_ports)
                 
                 #add the binding as an external port
-                if net['bind'] and net['bind'][:9]=="openflow:":
+                if net['provider'] and net['provider'][:9]=="openflow:":
                     external_port={"type":"external","mac":None}
-                    if net['bind'][-5:]==":vlan":
+                    external_port['uuid'] = net_id + ".1" #fake uuid
+                    if net['provider'][-5:]==":vlan":
                         external_port["vlan"] = net["vlan"]
-                        external_port["switch_port"] = net['bind'][9:-5]
+                        external_port["switch_port"] = net['provider'][9:-5]
                     else:
                         external_port["vlan"] = None
-                        external_port["switch_port"] = net['bind'][9:]
-                    ports = ports + (external_port,)
-                    ifaces_nb+=1
+                        external_port["switch_port"] = net['provider'][9:]
+                    net_ports = net_ports + (external_port,)
+                    nb_ports += 1
+                net['ports'] = net_ports
+                ifaces_nb += nb_ports
         
-        # Get the name of flows that will be affected by this NET or net_id==NULL that means
-        # net deleted (At DB foreign key: On delete set null)
+            # Get the name of flows that will be affected by this NET 
+            self.db_lock.acquire()
+            result, database_net_flows = self.db.get_table(FROM='of_flows', WHERE={'net_id':net_id})
+            self.db_lock.release()
+            if result < 0:
+                #print self.name, ": update_of_flows() ERROR getting flows from database", database_flows
+                return -1, "DB error getting flows from net '%s': %s" %(net_id, database_net_flows)
+            database_flows += database_net_flows
+        # Get the name of flows where net_id==NULL that means net deleted (At DB foreign key: On delete set null)
         self.db_lock.acquire()
-        result, database_flows = self.db.get_table(FROM='of_flows', WHERE={'net_id':net_id},
-                                          WHERE_OR={'net_id':None} )
+        result, database_net_flows = self.db.get_table(FROM='of_flows', WHERE={'net_id':None})
         self.db_lock.release()
         if result < 0:
             #print self.name, ": update_of_flows() ERROR getting flows from database", database_flows
-            return -1, "DB error getting flows: " + database_flows
+            return -1, "DB error getting flows from net 'null': %s" %(database_net_flows)
+        database_flows += database_net_flows
+
         #Get the existing flows at openflow controller
         result, of_flows = self.OF_connector.get_of_rules() 
         if result < 0:
@@ -292,7 +312,7 @@ class openflow_thread(threading.Thread):
             return -1, 'Only ptp and data networks are supported for openflow'
             
         # calculate new flows to be inserted
-        result, new_flows = self._compute_net_flows(net_id, ports)
+        result, new_flows = self._compute_net_flows(nets)
         if result < 0:
             return result, new_flows
 
@@ -315,15 +335,15 @@ class openflow_thread(threading.Thread):
                 self.logger.debug("Skipping already present flow %s", str(flow))
                 continue
             #2 look for a non used name
-            flow_name=flow["net_id"]+"_"+str(name_index)
+            flow_name=flow["net_id"]+"."+str(name_index)
             while flow_name in used_names or flow_name in of_flows:         
                 name_index += 1   
-                flow_name=flow["net_id"]+"_"+str(name_index)
+                flow_name=flow["net_id"]+"."+str(name_index)
             used_names.append(flow_name)
             flow['name'] = flow_name
             #3 insert at openflow
-            r,c = self.OF_connector.new_flow(flow)
-            if r < 0:
+            result, content = self.OF_connector.new_flow(flow)
+            if result < 0:
                 #print self.name, ": Error '%s' at flow insertion" % c, flow
                 return -1, content
             #4 insert at database
@@ -345,23 +365,23 @@ class openflow_thread(threading.Thread):
             if "not delete" in flow:
                 if flow["name"] not in of_flows:
                     #not in controller, insert it
-                    r,c = self.OF_connector.new_flow(flow)
-                    if r < 0:
+                    result, content = self.OF_connector.new_flow(flow)
+                    if result < 0:
                         #print self.name, ": Error '%s' at flow insertion" % c, flow
                         return -1, content
                 continue
             #Delete flow
             if flow["name"] in of_flows:
-                r,c= self.OF_connector.del_flow(flow['name'])
-                if r<0:
-                    self.logger.error("cannot delete flow '%s' from OF: %s", flow['name'], c )
+                result, content = self.OF_connector.del_flow(flow['name'])
+                if result<0:
+                    self.logger.error("cannot delete flow '%s' from OF: %s", flow['name'], content )
                     continue #skip deletion from database
             #delete from database
             self.db_lock.acquire()
-            r,c=self.db.delete_row_by_key('of_flows', 'id', flow['id'])
+            result, content = self.db.delete_row_by_key('of_flows', 'id', flow['id'])
             self.db_lock.release()
-            if r<0:
-                self.logger.error("cannot delete flow '%s' from DB: %s", flow['name'], c )
+            if result<0:
+                self.logger.error("cannot delete flow '%s' from DB: %s", flow['name'], content )
         
         return 0, 'Success'
 
@@ -395,88 +415,137 @@ class openflow_thread(threading.Thread):
             index += 1
         return -1
         
-    def _compute_net_flows(self, net_id, ports):
+    def _compute_net_flows(self, nets):
         new_flows=[]
-        nb_rules = len(ports)
+        new_broadcast_flows={}
+        nb_ports = 0
 
         # Check switch_port information is right
-        if not self.test:
-            for port in ports:
-                if str(port['switch_port']) not in self.OF_connector.pp2ofi and not self.test:
+        for net in nets:
+            for port in net['ports']:
+                nb_ports += 1
+                if not self.test and str(port['switch_port']) not in self.OF_connector.pp2ofi:
                     error_text= "switch port name '%s' is not valid for the openflow controller" % str(port['switch_port'])
                     #print self.name, ": ERROR " + error_text
                     return -1, error_text
+
+        for net_src in nets:
+            net_id = net_src["uuid"]
+            for net_dst in nets:
+                vlan_net_in  = None
+                vlan_net_out = None
+                if net_src == net_dst:
+                    #intra net rules    
+                    priority = 1000
+                elif net_src['bind_net'] == net_dst['uuid']:
+                    if net_src.get('bind_type') and net_src['bind_type'][0:5] == "vlan:":
+                        vlan_net_out = int(net_src['bind_type'][5:])
+                    priority = 1100
+                elif net_dst['bind_net'] == net_src['uuid']:
+                    if net_dst.get('bind_type') and net_dst['bind_type'][0:5] == "vlan:":
+                        vlan_net_in = int(net_dst['bind_type'][5:])
+                    priority = 1100
+                else:
+                    #nets not binding
+                    continue
+                for src_port in net_src['ports']:
+                    vlan_in  = vlan_net_in
+                    if vlan_in == None  and src_port['vlan'] != None:
+                        vlan_in  = src_port['vlan']
+                    elif vlan_in != None  and src_port['vlan'] != None:
+                        #TODO this is something that we can not do. It requires a double VLAN check
+                        #outer VLAN should be src_port['vlan'] and inner VLAN should be vlan_in
+                        continue
+
+                    # BROADCAST:
+                    broadcast_key = src_port['uuid'] + "." + str(vlan_in)
+                    if broadcast_key in new_broadcast_flows:
+                        flow_broadcast = new_broadcast_flows[broadcast_key]
+                    else:
+                        flow_broadcast = {'priority': priority,
+                            'net_id':  net_id,
+                            'dst_mac': 'ff:ff:ff:ff:ff:ff',
+                            "ingress_port": str(src_port['switch_port']),
+                            'actions': [] 
+                        }
+                        new_broadcast_flows[broadcast_key] = flow_broadcast
+                        if vlan_in is not None:
+                            flow_broadcast['vlan_id'] = str(vlan_in)
+
+                    for dst_port in net_dst['ports']:
+                        vlan_out = vlan_net_out 
+                        if vlan_out == None and dst_port['vlan'] != None:
+                            vlan_out = dst_port['vlan']
+                        elif vlan_out != None and dst_port['vlan'] != None:
+                            #TODO this is something that we can not do. It requires a double VLAN set
+                            #outer VLAN should be dst_port['vlan'] and inner VLAN should be vlan_out
+                            continue
+                        #if src_port == dst_port:
+                        #    continue
+                        if src_port['switch_port'] == dst_port['switch_port'] and vlan_in == vlan_out:
+                            continue
+                        flow = {
+                            "priority": priority,
+                            'net_id':  net_id,
+                            "ingress_port": str(src_port['switch_port']),
+                            'actions': []
+                        }
+                        if vlan_in is not None:
+                            flow['vlan_id'] = str(vlan_in)
+                        # allow that one port have no mac
+                        if dst_port['mac'] is None or nb_ports==2:  # point to point or nets with 2 elements
+                            flow['priority'] = priority-5  # less priority
+                        else:
+                            flow['dst_mac'] = str(dst_port['mac'])
             
-        # Insert rules so each point can reach other points using dest mac information
-        for src_port in ports:
-            for dst_port in ports:
-                #if src_port == dst_port:
-                #    continue
-                if src_port['switch_port'] == dst_port['switch_port'] and src_port['vlan'] == dst_port['vlan']:
-                    continue
-                flow = {
-                    "priority": 1000,
-                    'net_id':  net_id,
-                    "ingress_port": str(src_port['switch_port']),
-                    'actions': []
-                }
-                # allow that one port have no mac
-                if dst_port['mac'] is None or nb_rules==2:  # point to point or nets with 2 elements
-                    flow['priority'] = 990  # less priority
-                else:
-                    flow['dst_mac'] = str(dst_port['mac'])
+                        if vlan_out == None:
+                            if vlan_in != None:
+                                flow['actions'].append( ('vlan',None) )
+                        else:
+                            flow['actions'].append( ('vlan', vlan_out ) )
+                        flow['actions'].append( ('out', str(dst_port['switch_port'])) )
+            
+                        if self._check_flow_already_present(flow, new_flows) >= 0:
+                            self.logger.debug("Skipping repeated flow '%s'", str(flow))
+                            continue
+                        
+                        new_flows.append(flow)
                     
-                if src_port['vlan'] is not None:
-                    flow['vlan_id'] = str(src_port['vlan'])
-    
-                if dst_port['vlan'] is None:
-                    if src_port['vlan'] is not None:
-                        flow['actions'].append( ('vlan',None) )
-                else:
-                    flow['actions'].append( ('vlan', dst_port['vlan']) )
-                flow['actions'].append( ('out', str(dst_port['switch_port'])) )
-    
-                if self._check_flow_already_present(flow, new_flows) >= 0:
-                    self.logger.debug("Skipping repeated flow '%s'", str(flow))
-                    continue
-                
-                new_flows.append(flow)
+                        # BROADCAST:
+                        if nb_ports <= 2:  # point to multipoint or nets with more than 2 elements
+                            continue
+                        out = (vlan_out, str(dst_port['switch_port']))
+                        if out not in flow_broadcast['actions']:
+                            flow_broadcast['actions'].append( out )
+
+        #BROADCAST
+        for flow_broadcast in new_broadcast_flows.values():      
+            if len(flow_broadcast['actions'])==0:
+                continue #nothing to do, skip
+            flow_broadcast['actions'].sort()
+            if 'vlan_id' in flow_broadcast:
+                previous_vlan = 0  # indicates that a packet contains a vlan, and the vlan
+            else:
+                previous_vlan = None
+            final_actions=[]
+            action_number = 0
+            for action in flow_broadcast['actions']:
+                if action[0] != previous_vlan:
+                    action_number += 1
+                    final_actions.append( ('vlan', action[0]) )
+                    previous_vlan = action[0]
+                    if self.pmp_with_same_vlan and action_number:
+                        return -1, "Can not interconect different vlan tags in a network when flag 'of_controller_nets_with_same_vlan' is True."
+                final_actions.append( ('out', action[1]) )
+            flow_broadcast['actions'] = final_actions
+
+            if self._check_flow_already_present(flow_broadcast, new_flows) >= 0:
+                self.logger.debug("Skipping repeated flow '%s'", str(flow_broadcast))
+                continue
+            
+            new_flows.append(flow_broadcast)        
         
-        # BROADCAST:
-        if nb_rules > 2:  # point to multipoint or nets with more than 2 elements
-            for src_port in ports:
-                flow = {'priority': 1000,
-                    'net_id':  net_id,
-                    'dst_mac': 'ff:ff:ff:ff:ff:ff',
-                    'actions': []
-                }
-
-                flow['ingress_port'] = str(src_port['switch_port'])
-                if src_port['vlan'] is not None:
-                    flow['vlan_id'] = str(src_port['vlan'])
-                    last_vlan = 0  # indicates that a packet contains a vlan, and the vlan
-                else:
-                    last_vlan = None
-                
-                for dst_port in ports:
-                    if src_port == dst_port: continue
-                    if src_port['switch_port']==dst_port['switch_port'] and src_port['vlan']==dst_port['vlan']:
-                        continue #same physical port and same vlan, skip
-                    if last_vlan != dst_port['vlan']:
-                        flow['actions'].append( ('vlan', dst_port['vlan']) ) #dst_port["vlan"]==None means strip-vlan
-                        last_vlan = dst_port['vlan']
-                    out= ('out', str(dst_port['switch_port']))
-                    if out not in flow['actions']:
-                        flow['actions'].append( out )
-                
-                if len(flow['actions'])==0:
-                    continue #nothing to do, skip
-
-                if self._check_flow_already_present(flow, new_flows) >= 0:
-                    self.logger.debug("Skipping repeated flow '%s'", str(flow))
-                    continue
-                
-                new_flows.append(flow)
+        
             
         return 0, new_flows
 

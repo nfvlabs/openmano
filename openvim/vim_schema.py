@@ -34,6 +34,7 @@ __date__ ="$10-jul-2014 12:07:15$"
 path_schema={"type":"string", "pattern":"^(\.(\.?))?(/[^/"":{}\ \(\)]+)+$"}
 port_schema={"type":"integer","minimum":1,"maximun":65534}
 ip_schema={"type":"string","pattern":"^([0-9]{1,3}.){3}[0-9]{1,3}$"}
+cidr_schema={"type":"string","pattern":"^([0-9]{1,3}.){3}[0-9]{1,3}/[0-9]{1,2}$"}
 name_schema={"type" : "string", "minLength":1, "maxLength":255, "pattern" : "^[^,;()'\"]+$"}
 nameshort_schema={"type" : "string", "minLength":1, "maxLength":64, "pattern" : "^[^,;()'\"]+$"}
 nametiny_schema={"type" : "string", "minLength":1, "maxLength":12, "pattern" : "^[^,;()'\"]+$"}
@@ -592,7 +593,13 @@ network_new_schema = {
                 "tenant_id":id_schema,
                 "admin_state_up":{"type":"boolean"},
                 "provider:vlan":vlan_schema,
-                "provider:physical":net_bind_schema
+                "provider:physical":net_bind_schema,
+                "cidr":cidr_schema,
+                "enable_dhcp": {"type":"boolean"},
+                "dhcp_first_ip": ip_schema,
+                "dhcp_last_ip": ip_schema,
+                "bind_net":name_schema, #can be name, or uuid
+                "bind_type":{"oneOf":[{"type":"null"},{"type":"string", "pattern":"^vlan:[0-9]{1,4}$"}]}
             },
             "required": ["name"]
         }
@@ -614,7 +621,13 @@ network_update_schema = {
                 "tenant_id":id_schema,
                 "admin_state_up":{"type":"boolean"},
                 "provider:vlan":vlan_schema, 
-                "bind":net_bind_schema
+                "provider:physical":net_bind_schema,
+                "cidr":cidr_schema,
+                "enable_dhcp": {"type":"boolean"},
+                "dhcp_first_ip": ip_schema,
+                "dhcp_last_ip": ip_schema,
+                "bind_net":name_schema, #can be name, or uuid
+                "bind_type":{"oneOf":[{"type":"null"},{"type":"string", "pattern":"^vlan:[0-9]{1,4}$"}]}
             },
             "minProperties": 1,
             "additionalProperties": False

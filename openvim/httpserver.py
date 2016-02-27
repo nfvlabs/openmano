@@ -132,7 +132,7 @@ http2db_tenant={'id':'uuid'}
 http2db_flavor={'id':'uuid','imageRef':'image_id'}
 http2db_image={'id':'uuid', 'created':'created_at', 'updated':'modified_at', 'public': 'public'}
 http2db_server={'id':'uuid','hostId':'host_id','flavorRef':'flavor_id','imageRef':'image_id','created':'created_at'}
-http2db_network={'id':'uuid','provider:vlan':'vlan', 'provider:physical': 'bind'}
+http2db_network={'id':'uuid','provider:vlan':'vlan', 'provider:physical': 'provider'}
 http2db_port={'id':'uuid', 'network_id':'net_id', 'mac_address':'mac', 'device_owner':'type','device_id':'instance_id','binding:switch_port':'switch_port','binding:vlan':'vlan', 'bandwidth':'Mbps'}
 
 def remove_extra_items(data, schema):
@@ -435,6 +435,13 @@ def check_valid_tenant(my, tenant_id):
             return HTTP_Not_Found, "tenant '%s' not found" % tenant_id
     return 0, None
 
+def check_valid_uuid(uuid):
+    id_schema = {"type" : "string", "pattern": "^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$"}
+    try:
+        js_v(uuid, id_schema)
+        return True
+    except js_e.ValidationError:
+        return False
 
 @bottle.error(400)
 @bottle.error(401) 
@@ -1569,12 +1576,15 @@ def http_get_networks():
     select_,where_,limit_ = filter_query_string(bottle.request.query, http2db_network,
             ('id','name','tenant_id','type',
              'shared','provider:vlan','status','last_error','admin_state_up','provider:physical') )
+    #TODO temporally remove tenant_id
+    if "tenant_id" in where_:
+        del where_["tenant_id"]
     result, content = my.db.get_table(SELECT=select_, FROM='nets', WHERE=where_, LIMIT=limit_)
     if result < 0:
         print "http_get_networks error %d %s" % (result, content)
         bottle.abort(-result, content)
     else:
-        convert_boolean(content, ('shared', 'admin_state_up') )
+        convert_boolean(content, ('shared', 'admin_state_up', 'enable_dhcp') )
         delete_nulls(content)      
         change_keys_http2db(content, http2db_network, reverse=True)  
         data={'networks' : content}
@@ -1595,7 +1605,7 @@ def http_get_network_id(network_id):
         print "http_get_networks_id network '%s' not found" % network_id
         bottle.abort(HTTP_Not_Found, 'network %s not found' % network_id)
     else:
-        convert_boolean(content, ('shared', 'admin_state_up') )
+        convert_boolean(content, ('shared', 'admin_state_up', 'enale_dhcp') )
         change_keys_http2db(content, http2db_network, reverse=True)        
         #get ports
         result, ports = my.db.get_table(FROM='ports', SELECT=('uuid as port_id',), 
@@ -1625,12 +1635,51 @@ def http_post_networks():
             return
     bridge_net = None
     #check valid params
-    net_bind = network.get('bind')
-    net_type = network.get('type')
-    net_vlan = network.get("vlan")
+    net_provider = network.get('provider')
+    net_type =     network.get('type')
+    net_vlan =     network.get("vlan")
+    net_bind_net = network.get("bind_net")
+    net_bind_type= network.get("bind_type")
+    name = network["name"]
     
-    if net_bind!=None:
-        if net_bind[:9]=="openflow:":
+    #check if network name ends with :<vlan_tag> and network exist in order to make and automated bindning
+    vlan_index =name.rfind(":")
+    if net_bind_net==None and net_bind_type==None and vlan_index > 1: 
+        try:
+            vlan_tag = int(name[vlan_index+1:])
+            if vlan_tag >0 and vlan_tag < 4096:
+                net_bind_net = name[:vlan_index]
+                net_bind_type = "vlan:" + name[vlan_index+1:]
+        except:
+            pass 
+        
+    if net_bind_net != None:
+        #look for a valid net
+        if check_valid_uuid(net_bind_net):
+            net_bind_key = "uuid"
+        else:
+            net_bind_key = "name"
+        result, content = my.db.get_table(FROM='nets', WHERE={net_bind_key: net_bind_net} )
+        if result<0:
+            bottle.abort(HTTP_Internal_Server_Error, 'getting nets from db ' + content)
+            return
+        elif result==0:
+            bottle.abort(HTTP_Bad_Request, "bind_net %s '%s'not found" % (net_bind_key, net_bind_net) )
+            return
+        elif result>1:
+            bottle.abort(HTTP_Bad_Request, "more than one bind_net %s '%s' found, use uuid" % (net_bind_key, net_bind_net) )
+            return
+        network["bind_net"] = content[0]["uuid"]
+    if net_bind_type != None:
+        if net_bind_type[0:5] != "vlan:":
+            bottle.abort(HTTP_Bad_Request, "bad format for 'bind_type', must be 'vlan:<tag>'")
+            return
+        if int(net_bind_type[5:]) > 4095 or int(net_bind_type[5:])<=0 :
+            bottle.abort(HTTP_Bad_Request, "bad format for 'bind_type', must be 'vlan:<tag>' with a tag between 1 and 4095")
+            return
+    
+    if net_provider!=None:
+        if net_provider[:9]=="openflow:":
             if net_type!=None:
                 if net_type!="ptp" and net_type!="data":
                     bottle.abort(HTTP_Bad_Request, "Only 'ptp' or 'data' net types can be bound to 'openflow'")
@@ -1646,20 +1695,20 @@ def http_post_networks():
     if net_type==None:
         net_type='bridge_man' 
         
-    if net_bind != None:
-        if net_bind[:7]=='bridge:':
+    if net_provider != None:
+        if net_provider[:7]=='bridge:':
             #check it is one of the pre-provisioned bridges
-            bridge_net_name = net_bind[7:]
+            bridge_net_name = net_provider[7:]
             for brnet in config_dic['bridge_nets']:
                 if brnet[0]==bridge_net_name: # free
                     if brnet[3] != None:
-                        bottle.abort(HTTP_Conflict, "invalid binding at 'provider:physical', bridge '%s' is already used" % bridge_net_name)
+                        bottle.abort(HTTP_Conflict, "invalid 'provider:physical', bridge '%s' is already used" % bridge_net_name)
                         return
                     bridge_net=brnet
                     net_vlan = brnet[1]
                     break
 #            if bridge_net==None:     
-#                bottle.abort(HTTP_Bad_Request, "invalid binding at 'provider:physical', bridge '%s' is not one of the provisioned 'bridge_ifaces' in the configuration file" % bridge_net_name)
+#                bottle.abort(HTTP_Bad_Request, "invalid 'provider:physical', bridge '%s' is not one of the provisioned 'bridge_ifaces' in the configuration file" % bridge_net_name)
 #                return
     elif net_type=='bridge_data' or net_type=='bridge_man':
         #look for a free precreated nets
@@ -1678,7 +1727,7 @@ def http_post_networks():
             return
         else:
             print "using net", bridge_net
-            net_bind = "bridge:"+bridge_net[0]
+            net_provider = "bridge:"+bridge_net[0]
             net_vlan = bridge_net[1]
     if net_vlan==None and (net_type=="data" or net_type=="ptp"):
         net_vlan = my.db.get_free_net_vlan()
@@ -1686,9 +1735,9 @@ def http_post_networks():
             bottle.abort(HTTP_Internal_Server_Error, "Error getting an available vlan")
             return
     
-    network['bind'] = net_bind
-    network['type'] = net_type
-    network['vlan'] = net_vlan
+    network['provider'] = net_provider
+    network['type']     = net_type
+    network['vlan']     = net_vlan
     result, content = my.db.new_row('nets', network, True, True)
     
     if result >= 0:
@@ -1744,10 +1793,36 @@ def http_put_network_id(network_id):
             bottle.abort(HTTP_Method_Not_Allowed, "Can not change vlan of network while having ports attached")
 
     #check valid params
-    net_bind = network.get('bind', network_old[0]['bind'])
-    net_type = network.get('type', network_old[0]['type'])
-    if net_bind!=None:
-        if net_bind[:9]=="openflow:":
+    net_provider = network.get('provider', network_old[0]['provider'])
+    net_type     = network.get('type', network_old[0]['type'])
+    net_bind_net = network.get("bind_net")
+    net_bind_type= network.get("bind_type")
+    if net_bind_net != None:
+        #look for a valid net
+        if check_valid_uuid(net_bind_net):
+            net_bind_key = "uuid"
+        else:
+            net_bind_key = "name"
+        result, content = my.db.get_table(FROM='nets', WHERE={net_bind_key: net_bind_net} )
+        if result<0:
+            bottle.abort(HTTP_Internal_Server_Error, 'getting nets from db ' + content)
+            return
+        elif result==0:
+            bottle.abort(HTTP_Bad_Request, "bind_net %s '%s'not found" % (net_bind_key, net_bind_net) )
+            return
+        elif result>1:
+            bottle.abort(HTTP_Bad_Request, "more than one bind_net %s '%s' found, use uuid" % (net_bind_key, net_bind_net) )
+            return
+        network["bind_net"] = content[0]["uuid"]
+    if net_bind_type != None:
+        if net_bind_type[0:5] != "vlan:":
+            bottle.abort(HTTP_Bad_Request, "bad format for 'bind_type', must be 'vlan:<tag>'")
+            return
+        if int(net_bind_type[5:]) > 4095 or int(net_bind_type[5:])<=0 :
+            bottle.abort(HTTP_Bad_Request, "bad format for 'bind_type', must be 'vlan:<tag>' with a tag between 1 and 4095")
+            return
+    if net_provider!=None:
+        if net_provider[:9]=="openflow:":
             if net_type!="ptp" and net_type!="data":
                 bottle.abort(HTTP_Bad_Request, "Only 'ptp' or 'data' net types can be bound to 'openflow'")
         else:
@@ -1757,12 +1832,11 @@ def http_put_network_id(network_id):
     #insert in data base
     result, content = my.db.update_rows('nets', network, WHERE={'uuid': network_id}, log=True )
     if result >= 0:
-        if result>0:
-            if nbports>0 and 'admin_state_up' in network and network['admin_state_up'] != network_old[0]['admin_state_up']:
-                r,c = config_dic['of_thread'].insert_task("update-net", network_id)
-                if r  < 0:
-                    print "http_put_network_id error while launching openflow rules"
-                    bottle.abort(HTTP_Internal_Server_Error, c)
+        if result>0: # and nbports>0 and 'admin_state_up' in network and network['admin_state_up'] != network_old[0]['admin_state_up']:
+            r,c = config_dic['of_thread'].insert_task("update-net", network_id)
+            if r  < 0:
+                print "http_put_network_id error while launching openflow rules"
+                bottle.abort(HTTP_Internal_Server_Error, c)
             if config_dic.get("dhcp_server"):
                 if network_id in config_dic["dhcp_nets"]:
                     config_dic["dhcp_nets"].remove(network_id)

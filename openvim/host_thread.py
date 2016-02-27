@@ -550,7 +550,7 @@ class host_thread(threading.Thread):
         for v in bridge_interfaces:
             #Get the brifge name
             self.db_lock.acquire()
-            result, content = self.db.get_table(FROM='nets', SELECT=('bind',),WHERE={'uuid':v['net_id']} )
+            result, content = self.db.get_table(FROM='nets', SELECT=('provider',),WHERE={'uuid':v['net_id']} )
             self.db_lock.release()
             if result <= 0:
                 print "create_xml_server ERROR getting nets",result, content
@@ -559,27 +559,27 @@ class host_thread(threading.Thread):
             #I know it is not secure    
             #for v in sorted(desc['network interfaces'].itervalues()):
             model = v.get("model", None)
-            if content[0]['bind']=='default':
+            if content[0]['provider']=='default':
                 text += self.tab() + "<interface type='network'>" + \
-                    self.inc_tab() + "<source network='" +content[0]['bind']+ "'/>"
-            elif content[0]['bind'][0:7]=='macvtap':
+                    self.inc_tab() + "<source network='" +content[0]['provider']+ "'/>"
+            elif content[0]['provider'][0:7]=='macvtap':
                 text += self.tab()+"<interface type='direct'>" + \
-                    self.inc_tab() + "<source dev='" + self.get_local_iface_name(content[0]['bind'][8:]) + "' mode='bridge'/>" + \
+                    self.inc_tab() + "<source dev='" + self.get_local_iface_name(content[0]['provider'][8:]) + "' mode='bridge'/>" + \
                     self.tab() + "<target dev='macvtap0'/>"
                 if windows_os:
                     text += self.tab() + "<alias name='net" + str(net_nb) + "'/>"
                 elif model==None:
                     model = "virtio"
-            elif content[0]['bind'][0:6]=='bridge':
+            elif content[0]['provider'][0:6]=='bridge':
                 text += self.tab() + "<interface type='bridge'>" +  \
-                    self.inc_tab()+"<source bridge='" +self.get_local_iface_name(content[0]['bind'][7:])+ "'/>"
+                    self.inc_tab()+"<source bridge='" +self.get_local_iface_name(content[0]['provider'][7:])+ "'/>"
                 if windows_os:
                     text += self.tab() + "<target dev='vnet" + str(net_nb)+ "'/>" +\
                         self.tab() + "<alias name='net" + str(net_nb)+ "'/>"
                 elif model==None:
                     model = "virtio"
             else:
-                return -1, 'Unknown Bridge net bind ' + content[0]['bind']
+                return -1, 'Unknown Bridge net provider ' + content[0]['provider']
             if model!=None:
                 text += self.tab() + "<model type='" +model+ "'/>"
             if v.get('mac_address', None) != None:

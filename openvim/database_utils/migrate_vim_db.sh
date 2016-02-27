@@ -160,6 +160,7 @@ DATABASE_TARGET_VER_NUM=0
 [ $OPENVIM_VER_NUM -ge 3001 ] && DATABASE_TARGET_VER_NUM=4   #0.3.1   =>  4
 [ $OPENVIM_VER_NUM -ge 4001 ] && DATABASE_TARGET_VER_NUM=5   #0.4.1   =>  5
 [ $OPENVIM_VER_NUM -ge 4002 ] && DATABASE_TARGET_VER_NUM=6   #0.4.2   =>  6
+[ $OPENVIM_VER_NUM -ge 4005 ] && DATABASE_TARGET_VER_NUM=7   #0.4.5   =>  7
 #TODO ... put next versions here
 
 
@@ -405,6 +406,21 @@ function downgrade_from_6(){
     echo -en "        resources_port      \r"
     echo "ALTER TABLE resources_port CHANGE COLUMN source_name source_name VARCHAR(24) NULL DEFAULT NULL, CHANGE COLUMN switch_port switch_port VARCHAR(24) NULL DEFAULT NULL, CHANGE COLUMN switch_dpid switch_dpid VARCHAR(23) NULL DEFAULT NULL;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "DELETE FROM schema_version WHERE version_int='6';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+function upgrade_to_7(){
+    echo "    upgrade database from version 0.6 to version 0.7"
+    echo "     add 'bind_net','bind_type','cidr','enable_dhcp' to 'nets'"
+    echo "ALTER TABLE nets ADD COLUMN cidr VARCHAR(64) NULL DEFAULT NULL AFTER bind, ADD COLUMN enable_dhcp ENUM('true','false') NOT NULL DEFAULT 'false' after cidr, ADD COLUMN dhcp_first_ip VARCHAR(64) NULL DEFAULT NULL AFTER enable_dhcp, ADD COLUMN dhcp_last_ip VARCHAR(64) NULL DEFAULT NULL AFTER dhcp_first_ip;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE nets CHANGE COLUMN bind provider VARCHAR(36) NULL DEFAULT NULL AFTER vlan;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE nets ADD COLUMN bind_net VARCHAR(36) NULL DEFAULT NULL COMMENT 'To connect with other net' AFTER provider, ADD COLUMN bind_type VARCHAR(36)  NULL DEFAULT NULL COMMENT 'VLAN:<tag> to insert/remove' after bind_net;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openvim_ver, comments, date) VALUES (7, '0.7', '0.4.4', 'Add bind_net to net table', '2016-02-12');"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+function downgrade_from_7(){
+    echo "    downgrade database from version 0.7 to version 0.6"
+    echo "     removing 'bind_net','bind_type','cidr','enable_dhcp' from 'nets'"
+    echo "ALTER TABLE nets CHANGE COLUMN provider bind NULL DEFAULT NULL AFTER vlan;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE nets DROP COLUMN cidr, DROP COLUMN enable_dhcp, DROP COLUMN bind_net, DROP COLUMN bind_type, DROP COLUMN dhcp_first_ip, DROP COLUMN dhcp_last_ip;"| $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int = '7';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 #TODO ... put funtions here
 

@@ -1635,7 +1635,7 @@ class vim_db():
             if nb_ports<0:
                 return -1, data
             else:
-                if net['bind']:
+                if net['provider']:
                     nb_ports +=1
                 if nb_ports >=2:
                     return -1, "net of type p2p already contain two ports attached. No room for another"
