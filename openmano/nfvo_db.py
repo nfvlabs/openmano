@@ -433,12 +433,13 @@ class nfvo_db():
     def get_table(self, **sql_dict):
         ''' Obtain rows from a table.
         Attribute sql_dir: dictionary with the following key: value
-            'SELECT': (list or tuple of fields to retrieve) (by default all)
-            'FROM': string of table name (Mandatory)
-            'WHERE': dict of key:values, translated to key=value AND ... (Optional)
+            'SELECT':    list or tuple of fields to retrieve) (by default all)
+            'FROM':      string of table name (Mandatory)
+            'WHERE':     dict of key:values, translated to key=value AND ... (Optional)
             'WHERE_NOT': dict of key:values, translated to key<>value AND ... (Optional)
-            'WHERE_NOTNULL': (list or tuple of items that must not be null in a where ... (Optional)
-            'LIMIT': limit of number of rows (Optional)
+            'WHERE_NOTNULL': list or tuple of items that must not be null in a where ... (Optional)
+            'LIMIT':     limit of number of rows (Optional)
+            'ORDER_BY':  list or tuple of fields to order
         Return: a list with dictionaries at each row
         '''
         #print sql_dict
@@ -462,8 +463,10 @@ class nfvo_db():
             else:                where_ = where_ + " AND " + where_2
         #print 'where_', where_
         limit_ = "LIMIT " + str(sql_dict['LIMIT']) if 'LIMIT' in sql_dict else ""
+        order_ = "ORDER BY " + ",".join(map(str,sql_dict['SELECT'])) if 'ORDER_BY' in sql_dict else ""
+        
         #print 'limit_', limit_
-        cmd =  " ".join( (select_, from_, where_, limit_) )
+        cmd =  " ".join( (select_, from_, where_, limit_, order_) )
         for retry_ in range(0,2):
             try:
                 with self.con:
@@ -932,7 +935,7 @@ class nfvo_db():
                             continue
                         WHERE_=" WHERE name='%s'" % net['name']
                         if datacenter_id!=None:
-                            WHERE_ += " AND datacenter_id='%s'" % datacenter_id 
+                            WHERE_ += " AND datacenter_id='%s'" % datacenter_id
                         self.cur.execute("SELECT vim_net_id FROM datacenter_nets" + WHERE_ ) 
                         d_net = self.cur.fetchone()
                         if d_net==None or datacenter_id==None:

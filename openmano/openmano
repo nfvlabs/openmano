@@ -28,8 +28,8 @@ openmano client used to interact with openmano-server (openmanod)
 '''
 __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$09-oct-2014 09:09:48$"
-__version__="0.4.1-r449"
-version_date="Dec 2015"
+__version__="0.4.2-r456"
+version_date="Feb 2016"
 
 from argcomplete.completers import FilesCompleter
 import os
@@ -58,7 +58,6 @@ def config(args):
     print "OPENMANO_PORT: %s" %mano_port
     print "OPENMANO_TENANT: %s" %mano_tenant
     print "OPENMANO_DATACENTER: %s" %str (mano_datacenter)
-
 
 def _print_verbose(mano_response, verbose_level=0):
     content = mano_response.json()
@@ -90,9 +89,20 @@ def _print_verbose(mano_response, verbose_level=0):
 
     if mano_response.status_code == 200:
         for content in content_list:
-            myoutput = "%s %s" %(content['uuid'].ljust(38),content['name'].ljust(20))
+            if "uuid" in content:
+                uuid = content['uuid']
+            elif "id" in content:
+                uuid = content['id']
+            elif "vim_id" in content:
+                uuid = content['vim_id']
+            myoutput = "%s %s" %(uuid.ljust(38),content['name'].ljust(20))
+            if "status" in content:
+                myoutput += " " + content['status'].ljust(20)
+            elif "enabled" in content and not content["enabled"]:
+                myoutput += " enabled=False".ljust(20)
             if verbose_level >=1:
-                myoutput += " " + content['created_at'].ljust(20)
+                if 'created_at' in content:
+                    myoutput += " " + content['created_at'].ljust(20)
                 if verbose_level >=2:
                     new_line='\n'
                     if 'type' in content and content['type']!=None:
@@ -367,51 +377,58 @@ def scenario_delete(args):
     return result
 
 def scenario_deploy(args):
-    #print "scenario-deploy",args
-    headers_req = {'content-type': 'application/json'}
-    action = {}
-    actionCmd="start"
-    if args.nostart:
-        actionCmd="reserve"
-    action[actionCmd] = {}
-    action[actionCmd]["instance_name"] = args.name
-    if args.datacenter != None:
-        action[actionCmd]["datacenter"] = args.datacenter
-    elif mano_datacenter != None:
-        action[actionCmd]["datacenter"] = mano_datacenter
-        
-    if args.description:
-        action[actionCmd]["description"] = args.description
-    payload_req = json.dumps(action, indent=4)
-    #print payload_req
+    print "This command is deprecated, use 'openmano instance-scenario-create --scenario %s --name %s' instead!!!" % (args.scenario, args.name)
+    print
+    args.file = None
+    args.netmap_use = None
+    args.netmap_create = None
+    return instance_create(args)
 
-    URLrequest = "http://%s:%s/openmano/%s/scenarios/%s/action" %(mano_host, mano_port, mano_tenant, args.scenario)
-    logger.debug("openmano request: %s", payload_req)
-    mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
-    logger.debug("openmano response: %s", mano_response.text )
-    if args.verbose==None:
-        args.verbose=0
-    
-    result = 0 if mano_response.status_code==200 else mano_response.status_code
-    content = mano_response.json()
-    #print json.dumps(content, indent=4)
-    if args.verbose >= 3:
-        print yaml.safe_dump(content, indent=4, default_flow_style=False)
-        return result
-
-    if mano_response.status_code == 200:
-        myoutput = "%s %s" %(content['uuid'].ljust(38),content['name'].ljust(20))
-        if args.verbose >=1:
-            myoutput = "%s %s" %(myoutput, content['created_at'].ljust(20))
-        if args.verbose >=2:
-            myoutput = "%s %s %s" %(myoutput, content['description'].ljust(30))
-        print myoutput
-        print ""
-        print "To check the status, run the following command:"
-        print "openmano instance-scenario-list <instance_id>"
-    else:
-        print content['error']['description']
-    return result
+#     #print "scenario-deploy",args
+#     headers_req = {'content-type': 'application/json'}
+#     action = {}
+#     actionCmd="start"
+#     if args.nostart:
+#         actionCmd="reserve"
+#     action[actionCmd] = {}
+#     action[actionCmd]["instance_name"] = args.name
+#     if args.datacenter != None:
+#         action[actionCmd]["datacenter"] = args.datacenter
+#     elif mano_datacenter != None:
+#         action[actionCmd]["datacenter"] = mano_datacenter
+#         
+#     if args.description:
+#         action[actionCmd]["description"] = args.description
+#     payload_req = json.dumps(action, indent=4)
+#     #print payload_req
+# 
+#     URLrequest = "http://%s:%s/openmano/%s/scenarios/%s/action" %(mano_host, mano_port, mano_tenant, args.scenario)
+#     logger.debug("openmano request: %s", payload_req)
+#     mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
+#     logger.debug("openmano response: %s", mano_response.text )
+#     if args.verbose==None:
+#         args.verbose=0
+#     
+#     result = 0 if mano_response.status_code==200 else mano_response.status_code
+#     content = mano_response.json()
+#     #print json.dumps(content, indent=4)
+#     if args.verbose >= 3:
+#         print yaml.safe_dump(content, indent=4, default_flow_style=False)
+#         return result
+# 
+#     if mano_response.status_code == 200:
+#         myoutput = "%s %s" %(content['uuid'].ljust(38),content['name'].ljust(20))
+#         if args.verbose >=1:
+#             myoutput = "%s %s" %(myoutput, content['created_at'].ljust(20))
+#         if args.verbose >=2:
+#             myoutput = "%s %s %s" %(myoutput, content['description'].ljust(30))
+#         print myoutput
+#         print ""
+#         print "To check the status, run the following command:"
+#         print "openmano instance-scenario-list <instance_id>"
+#     else:
+#         print content['error']['description']
+#     return result
 
 def scenario_verify(args):
     #print "scenario-verify",args
@@ -463,21 +480,40 @@ def instance_create(args):
     if "name" not in myInstance["instance"]:
         print "you must provide a name in the file descriptor or with --name"
         return 1
-    if args.net_map:
+    if args.netmap_use:
         if "networks" not in myInstance["instance"]:
             myInstance["instance"]["networks"] = {}
-        for net in args.net_map:
+        for net in args.netmap_use:
             net_comma_list = net.split(",")
             for net_comma in net_comma_list:
                 net_tuple = net_comma.split("=")
                 if len(net_tuple) != 2:
-                    print "error at net-map. Expected net-scenario=net-datacenter. (%s)?" % net_comma
+                    print "error at netmap-use. Expected net-scenario=net-datacenter. (%s)?" % net_comma
                     return
-                net_scenario   = net_comma[0].strip()
-                net_datacenter = net_comma[1].strip()
+                net_scenario   = net_tuple[0].strip()
+                net_datacenter = net_tuple[1].strip()
                 if net_scenario not in myInstance["instance"]["networks"]:
                     myInstance["instance"]["networks"][net_scenario] = {} 
-                myInstance["instance"]["networks"][net_scenario]["source"] = net_datacenter
+                myInstance["instance"]["networks"][net_scenario]["netmap-use"] = net_datacenter
+    if args.netmap_create:
+        if "networks" not in myInstance["instance"]:
+            myInstance["instance"]["networks"] = {}
+        for net in args.netmap_create:
+            net_comma_list = net.split(",")
+            for net_comma in net_comma_list:
+                net_tuple = net_comma.split("=")
+                if len(net_tuple) == 1:
+                    net_scenario   = net_tuple[0].strip()
+                    net_datacenter = None
+                elif len(net_tuple) == 2:
+                    net_scenario   = net_tuple[0].strip()
+                    net_datacenter = net_tuple[1].strip()
+                else:
+                    print "error at netmap-create. Expected net-scenario=net-datacenter or net-scenario. (%s)?" % net_comma
+                    return
+                if net_scenario not in myInstance["instance"]["networks"]:
+                    myInstance["instance"]["networks"][net_scenario] = {} 
+                myInstance["instance"]["networks"][net_scenario]["netmap-create"] = net_datacenter
                         
     payload_req = yaml.safe_dump(myInstance, explicit_start=True, indent=4, default_flow_style=False, tags=False, encoding='utf-8', allow_unicode=True)
     logger.debug("openmano request: %s", payload_req)
@@ -774,41 +810,180 @@ def datacenter_list(args):
         args.verbose += 1
     return _print_verbose(mano_response, args.verbose)
 
-
-def datacenter_net_action(args):
+def vim_action(args):
     #print "datacenter-net-action",args
     if args.verbose==None:
         args.verbose=0
-    if args.action=="net-list":
-        URLrequest = "http://%s:%s/openmano/datacenters/%s/networks" %(mano_host, mano_port, args.datacenter)
-        mano_response = requests.get(URLrequest)
-        if args.datacenter!=None:
-            args.verbose += 1
+    if args.datacenter != None:
+        datacenter = args.datacenter
+    elif mano_datacenter != None:
+        datacenter = mano_datacenter
     else:
-        headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
-        URLrequest = "http://%s:%s/openmano/%s/datacenters/%s/action" %(mano_host, mano_port, mano_tenant, args.datacenter)
+        print "You must provide a datacenter"
+    if args.action=="list":
+        URLrequest = "http://%s:%s/openmano/%s/vim/%s/%ss" %(mano_host, mano_port, mano_tenant, datacenter, args.item)
+        if args.name!=None:
+            args.verbose += 1
+            URLrequest += "/" + args.name
+        mano_response = requests.get(URLrequest)
+        logger.debug("openmano response: %s", mano_response.text )
+        return _print_verbose(mano_response, args.verbose)
+    elif args.action=="delete":
+        URLrequest = "http://%s:%s/openmano/%s/vim/%s/%ss/%s" %(mano_host, mano_port, mano_tenant, datacenter, args.item, args.name)
+        mano_response = requests.delete(URLrequest)
+        logger.debug("openmano response: %s", mano_response.text )
+        result = 0 if mano_response.status_code==200 else mano_response.status_code
+        content = mano_response.json()
+        #print json.dumps(content, indent=4)
+        if mano_response.status_code == 200:
+            print content['result']
+        else:
+            print content['error']['description']
+        return result
+    elif args.action=="create":
+        headers_req = {'content-type': 'application/yaml'}
+        if args.file:
+            create_dict = _load_file_or_yaml(args.file)
+            if args.item not in create_dict:
+                create_dict = {args.item: create_dict}
+        else:
+            create_dict = {args.item:{}}
+        if args.name:
+            create_dict[args.item]['name'] = args.name
+        #if args.description:
+        #    create_dict[args.item]['description'] = args.description
+        if args.item=="vim-net":
+            if args.bind_net:
+                create_dict[args.item]['bind_net'] = args.bind_net
+            if args.bind_type:
+                create_dict[args.item]['bind_type'] = args.bind_type
+            if args.shared:
+                create_dict[args.item]['shared'] = args.shared
+        if "name" not in create_dict[args.item]:
+            print "You must provide a name in the descriptor file or with the --name option"
+            return
+        payload_req = yaml.safe_dump(create_dict, explicit_start=True, indent=4, default_flow_style=False, tags=False, encoding='utf-8', allow_unicode=True)
+        logger.debug("openmano request: %s", payload_req)
+        URLrequest = "http://%s:%s/openmano/%s/vim/%s/%ss" %(mano_host, mano_port, mano_tenant, datacenter, args.item)
+        mano_response = requests.post(URLrequest, headers = headers_req, data=payload_req)
+        logger.debug("openmano response: %s", mano_response.text )
+        if args.verbose==None:
+            args.verbose=0
+        return _print_verbose(mano_response, args.verbose)
+
+
+def datacenter_net_action(args):
+    if args.action == "net-update":
+        print "This command is deprecated, use 'openmano datacenter-netmap-delete --all' and 'openmano datacenter-netmap-upload' instead!!!"
+        print
+        args.action = "netmap-delete"
+        args.netmap = None
+        args.all = True
+        r = datacenter_netmap_action(args)
+        if r == 0:
+            args.force = True
+            args.action = "netmap-upload"
+            r = datacenter_netmap_action(args)
+        return r
+
+    if args.action == "net-edit":
+        args.netmap = args.net
+        args.name = None
+    elif args.action == "net-list":
+        args.netmap = None
+    elif args.action == "net-delete":
+        args.netmap = args.net
+        args.all = False
+          
+    args.action = "netmap" + args.action[3:]
+    args.vim_name=None
+    args.vim_id=None
+    print "This command is deprecated, use 'openmano datacenter-%s' instead!!!" % args.action
+    print
+    return datacenter_netmap_action(args)
+
+def datacenter_netmap_action(args):
+    #print "datacenter_netmap_action",args
+    payload_req = None
+    if args.verbose==None:
+        args.verbose=0
+    datacenter_id = args.datacenter
+    if not datacenter_id:
+        datacenter_id = mano_datacenter
+    if not datacenter_id:
+        print "A datacenter must be specify by --datacenter option or by the OPENMANO_DATACTENTER environment variable"
+        return 1
+    headers_req = {'Accept': 'application/json', 'content-type': 'application/json'}
+    URLrequest = "http://%s:%s/openmano/%s/datacenters/%s/netmaps" %(mano_host, mano_port, mano_tenant, datacenter_id)
+        
+    if args.action=="netmap-list":
+        if args.netmap:
+            URLrequest += "/" + args.netmap
+            args.verbose += 1
+        mano_response = requests.get(URLrequest)
+            
+    elif args.action=="netmap-delete":
+        if args.netmap and args.all:
+            print "you can not use a netmap name and the option --all at the same time"
+            return 1
+        if args.netmap:
+            force_text= "Delete default netmap '%s' from datacenter '%s' (y/N)? " % (args.netmap, datacenter_id)
+            URLrequest += "/" + args.netmap
+        elif args.all: 
+            force_text="Delete all default netmaps from datacenter '%s' (y/N)? " % (datacenter_id)
+        else:
+            print "you must a netmap name or the option --all"
+            return 1
         if not args.force:
-            if args.action=="net-update":
-                r = raw_input(" Edit datacenter " + args.datacenter + " (y/N)? ")
-            elif args.action=="net-delete":
-                r = raw_input(" Delete datacenter " + args.datacenter + " net " + args.net +" (y/N)? ")
-            else: 
-                r = raw_input(" Edit datacenter " + args.datacenter + " net " + args.net +" (y/N)? ")
+            r = raw_input(force_text)
             if  len(r)>0  and r[0].lower()=="y":
                 pass
             else:
                 return 0
-        if args.action=="net-update":
-            payload={args.action : None}
+        mano_response = requests.delete(URLrequest, headers=headers_req)
+    elif args.action=="netmap-upload":
+        if not args.force:
+            r = raw_input("Create all the available networks from datacenter '%s' as default netmaps (y/N)? " % (datacenter_id))
+            if  len(r)>0  and r[0].lower()=="y":
+                pass
+            else:
+                return 0
+        URLrequest += "/upload"
+        mano_response = requests.post(URLrequest, headers=headers_req)
+    elif args.action=="netmap-edit" or args.action=="netmap-create":
+        if args.file:
+            payload = _load_file_or_yaml(args.file)
         else:
-            payload = {args.action: {'net': args.net} }
-            if args.action=="net-edit":
-                payload[args.action].update(_load_file_or_yaml(args.file))
-
+            payload = {}
+        if "netmap" not in payload:
+            payload = {"netmap": payload}
+        if args.name:
+            payload["netmap"]["name"] = args.name
+        if args.vim_id:
+            payload["netmap"]["vim_id"] = args.vim_id
+        if args.action=="netmap-create" and args.vim_name:
+            payload["netmap"]["vim_name"] = args.vim_name
         payload_req = json.dumps(payload)
         logger.debug("openmano request: %s", payload_req)
-        mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
-        logger.debug("openmano response: %s", mano_response.text )
+        
+        if args.action=="netmap-edit" and not args.force:
+            if len(payload["netmap"]) == 0:
+                print "You must supply some parameter to edit"
+                return 1
+            r = raw_input("Edit default netmap '%s' from datacenter '%s' (y/N)? " % (args.netmap, datacenter_id))
+            if  len(r)>0  and r[0].lower()=="y":
+                pass
+            else:
+                return 0
+            URLrequest += "/" + args.netmap
+            mano_response = requests.put(URLrequest, headers=headers_req, data=payload_req)
+        else: #netmap-create
+            if "vim_name" not in payload["netmap"] and "vim_id" not in payload["netmap"]:
+                print "You must supply either --vim-id or --vim-name option; or include one of them in the file descriptor"
+                return 1
+            mano_response = requests.post(URLrequest, headers=headers_req, data=payload_req)
+
+    logger.debug("openmano response: %s", mano_response.text )
     return _print_verbose(mano_response, args.verbose)
 
 def element_edit(args):
@@ -842,7 +1017,7 @@ global mano_tenant
 
 if __name__=="__main__":
     
-    mano_tenant = os.getenv('OPENMANO_TENANT',"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    mano_tenant = os.getenv('OPENMANO_TENANT', None)
     mano_host = os.getenv('OPENMANO_HOST',"localhost")
     mano_port = os.getenv('OPENMANO_PORT',"9090")
     mano_datacenter = os.getenv('OPENMANO_DATACENTER',None)
@@ -855,59 +1030,51 @@ if __name__=="__main__":
     config_parser = subparsers.add_parser('config', help="prints configuration values")
     config_parser.set_defaults(func=config)
 
-    vnf_create_parser = subparsers.add_parser('vnf-create', help="adds a vnf into the catalogue")
+    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser.add_argument('--verbose', '-v', action='count', help="increase verbosity level. Use several times")
+    parent_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
+
+    vnf_create_parser = subparsers.add_parser('vnf-create', parents=[parent_parser], help="adds a vnf into the catalogue")
     vnf_create_parser.add_argument("file", action="store", help="location of the JSON file describing the VNF").completer = FilesCompleter
     vnf_create_parser.add_argument("--name", action="store", help="name of the VNF (if it exists in the VNF descriptor, it is overwritten)")
     vnf_create_parser.add_argument("--description", action="store", help="description of the VNF (if it exists in the VNF descriptor, it is overwritten)")
     vnf_create_parser.add_argument("--image-path", action="store",  help="change image path locations (overwritten)")
-    vnf_create_parser.add_argument('--verbose', '-v', action='count')
-    vnf_create_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     vnf_create_parser.set_defaults(func=vnf_create)
 
-    vnf_list_parser = subparsers.add_parser('vnf-list', help="lists information about a vnf")
+    vnf_list_parser = subparsers.add_parser('vnf-list', parents=[parent_parser], help="lists information about a vnf")
     vnf_list_parser.add_argument("name", nargs='?', help="name of the VNF")
-    vnf_list_parser.add_argument('--verbose', '-v', action='count')
     vnf_list_parser.add_argument('--details', action="store_true", help="prints details of the VNF (internal structure)")
     #vnf_list_parser.add_argument('--descriptor', help="prints the VNF descriptor", action="store_true")
-    vnf_list_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     vnf_list_parser.set_defaults(func=vnf_list)
     
-    vnf_delete_parser = subparsers.add_parser('vnf-delete', help="deletes a vnf from the catalogue")
+    vnf_delete_parser = subparsers.add_parser('vnf-delete', parents=[parent_parser], help="deletes a vnf from the catalogue")
     vnf_delete_parser.add_argument("name", action="store", help="name or uuid of the VNF to be deleted")
     vnf_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
-    vnf_delete_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     vnf_delete_parser.set_defaults(func=vnf_delete)
     
-    scenario_create_parser = subparsers.add_parser('scenario-create', help="adds a scenario into the OPENMANO DB")
+    scenario_create_parser = subparsers.add_parser('scenario-create', parents=[parent_parser], help="adds a scenario into the OPENMANO DB")
     scenario_create_parser.add_argument("file", action="store", help="location of the YAML file describing the scenario").completer = FilesCompleter
     scenario_create_parser.add_argument("--name", action="store", help="name of the scenario (if it exists in the YAML scenario, it is overwritten)")
     scenario_create_parser.add_argument("--description", action="store", help="description of the scenario (if it exists in the YAML scenario, it is overwritten)")
-    scenario_create_parser.add_argument('--verbose', '-v', action='count')
-    scenario_create_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     scenario_create_parser.set_defaults(func=scenario_create)
 
-    scenario_list_parser = subparsers.add_parser('scenario-list', help="lists information about a scenario")
+    scenario_list_parser = subparsers.add_parser('scenario-list', parents=[parent_parser], help="lists information about a scenario")
     scenario_list_parser.add_argument("name", nargs='?', help="name of the scenario")
-    scenario_list_parser.add_argument('--verbose', '-v', action='count')
     scenario_list_parser.add_argument('--details', action="store_true", help="prints details of the scenario (internal structure)")
     #scenario_list_parser.add_argument('--descriptor', help="prints the scenario descriptor", action="store_true")
-    scenario_list_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     scenario_list_parser.set_defaults(func=scenario_list)
     
-    scenario_delete_parser = subparsers.add_parser('scenario-delete', help="deletes a scenario from the OPENMANO DB")
+    scenario_delete_parser = subparsers.add_parser('scenario-delete', parents=[parent_parser], help="deletes a scenario from the OPENMANO DB")
     scenario_delete_parser.add_argument("name", action="store", help="name or uuid of the scenario to be deleted")
     scenario_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
-    scenario_delete_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     scenario_delete_parser.set_defaults(func=scenario_delete)
 
-    scenario_deploy_parser = subparsers.add_parser('scenario-deploy', help="deploys a scenario")
+    scenario_deploy_parser = subparsers.add_parser('scenario-deploy', parents=[parent_parser], help="deploys a scenario")
     scenario_deploy_parser.add_argument("scenario", action="store", help="name or uuid of the scenario to be deployed")
     scenario_deploy_parser.add_argument("name", action="store", help="name of the instance")
     scenario_deploy_parser.add_argument("--nostart", action="store_true", help="does not start the vms, just reserve resources")
     scenario_deploy_parser.add_argument("--datacenter", action="store", help="specifies the datacenter. Needed if several datacenters are available")
     scenario_deploy_parser.add_argument("--description", action="store", help="description of the instance")
-    scenario_deploy_parser.add_argument('--verbose', '-v', action='count')
-    scenario_deploy_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     scenario_deploy_parser.set_defaults(func=scenario_deploy)
     
     scenario_deploy_parser = subparsers.add_parser('scenario-verify', help="verifies if a scenario can be deployed (deploys it and deletes it)")
@@ -915,32 +1082,28 @@ if __name__=="__main__":
     scenario_deploy_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     scenario_deploy_parser.set_defaults(func=scenario_verify)
     
-    instance_scenario_create_parser = subparsers.add_parser('instance-scenario-create', help="deploys a scenario")
+    instance_scenario_create_parser = subparsers.add_parser('instance-scenario-create', parents=[parent_parser], help="deploys a scenario")
     instance_scenario_create_parser.add_argument("file", nargs='?', help="descriptor of the instance. Must be a file or yaml/json text")
     instance_scenario_create_parser.add_argument("--scenario", action="store", help="name or uuid of the scenario to be deployed")
     instance_scenario_create_parser.add_argument("--name", action="store", help="name of the instance")
     instance_scenario_create_parser.add_argument("--nostart", action="store_true", help="does not start the vms, just reserve resources")
     instance_scenario_create_parser.add_argument("--datacenter", action="store", help="specifies the datacenter. Needed if several datacenters are available")
-    instance_scenario_create_parser.add_argument("--net-map", action="append", type=str, dest="net_map", help="indicates maps between 'scenario-network=datacenter-network'. Can be used several times")
+    instance_scenario_create_parser.add_argument("--netmap-use", action="append", type=str, dest="netmap_use", help="indicates a datacenter network to map a scenario network 'scenario-network=datacenter-network'. Can be used several times")
+    instance_scenario_create_parser.add_argument("--netmap-create", action="append", type=str, dest="netmap_create", help="the scenario network must be created at datacenter 'scenario-network[=datacenter-network-name]' . Can be used several times")
     instance_scenario_create_parser.add_argument("--description", action="store", help="description of the instance")
-    instance_scenario_create_parser.add_argument('--verbose', '-v', action='count')
-    instance_scenario_create_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     instance_scenario_create_parser.set_defaults(func=instance_create)
 
-    instance_scenario_list_parser = subparsers.add_parser('instance-scenario-list', help="lists information about a scenario instance")
+    instance_scenario_list_parser = subparsers.add_parser('instance-scenario-list', parents=[parent_parser], help="lists information about a scenario instance")
     instance_scenario_list_parser.add_argument("name", nargs='?', help="name of the scenario instance")
-    instance_scenario_list_parser.add_argument('--verbose', '-v', action='count')
     instance_scenario_list_parser.add_argument('--details', action="store_true", help="prints details of the scenario instance (internal structure)")
-    instance_scenario_list_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     instance_scenario_list_parser.set_defaults(func=instance_scenario_list)
 
-    instance_scenario_delete_parser = subparsers.add_parser('instance-scenario-delete', help="deletes a scenario instance (and deletes all VM and net instances in VIM)")
+    instance_scenario_delete_parser = subparsers.add_parser('instance-scenario-delete', parents=[parent_parser], help="deletes a scenario instance (and deletes all VM and net instances in VIM)")
     instance_scenario_delete_parser.add_argument("name", action="store", help="name or uuid of the scenario instance to be deleted")
     instance_scenario_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
-    instance_scenario_delete_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     instance_scenario_delete_parser.set_defaults(func=instance_scenario_delete)
     
-    instance_scenario_action_parser = subparsers.add_parser('instance-scenario-action', help="invoke an action over part or the whole scenario instance")
+    instance_scenario_action_parser = subparsers.add_parser('instance-scenario-action', parents=[parent_parser], help="invoke an action over part or the whole scenario instance")
     instance_scenario_action_parser.add_argument("name", action="store", help="name or uuid of the scenario instance")
     instance_scenario_action_parser.add_argument("action", action="store", type=str, \
             choices=["start","pause","resume","shutoff","shutdown","forceOff","rebuild","reboot", "console"],\
@@ -948,82 +1111,65 @@ if __name__=="__main__":
     instance_scenario_action_parser.add_argument("param", nargs='?', help="addional param of the action. e.g. console type (novnc, ...), reboot type (TODO)")
     instance_scenario_action_parser.add_argument("--vnf", action="append", help="VNF to act on (can use several entries)")
     instance_scenario_action_parser.add_argument("--vm", action="append", help="VM to act on (can use several entries)")
-    instance_scenario_action_parser.add_argument('--verbose', '-v', action='count')
-    instance_scenario_action_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     instance_scenario_action_parser.set_defaults(func=instance_scenario_action)
 
     #instance_scenario_status_parser = subparsers.add_parser('instance-scenario-status', help="show the status of a scenario instance")
     #instance_scenario_status_parser.add_argument("name", action="store", help="name or uuid of the scenario instance")
     #instance_scenario_status_parser.set_defaults(func=instance_scenario_status)
     
-    tenant_create_parser = subparsers.add_parser('tenant-create', help="creates a new tenant")
+    tenant_create_parser = subparsers.add_parser('tenant-create', parents=[parent_parser], help="creates a new tenant")
     tenant_create_parser.add_argument("name", action="store", help="name for the tenant")
     tenant_create_parser.add_argument("--description", action="store", help="description of the tenant")
-    tenant_create_parser.add_argument('--verbose', '-v', action='count')
-    tenant_create_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     tenant_create_parser.set_defaults(func=tenant_create)
 
-    tenant_delete_parser = subparsers.add_parser('tenant-delete', help="deletes a tenant from the catalogue")
+    tenant_delete_parser = subparsers.add_parser('tenant-delete', parents=[parent_parser], help="deletes a tenant from the catalogue")
     tenant_delete_parser.add_argument("name", action="store", help="name or uuid of the tenant to be deleted")
     tenant_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
-    tenant_delete_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     tenant_delete_parser.set_defaults(func=tenant_delete)
 
-    tenant_list_parser = subparsers.add_parser('tenant-list', help="lists information about a tenant")
+    tenant_list_parser = subparsers.add_parser('tenant-list', parents=[parent_parser], help="lists information about a tenant")
     tenant_list_parser.add_argument("name", nargs='?', help="name or uuid of the tenant")
-    tenant_list_parser.add_argument('--verbose', '-v', action='count')
-    tenant_list_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     tenant_list_parser.set_defaults(func=tenant_list)
 
     item_list=('tenant','datacenter') #put tenant before so that help appear in order
     for item in item_list:
-        element_edit_parser = subparsers.add_parser(item+'-edit', help="edits one "+item)
+        element_edit_parser = subparsers.add_parser(item+'-edit', parents=[parent_parser], help="edits one "+item)
         element_edit_parser.add_argument("name", help="name or uuid of the "+item)
         element_edit_parser.add_argument("file", help="json/yaml text or file with the changes").completer = FilesCompleter
         element_edit_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
-        element_edit_parser.add_argument('--verbose', '-v', action='count')
-        element_edit_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
         element_edit_parser.set_defaults(func=element_edit, element=item + 's')
 
-    datacenter_create_parser = subparsers.add_parser('datacenter-create', help="creates a new datacenter")
+    datacenter_create_parser = subparsers.add_parser('datacenter-create', parents=[parent_parser], help="creates a new datacenter")
     datacenter_create_parser.add_argument("name", action="store", help="name for the datacenter")
     datacenter_create_parser.add_argument("url", action="store", help="url for the datacenter")
     datacenter_create_parser.add_argument("--url_admin", action="store", help="url for administration for the datacenter")
     datacenter_create_parser.add_argument("--type", action="store", help="datacenter type: openstack or openvim (default)")
     datacenter_create_parser.add_argument("--config", action="store", help="aditional configuration in json/yaml format")
     datacenter_create_parser.add_argument("--description", action="store", help="description of the datacenter")
-    datacenter_create_parser.add_argument('--verbose', '-v', action='count')
-    datacenter_create_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     datacenter_create_parser.set_defaults(func=datacenter_create)
 
-    datacenter_delete_parser = subparsers.add_parser('datacenter-delete', help="deletes a datacenter from the catalogue")
+    datacenter_delete_parser = subparsers.add_parser('datacenter-delete', parents=[parent_parser], help="deletes a datacenter from the catalogue")
     datacenter_delete_parser.add_argument("name", action="store", help="name or uuid of the datacenter to be deleted")
     datacenter_delete_parser.add_argument("-f", "--force", action="store_true", help="forces deletion without asking")
-    datacenter_delete_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     datacenter_delete_parser.set_defaults(func=datacenter_delete)
 
-    datacenter_list_parser = subparsers.add_parser('datacenter-list', help="lists information about a datacenter")
+    datacenter_list_parser = subparsers.add_parser('datacenter-list', parents=[parent_parser], help="lists information about a datacenter")
     datacenter_list_parser.add_argument("name", nargs='?', help="name or uuid of the datacenter")
-    datacenter_list_parser.add_argument('--verbose', '-v', action='count')
     datacenter_list_parser.add_argument("-a", "--all", action="store_true", help="shows all datacenters, not only datacenters attached to tenant")
-    datacenter_list_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     datacenter_list_parser.set_defaults(func=datacenter_list)
 
-    datacenter_attach_parser = subparsers.add_parser('datacenter-attach', help="associates a datacenter to the operating tenant")
+    datacenter_attach_parser = subparsers.add_parser('datacenter-attach', parents=[parent_parser], help="associates a datacenter to the operating tenant")
     datacenter_attach_parser.add_argument("name", help="name or uuid of the datacenter")
     datacenter_attach_parser.add_argument('--vim-tenant-id', action='store', help="specify a datacenter tenant to use. A new one is created by default")
     datacenter_attach_parser.add_argument('--vim-tenant-name', action='store', help="specify a datacenter tenant name.")
     datacenter_attach_parser.add_argument("--user", action="store", help="user credentials for the datacenter")
     datacenter_attach_parser.add_argument("--password", action="store", help="password credentials for the datacenter")
-    datacenter_attach_parser.add_argument('--verbose', '-v', action='count')
-    datacenter_attach_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     datacenter_attach_parser.set_defaults(func=datacenter_attach)
 
-    datacenter_detach_parser = subparsers.add_parser('datacenter-detach', help="removes the association between a datacenter and the operating tenant")
+    datacenter_detach_parser = subparsers.add_parser('datacenter-detach', parents=[parent_parser], help="removes the association between a datacenter and the operating tenant")
     datacenter_detach_parser.add_argument("name", help="name or uuid of the datacenter")
-    datacenter_detach_parser.add_argument('--verbose', '-v', action='count')
-    datacenter_detach_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
     datacenter_detach_parser.set_defaults(func=datacenter_detach)
+
 
     action_dict={'net-update': 'retrieves external networks from datacenter',
                  'net-edit': 'edits an external network',
@@ -1031,7 +1177,7 @@ if __name__=="__main__":
                  'net-list': 'lists external networks from a datacenter'
                  }
     for item in action_dict:
-        datacenter_action_parser = subparsers.add_parser('datacenter-'+item, help=action_dict[item])
+        datacenter_action_parser = subparsers.add_parser('datacenter-'+item, parents=[parent_parser], help=action_dict[item])
         datacenter_action_parser.add_argument("datacenter", help="name or uuid of the datacenter")
         if item=='net-edit' or item=='net-delete':
             datacenter_action_parser.add_argument("net", help="name or uuid of the datacenter net")
@@ -1039,9 +1185,67 @@ if __name__=="__main__":
             datacenter_action_parser.add_argument("file", help="json/yaml text or file with the changes").completer = FilesCompleter
         if item!='net-list':
             datacenter_action_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
-        datacenter_action_parser.add_argument('--verbose', '-v', action='count')
-        datacenter_action_parser.add_argument('--debug', '-d', action='store_true', help="show debug information")
         datacenter_action_parser.set_defaults(func=datacenter_net_action, action=item)
+
+
+    action_dict={'netmap-upload': 'create network senario netmap base on the datacenter networks',
+                 'netmap-create': 'create a new network senario netmap',
+                 'netmap-edit':   'edit name of a network senario netmap',
+                 'netmap-delete': 'deletes a network scenario netmap (--all for clearing all)',
+                 'netmap-list':   'list/show network scenario netmaps'
+                 }
+    for item in action_dict:
+        datacenter_action_parser = subparsers.add_parser('datacenter-'+item, parents=[parent_parser], help=action_dict[item])
+        datacenter_action_parser.add_argument("--datacenter", help="name or uuid of the datacenter")
+        #if item=='net-add':
+        #    datacenter_action_parser.add_argument("net", help="name of the network")
+        if item=='netmap-delete':
+            datacenter_action_parser.add_argument("netmap", nargs='?',help="name or uuid of the datacenter netmap to delete")
+            datacenter_action_parser.add_argument("--all", action="store_true", help="delete all netmap of this datacenter")
+            datacenter_action_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+        if item=='netmap-edit':
+            datacenter_action_parser.add_argument("netmap", help="name or uuid of the datacenter netmap do edit")
+            datacenter_action_parser.add_argument("file", nargs='?', help="json/yaml text or file with the changes").completer = FilesCompleter
+            datacenter_action_parser.add_argument("--name", action='store', help="name to assign to the datacenter netmap")
+            datacenter_action_parser.add_argument('--vim-id', action='store', help="specify vim network uuid")
+            datacenter_action_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+        if item=='netmap-list':
+            datacenter_action_parser.add_argument("netmap", nargs='?',help="name or uuid of the datacenter netmap to show")
+        if item=='netmap-create':
+            datacenter_action_parser.add_argument("file", nargs='?', help="json/yaml text or file descriptor with the changes").completer = FilesCompleter
+            datacenter_action_parser.add_argument("--name", action='store', help="name to assign to the datacenter netmap, by default same as vim-name")
+            datacenter_action_parser.add_argument('--vim-id', action='store', help="specify vim network uuid")
+            datacenter_action_parser.add_argument('--vim-name', action='store', help="specify vim network name")
+        if item=='netmap-upload':
+            datacenter_action_parser.add_argument("-f","--force", action="store_true", help="do not prompt for confirmation")
+        datacenter_action_parser.set_defaults(func=datacenter_netmap_action, action=item)
+    
+    for item in ("network", "tenant"):
+        if item=="network":
+            commnad_name = 'vim-net'
+        else:
+            commnad_name = 'vim-'+item
+        vim_item_list_parser = subparsers.add_parser(commnad_name + '-list', parents=[parent_parser], help="list the vim " + item + "s")
+        vim_item_list_parser.add_argument("name", nargs='?', help="name or uuid of the " + item + "s")
+        vim_item_list_parser.add_argument("--datacenter", action="store", help="specifies the datacenter")
+        vim_item_list_parser.set_defaults(func=vim_action, item=item, action="list")
+
+        vim_item_del_parser = subparsers.add_parser(commnad_name + '-delete', parents=[parent_parser], help="list the vim " + item + "s")
+        vim_item_del_parser.add_argument("name", help="name or uuid of the " + item + "s")
+        vim_item_del_parser.add_argument("--datacenter", action="store", help="specifies the datacenter")
+        vim_item_del_parser.set_defaults(func=vim_action, item=item, action="delete")
+
+        vim_item_create_parser = subparsers.add_parser(commnad_name + '-create', parents=[parent_parser], help="create a "+item+" at vim")
+        vim_item_create_parser.add_argument("file", nargs='?', help="descriptor of the %s. Must be a file or yaml/json text" % item).completer = FilesCompleter
+        vim_item_create_parser.add_argument("--name", action="store", help="name of the %s" % item  )
+        vim_item_create_parser.add_argument("--datacenter", action="store", help="specifies the datacenter")
+        if item=="network":
+            vim_item_create_parser.add_argument("--type", action="store", help="type of network, data, ptp, bridge")
+            vim_item_create_parser.add_argument("--shared", action="store_true", help="Private or shared")
+            vim_item_create_parser.add_argument("--bind-net", action="store", help="For openvim datacenter type, net to be bind to, for vlan type, use sufix ':<vlan_tag>'")
+        else:
+            vim_item_create_parser.add_argument("--description", action="store", help="description of the %s" % item)
+        vim_item_create_parser.set_defaults(func=vim_action, item=item, action="create")
 
     argcomplete.autocomplete(main_parser)
     

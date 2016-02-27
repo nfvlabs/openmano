@@ -500,6 +500,18 @@ function downgrade_from_9(){
     echo "ALTER TABLE instance_vms CHANGE COLUMN status status ENUM('ACTIVE','INACTIVE','BUILD','ERROR','VIM_ERROR','PAUSED','SUSPENDED','DELETED') NOT NULL DEFAULT 'BUILD';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "DELETE FROM schema_version WHERE version_int='9';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
+function upgrade_to_X(){
+    echo "    upgrade database from version 0.9 to version 0.10"
+    echo "      change 'datacenter_nets'"
+    echo "ALTER TABLE datacenter_nets ADD COLUMN vim_tenant_id VARCHAR(36) NOT NULL AFTER datacenter_id, DROP INDEX name_datacenter_id, ADD UNIQUE INDEX name_datacenter_id (name, datacenter_id, vim_tenant_id);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (10, '0.10', '0.4.XCCCC', 'Change datacenter_nets', '2016-02-17');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+function downgrade_from_X(){
+    echo "    downgrade database from version 0.10 to version 0.9"
+    echo "      Change back 'datacenter_nets'"
+    echo "TODO ALTER TABLE instance_vms CHANGE COLUMN status status ENUM('ACTIVE','INACTIVE','BUILD','ERROR','VIM_ERROR','PAUSED','SUSPENDED','DELETED') NOT NULL DEFAULT 'BUILD';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "DELETE FROM schema_version WHERE version_int='10';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
 #TODO ... put funtions here
 
 

@@ -33,7 +33,8 @@ function usage(){
     echo -e "  at 'https://github.com/nfvlabs/openmano/wiki/Getting-started#how-to-use-it'"
     echo -e "  OPTIONS:"
     echo -e "    -f --force : does not prompt for confirmation"
-    echo -e "    -d --delete : delete all the created things"
+    echo -e "    -d --delete : delete vnfs,scenarios,instances / vms;"
+    echo -e "                  insert twice to delete all (datacenters,tenants / images,flavors,ports,nets,hosts)"
     echo -e "    -h --help  : shows this help"
 }
 
@@ -48,22 +49,41 @@ function is_valid_uuid(){
 
 #check correct arguments
 force=""
-delete=""
-for argument in $*
+force_="y"
+delete=0
+while [[ $# -gt 0 ]]
 do
-    [[ $argument == -h ]] || [[ $argument == --help ]]   && usage   && $_exit 0
-    [[ $argument == -f ]] || [[ $argument == --force ]]  && force=y && continue
-    [[ $argument == -d ]] || [[ $argument == --delete ]] && delete=y && continue
+    argument="$1"
+    shift
+    #short options
+    if [[ ${argument:0:1} == "-" ]] && [[ ${argument:1:1} != "-" ]] && [[ ${#argument} -ge 2 ]]
+    then
+        index=0
+        while index=$((index+1)) && [[ $index -lt ${#argument} ]]
+        do
+            [[ ${argument:$index:1} == h ]]  && usage   && $_exit 0
+            [[ ${argument:$index:1} == f ]]  && force=y && continue
+            [[ ${argument:$index:1} == d ]]  && delete=$((delete+1)) && continue
+            echo "invalid option '${argument:$index:1}'?  Type -h for help" >&2 && $_exit 1
+        done
+        continue
+    fi
+    #long options
+    [[ $argument == --help ]]   && usage   && $_exit 0
+    [[ $argument == --force ]]  && force=y && continue
+    [[ $argument == --delete ]] && delete=$((delete+1)) && continue
     echo "invalid argument '$argument'?  Type -h for help" >&2 && $_exit 1
 done
 
-if [[ $delete == y ]] 
+if [[ $delete -gt 0 ]] 
 then
-    [[ $force != y ]] && read -e -p "Proceed with openmano/openvim deletion of items? (y/N)" force
-    [[ $force != y ]] && [[ $force != yes ]] && echo "aborted!" && $_exit
-    for what in instance-scenario scenario vnf datacenter tenant
+    todelete="instance-scenario scenario vnf"
+    [[ $delete -gt 1 ]] && todelete="${todelete} datacenter tenant"
+    for what in $todelete
     do
-        echo deleting openmano ${what}s
+        [[ $force == y ]] && echo deleting openmano ${what}s
+        [[ $force != y ]] && read -e -p "Delete openmano ${what}s? (y/N)" force_
+        [[ $force_ != y ]] && [[ $force_ != yes ]] && continue
         for item in `openmano $what-list | awk '/^ *[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12} +/{print $1}'`;
         do
             echo -n "$item   "
@@ -72,9 +92,13 @@ then
         done
     done
 
-    for what in vm image flavor port net host tenant
+    todelete="vm"
+    [[ $delete -gt 1 ]] && todelete="${todelete} image flavor port net  host tenant"
+    for what in ${todelete}
     do
-        echo deleting openvim ${what}s
+        [[ $force == y ]] && echo deleting openvim ${what}s
+        [[ $force != y ]] && read -e -p "Delete openvim ${what}s? (y/N)" force_
+        [[ $force_ != y ]] && [[ $force_ != yes ]] && echo "aborted!" && $_exit
         for item in `openvim $what-list | awk '/^ *[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12} +/{print $1}'`;
         do
             echo -n "$item   "
@@ -149,7 +173,7 @@ echo "Attaching openmano tenant to the datacenter and the openvim tenant"
 openmano datacenter-attach mydc --vim-tenant-id $vimtenant || ! echo "fail" >&2 || $_exit 1 
 
 echo "Updating external nets in openmano"
-openmano datacenter-net-update -f mydc || ! echo "fail" >&2 || $_exit 1
+openmano datacenter-netmap-upload -f || ! echo "fail" >&2 || $_exit 1
 
 echo "Adding particular configuration - VNFs"
 openmano vnf-create $DIRmano/vnfs/examples/linux.yaml         || ! echo "fail" >&2 || $_exit 1
@@ -164,9 +188,9 @@ openmano scenario-create $DIRmano/scenarios/examples/complex.yaml || ! echo "fai
 openmano scenario-create $DIRmano/scenarios/examples/complex2.yaml || ! echo "fail" >&2 || $_exit 1
 
 echo "Adding particular configuration - Scenario instances"
-openmano scenario-deploy simple simple-instance   || ! echo "fail" >&2 || $_exit 1
-openmano scenario-deploy complex complex-instance || ! echo "fail" >&2 || $_exit 1
-openmano scenario-deploy complex2 complex2-instance || ! echo "fail" >&2 || $_exit 1
+openmano instance-scenario-create --scenario simple   --name simple-instance   || ! echo "fail" >&2 || $_exit 1
+openmano instance-scenario-create --scenario complex  --name complex-instance  || ! echo "fail" >&2 || $_exit 1
+openmano instance-scenario-create --scenario complex2 --name complex2-instance || ! echo "fail" >&2 || $_exit 1
 
 echo
 echo "Check virtual machines are deployed"

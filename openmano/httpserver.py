@@ -40,7 +40,8 @@ from openmano_schemas import vnfd_schema_v01, vnfd_schema_v02, \
                             nsd_schema_v01, nsd_schema_v02, scenario_edit_schema, \
                             scenario_action_schema, instance_scenario_action_schema, instance_scenario_create_schema, \
                             tenant_schema, tenant_edit_schema,\
-                            datacenter_schema, datacenter_edit_schema, datacenter_action_schema, datacenter_associate_schema
+                            datacenter_schema, datacenter_edit_schema, datacenter_action_schema, datacenter_associate_schema,\
+                            object_schema, netmap_new_schema, netmap_edit_schema
 import nfvo
 from utils import auxiliary_functions as af
 
@@ -404,8 +405,9 @@ def http_get_datacenter_id(tenant_id, datacenter_id):
     what = 'uuid' if af.check_valid_uuid(datacenter_id) else 'name'
     where_={}
     where_[what] = datacenter_id
-    select_=('uuid', 'name','vim_url', 'vim_url_admin', 'type', 'config', 'description', 'd.created_at as created_at')
+    select_=['uuid', 'name','vim_url', 'vim_url_admin', 'type', 'config', 'description', 'd.created_at as created_at']
     if tenant_id != 'any':
+        select_.append("vim_tenant_id")
         where_['td.nfvo_tenant_id']= tenant_id
         from_='datacenters as d join tenants_datacenters as td on d.uuid=td.datacenter_id'
     else:
@@ -423,6 +425,18 @@ def http_get_datacenter_id(tenant_id, datacenter_id):
     elif result>1: 
         bottle.abort( HTTP_Bad_Request, "More than one datacenter found for tenant with %s '%s'" %(what, datacenter_id) )
 
+    if tenant_id != 'any':
+        #get vim tenant info
+        result, content2 = mydb.get_table(
+                SELECT=("vim_tenant_name", "vim_tenant_id", "user"),
+                FROM="vim_tenants",
+                WHERE={"uuid": content[0]["vim_tenant_id"]},
+                ORDER_BY=("created", ) )
+        del content[0]["vim_tenant_id"]
+        if result < 0:
+            print "http_get_datacenter_id vim_tenant_info error %d %s" % (result, content2)
+            bottle.abort(-result, content2)
+        content[0]["vim_tenants"] = content2
 
     print content
     if content[0]['config'] != None:
@@ -466,27 +480,115 @@ def http_edit_datacenter_id(datacenter_id_name):
     else:
         return http_get_datacenter_id('any', datacenter_id)
 
-@bottle.route(url_base + '/datacenters/<datacenter_id>/networks', method='GET')
-def http_getnetwork_datacenter_id(datacenter_id):
+@bottle.route(url_base + '/<tenant_id>/datacenters/<datacenter_id>/networks', method='GET')  #deprecated
+@bottle.route(url_base + '/<tenant_id>/datacenters/<datacenter_id>/netmaps', method='GET')
+@bottle.route(url_base + '/<tenant_id>/datacenters/<datacenter_id>/netmaps/<netmap_id>', method='GET')
+def http_getnetmap_datacenter_id(tenant_id, datacenter_id, netmap_id=None):
     '''get datacenter networks, can use both uuid or name'''
     #obtain data
     result, datacenter_dict = mydb.get_table_by_uuid_name('datacenters', datacenter_id, "datacenter") 
     if result < 0:
         print "http_getnetwork_datacenter_id error %d %s" % (result, datacenter_dict)
         bottle.abort(-result, datacenter_dict)
-    #change_keys_http2db(content, http2db_tenant, reverse=True)
+    where_= {"datacenter_id":datacenter_dict['uuid']}
+    if netmap_id:
+        if af.check_valid_uuid(netmap_id):
+            where_["uuid"] = netmap_id
+        else:
+            where_["name"] = netmap_id
     result, content =mydb.get_table(FROM='datacenter_nets',
-                                    SELECT=('name','vim_net_id as uuid','type','multipoint','shared','description', 'created_at'),
-                                    WHERE={"datacenter_id":datacenter_dict['uuid']} ) 
+                                    SELECT=('name','vim_net_id as vim_id', 'uuid', 'type','multipoint','shared','description', 'created_at'),
+                                    WHERE=where_ ) 
     if result < 0:
         print "http_getnetwork_datacenter_id error %d %s" % (result, content)
         bottle.abort(-result, content)
 
     convert_datetime2str(content)
     af.convert_str2boolean(content, ('shared', 'multipoint') )
-    print content
-    data={'networks' : content}
+    if netmap_id and len(content)==1:
+        data={'netmap' : content[0]}
+    elif netmap_id and len(content)==0:
+        bottle.abort(HTTP_Not_Found, "No netmap found with " + " and ".join(map(lambda x: str(x[0])+": "+str(x[1]), where_.iteritems())) )
+        return 
+    else:
+        data={'netmaps' : content}
     return format_out(data)
+
+@bottle.route(url_base + '/<tenant_id>/datacenters/<datacenter_id>/netmaps', method='DELETE')
+@bottle.route(url_base + '/<tenant_id>/datacenters/<datacenter_id>/netmaps/<netmap_id>', method='DELETE')
+def http_delnetmap_datacenter_id(tenant_id, datacenter_id, netmap_id=None):
+    '''get datacenter networks, can use both uuid or name'''
+    #obtain data
+    result, datacenter_dict = mydb.get_table_by_uuid_name('datacenters', datacenter_id, "datacenter") 
+    if result < 0:
+        print "http_delnetmap_datacenter_id error %d %s" % (result, datacenter_dict)
+        bottle.abort(-result, datacenter_dict)
+    where_= {"datacenter_id":datacenter_dict['uuid']}
+    if netmap_id:
+        if af.check_valid_uuid(netmap_id):
+            where_["uuid"] = netmap_id
+        else:
+            where_["name"] = netmap_id
+    #change_keys_http2db(content, http2db_tenant, reverse=True)
+    result, content =mydb.delete_row_by_dict(FROM='datacenter_nets', WHERE= where_) 
+    if result < 0:
+        print "http_delnetmap_datacenter_id error %d %s" % (result, content)
+        bottle.abort(-result, content)
+    elif result == 0 and netmap_id :
+        bottle.abort(HTTP_Not_Found, "No netmap found with " + " and ".join(map(lambda x: str(x[0])+": "+str(x[1]), where_.iteritems())) )
+    if netmap_id:
+        return format_out({"result": "netmap %s deleted" % netmap_id})
+    else:
+        return format_out({"result": "%d netmap deleted" % result})
+
+
+@bottle.route(url_base + '/<tenant_id>/datacenters/<datacenter_id>/netmaps/upload', method='POST')
+def http_uploadnetmap_datacenter_id(tenant_id, datacenter_id):
+    result, content = nfvo.datacenter_new_netmap(mydb, tenant_id, datacenter_id, None)
+    if result < 0:
+        print "http_postnetmap_datacenter_id error %d %s" % (result, content)
+        bottle.abort(-result, content)
+    convert_datetime2str(content)
+    af.convert_str2boolean(content, ('shared', 'multipoint') )
+    print content
+    data={'netmaps' : content}
+    return format_out(data)
+
+@bottle.route(url_base + '/<tenant_id>/datacenters/<datacenter_id>/netmaps', method='POST')
+def http_postnetmap_datacenter_id(tenant_id, datacenter_id):
+    '''creates a new netmap'''
+    #parse input data
+    http_content,_ = format_in( netmap_new_schema )
+    r = af.remove_extra_items(http_content, netmap_new_schema)
+    if r is not None: print "http_action_datacenter_id: Warning: remove extra items ", r
+    
+    #obtain data, check that only one exist
+    result, content = nfvo.datacenter_new_netmap(mydb, tenant_id, datacenter_id, http_content)
+    if result < 0:
+        print "http_postnetmap_datacenter_id error %d %s" % (result, content)
+        bottle.abort(-result, content)
+    convert_datetime2str(content)
+    af.convert_str2boolean(content, ('shared', 'multipoint') )
+    print content
+    data={'netmaps' : content}
+    return format_out(data)
+
+@bottle.route(url_base + '/<tenant_id>/datacenters/<datacenter_id>/netmaps/<netmap_id>', method='PUT')
+def http_putnettmap_datacenter_id(tenant_id, datacenter_id, netmap_id):
+    '''edit a  netmap'''
+    #parse input data
+    http_content,_ = format_in( netmap_edit_schema )
+    r = af.remove_extra_items(http_content, netmap_edit_schema)
+    if r is not None: print "http_putnettmap_datacenter_id: Warning: remove extra items ", r
+    
+    #obtain data, check that only one exist
+    result, content = nfvo.datacenter_edit_netmap(mydb, tenant_id, datacenter_id, netmap_id, http_content)
+    if result < 0:
+        print "http_putnettmap_datacenter_id error %d %s" % (result, content)
+        bottle.abort(-result, content)
+    else:
+        return http_getnetmap_datacenter_id(tenant_id, datacenter_id, netmap_id)
+    
 
 @bottle.route(url_base + '/<tenant_id>/datacenters/<datacenter_id>/action', method='POST')
 def http_action_datacenter_id(tenant_id, datacenter_id):
@@ -502,7 +604,7 @@ def http_action_datacenter_id(tenant_id, datacenter_id):
         print "http_action_datacenter_id error %d %s" % (result, content)
         bottle.abort(-result, content)
     if 'net-update' in http_content:
-        return http_getnetwork_datacenter_id(datacenter_id)
+        return http_getnetmap_datacenter_id(datacenter_id)
     else:
         return format_out(content)
 
@@ -549,6 +651,36 @@ def http_deassociate_datacenters(tenant_id, datacenter_id):
     else:
         return format_out({"result":data})
        
+
+
+@bottle.route(url_base + '/<tenant_id>/vim/<datacenter_id>/<item>', method='GET')
+@bottle.route(url_base + '/<tenant_id>/vim/<datacenter_id>/<item>/<name>', method='GET')
+def http_get_vim_items(tenant_id, datacenter_id, item, name=None):
+    result, data = nfvo.vim_action_get(mydb, tenant_id, datacenter_id, item, name)
+    if result < 0:
+        print "http_get_vim_items error %d %s" % (-result, data)
+        bottle.abort(-result, data)
+    else:
+        return format_out(data)
+
+@bottle.route(url_base + '/<tenant_id>/vim/<datacenter_id>/<item>/<name>', method='DELETE')
+def http_del_vim_items(tenant_id, datacenter_id, item, name):
+    result, data = nfvo.vim_action_delete(mydb, tenant_id, datacenter_id, item, name)
+    if result < 0:
+        print "http_get_vim_items error %d %s" % (-result, data)
+        bottle.abort(-result, data)
+    else:
+        return format_out({"result":data})
+
+@bottle.route(url_base + '/<tenant_id>/vim/<datacenter_id>/<item>', method='POST')
+def http_post_vim_items(tenant_id, datacenter_id, item):
+    http_content,_ = format_in( object_schema )
+    result, data = nfvo.vim_action_create(mydb, tenant_id, datacenter_id, item, http_content)
+    if result < 0:
+        print "http_post_vim_items error %d %s" % (-result, data)
+        bottle.abort(-result, data)
+    else:
+        return format_out(data)
 
 @bottle.route(url_base + '/<tenant_id>/vnfs', method='GET')
 def http_get_vnfs(tenant_id):
@@ -860,7 +992,7 @@ def http_delete_scenario_id(tenant_id, scenario_id):
         bottle.abort(-result, data)
     else:
         #print json.dumps(data, indent=4)
-        return format_out({"result":"Scenario " + data + " deleted"})
+        return format_out({"result":"scenario " + data + " deleted"})
 
 
 @bottle.route(url_base + '/<tenant_id>/scenarios/<scenario_id>', method='PUT')
@@ -901,8 +1033,6 @@ def http_post_instances(tenant_id):
         bottle.abort(-result, data)
     else:
         return format_out(data)
-
-
 
 
 #

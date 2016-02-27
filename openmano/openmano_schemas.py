@@ -48,6 +48,8 @@ mac_schema={"type":"string", "pattern":"^[0-9a-fA-F][02468aceACE](:[0-9a-fA-F]{2
 #mac_schema={"type":"string", "pattern":"^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$"}
 ip_schema={"type":"string","pattern":"^([0-9]{1,3}.){3}[0-9]{1,3}$"}
 port_schema={"type":"integer","minimum":1,"maximum":65534}
+object_schema={"type":"object"}
+
 metadata_schema={
     "type":"object",
     "properties":{
@@ -172,6 +174,45 @@ datacenter_edit_schema = {
     "additionalProperties": False
 }
 
+
+netmap_new_schema = {
+    "title":"netmap new information schema",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type":"object",
+    "properties":{
+        "netmap":{   #delete from datacenter
+            "type":"object",
+            "properties":{
+                "name": name_schema,  #name or uuid of net to change
+                "vim_id": id_schema,
+                "vim_name": name_schema
+            },
+            "minProperties": 1,
+            "additionalProperties": False
+        },
+    },
+    "required": ["netmap"],
+    "additionalProperties": False
+}
+
+netmap_edit_schema = {
+    "title":"netmap edit information schema",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type":"object",
+    "properties":{
+        "netmap":{   #delete from datacenter
+            "type":"object",
+            "properties":{
+                "name": name_schema,  #name or uuid of net to change
+            },
+            "minProperties": 1,
+            "additionalProperties": False
+        },
+    },
+    "required": ["netmap"],
+    "additionalProperties": False
+}
+
 datacenter_action_schema = {
     "title":"datacenter action information schema",
     "$schema": "http://json-schema.org/draft-04/schema#",
@@ -196,8 +237,7 @@ datacenter_action_schema = {
             },
             "required": ["net"],
             "additionalProperties": False
-        }
-    
+        },
     },
     "minProperties": 1,
     "maxProperties": 1,
@@ -651,7 +691,8 @@ instance_scenario_create_schema = {
                         ".": {
                             "type": "object",
                             "properties":{
-                                "source": {"oneOf":[name_schema,{"type": "null"}]}, #datacenter network to use. Null if must be created as an internal net
+                                "netmap-create": {"oneOf":[name_schema,{"type": "null"}]}, #datacenter network to use. Null if must be created as an internal net
+                                "netmap-use": name_schema,
                                 "name":   name_schema,#override network name
                                 "datacenter": name_schema,
                             }

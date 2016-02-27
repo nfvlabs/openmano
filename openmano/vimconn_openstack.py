@@ -581,7 +581,7 @@ class vimconnector(vimconn.vimconnector):
                 continue
             except IOError as e:  #can not open the file
                 error_value=-vimconn.HTTP_Bad_Request
-                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0])) + " for " + image_dict['location']
                 break
             except (ksExceptions.ClientException, nvExceptions.ClientException) as e:
                 error_value=-vimconn.HTTP_Bad_Request

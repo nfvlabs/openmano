@@ -539,17 +539,19 @@ class vimconnector(vimconn.vimconnector):
             #print text
             return -vim_response.status_code,text
 
-    def new_tenant_network(self,net_name,net_type):
+    def new_tenant_network(self,net_name,net_type,public=False, **vim_specific):
         '''Adds a tenant network to VIM'''
         '''Returns the network identifier'''
+        print "vim_specific", vim_specific
         if net_type=="bridge":
             net_type="bridge_data"
         print "VIMConnector: Adding a new tenant network to VIM (tenant: " + self.tenant + ", type: " + net_type + "): "+ net_name
 
         headers_req = {'content-type': 'application/json'}
-        payload_req = '{"network":{"name": "' + net_name + '", "type": "' + net_type + '","self.tenant":"' + self.tenant + '"}}'
+        payload_req = {"name": net_name, "type": net_type, "tenant_id": self.tenant, "shared": public}
+        payload_req.update(vim_specific)
         try:
-            vim_response = requests.post(self.url+'/networks', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url+'/networks', headers = headers_req, data=json.dumps({"network": payload_req}) )
         except requests.exceptions.RequestException, e:
             print "new_tenant_network Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -575,6 +577,42 @@ class vimconnector(vimconn.vimconnector):
             #print text
             return -vim_response.status_code,text
 
+    def get_tenant_list(self, filter_dict={}):
+        '''Obtain tenants of VIM
+        Filter_dict can be:
+            name: network name
+            id: network uuid
+        Returns the network list of dictionaries
+        '''
+        print "VIMConnector.get_tenant_list: Getting tenants from VIM (filter: " + str(filter_dict) + "): "
+        filterquery=[]
+        filterquery_text=''
+        for k,v in filter_dict.iteritems():
+            filterquery.append(str(k)+'='+str(v))
+        if len(filterquery)>0:
+            filterquery_text='?'+ '&'.join(filterquery)
+        headers_req = {'content-type': 'application/json'}
+        try:
+            print self.url+'/tenants'+filterquery_text
+            vim_response = requests.get(self.url+'/tenants'+filterquery_text, headers = headers_req)
+        except requests.exceptions.RequestException, e:
+            print "get_tenant_list Exception: ", e.args
+            return -vimconn.HTTP_Not_Found, str(e.args[0])
+        print vim_response
+        #print vim_response.status_code
+        if vim_response.status_code == 200:
+            #print vim_response.json()
+            #print json.dumps(vim_response.json(), indent=4)
+            #TODO: parse input datares,http_content = self._format_in(vim_response, new_network_response_schema)
+            #print http_content
+            return vim_response.status_code, vim_response.json()["tenants"]
+        else:
+            #print vim_response.text
+            jsonerror = self._format_jsonerror(vim_response)
+            text = 'Error in VIM "%s": not possible to get tenant list. HTTP Response: %d. Error: %s' % (self.url, vim_response.status_code, jsonerror)
+            #print text
+            return -vim_response.status_code,text
+        
     def get_network_list(self, filter_dict={}):
         '''Obtain tenant networks of VIM
         Filter_dict can be:

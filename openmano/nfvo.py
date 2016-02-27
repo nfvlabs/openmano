@@ -33,7 +33,7 @@ import yaml
 import os
 from utils import auxiliary_functions as af
 from nfvo_db import HTTP_Unauthorized, HTTP_Bad_Request, HTTP_Internal_Server_Error, HTTP_Not_Found,\
-    HTTP_Conflict
+    HTTP_Conflict, HTTP_Method_Not_Allowed
 import console_proxy_thread as cli
 
 global global_config
@@ -262,7 +262,7 @@ def check_vnf_descriptor(vnf_descriptor):
         print "WARNING: The VNF descriptor already exists in the VNF repository"
     return 200, None
 
-def create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vim=False):
+def create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vim=False, return_on_error = False):
     #look if image exist
     if only_create_at_vim:
         image_mano_id = image_dict['uuid']
@@ -300,6 +300,8 @@ def create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vi
             result, image_vim_id = vim.new_tenant_image(image_dict)
             if result < 0:
                 print "Error creating image at VIM: %s." %image_vim_id
+                if return_on_error:
+                    return result, image_vim_id
                 continue
             else:
                 rollback_list.append({"where":"vim", "vim_id": vim_id, "what":"image","uuid":image_vim_id})
@@ -315,7 +317,7 @@ def create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vi
             
     return 1, image_vim_id if only_create_at_vim else image_mano_id
 
-def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_vim=False):
+def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_vim=False, return_on_error = False):
     temp_flavor_dict= {'disk':flavor_dict.get('disk',1),
             'ram':flavor_dict.get('ram'),
             'vcpus':flavor_dict.get('vcpus'),
@@ -408,17 +410,21 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
                 r,image_mano_id=create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vim=False)
                 if r<0:
                     print "Error creating device image for flavor: %s." %image_mano_id
+                    error_text = image_mano_id
                     error=True
                     break
                 image_dict["uuid"]=image_mano_id
                 r,image_vim_id=create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vim=True)
                 if r<0:
                     print "Error creating device image for flavor at VIM: %s." %image_vim_id
+                    error_text = image_vim_id
                     error=True
                     break
                 flavor_dict["extended"]["devices"][index]['imageRef']=image_vim_id
                 dev_nb += 1
         if error:
+            if return_on_error:
+                return r, error_text
             continue
         if res_db>0:
             #check that this vim_id exist in VIM, if not create
@@ -432,6 +438,8 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
         
         if result < 0:
             print "Error creating flavor at VIM %s: %s." %(vim["name"], flavor_vim_id)
+            if return_on_error:
+                return result, flavor_vim_id
             continue
         else:
             rollback_list.append({"where":"vim", "vim_id": vim_id, "what":"flavor","uuid":flavor_vim_id})
@@ -742,8 +750,6 @@ def get_hosts(mydb, nfvo_tenant_id):
     return result, datacenter
 
 def new_scenario(mydb, nfvo_tenant_id, topo):
-    # TODO: With future versions of the NSD, different code might be applied for each version.
-    # Depending on the new structure of the NSD (identified by version in topo), we should have separate code for each version, or integrated code with small changes.  
 
 #    result, vims = get_vim(mydb, nfvo_tenant_id)
 #    if result < 0:
@@ -882,29 +888,31 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
             else:
                 return -HTTP_Bad_Request, "unknown 'model' '"+ net['model'] +"' at " + error_pos
         else: #external
-            error_text = ""
-            WHERE_={}
-            if 'net_id' in net:
-                error_text += " 'net_id' " +  net['net_id']
-                WHERE_['uuid'] = net['net_id']
-            if 'model' in net:
-                error_text += " 'model' " +  net['model']
-                WHERE_['name'] = net['model']
-            if len(WHERE_) == 0:
-                return -HTTP_Bad_Request, "needed a 'net_id' or 'model' at " + error_pos
-            r,net_db = mydb.get_table(SELECT=('uuid','name','description','type','shared'),
-                FROM='datacenter_nets', WHERE=WHERE_ )
-            if r<0:
-                print "nfvo.new_scenario Error getting datacenter_nets",r,net_db
-            elif r==0:
-                print "nfvo.new_scenario Error" +error_text+ " is not present at database"
-#BEGIN remove this block if we do not want to check that external network exist at datacenter
-                return -HTTP_Bad_Request, "unknown " +error_text+ " at " + error_pos
-            elif r>1:
-                print "nfvo.new_scenario Error more than one external_network for " +error_text+ " is present at database" 
-                return -HTTP_Bad_Request, "more than one external_network for " +error_text+ "at "+ error_pos + " Concrete with 'net_id'" 
-            other_nets[k].update(net_db[0])
-#END    
+#IF we do not want to check that external network exist at datacenter
+            pass
+#ELSE    
+#             error_text = ""
+#             WHERE_={}
+#             if 'net_id' in net:
+#                 error_text += " 'net_id' " +  net['net_id']
+#                 WHERE_['uuid'] = net['net_id']
+#             if 'model' in net:
+#                 error_text += " 'model' " +  net['model']
+#                 WHERE_['name'] = net['model']
+#             if len(WHERE_) == 0:
+#                 return -HTTP_Bad_Request, "needed a 'net_id' or 'model' at " + error_pos
+#             r,net_db = mydb.get_table(SELECT=('uuid','name','description','type','shared'),
+#                 FROM='datacenter_nets', WHERE=WHERE_ )
+#             if r<0:
+#                 print "nfvo.new_scenario Error getting datacenter_nets",r,net_db
+#             elif r==0:
+#                 print "nfvo.new_scenario Error" +error_text+ " is not present at database"
+#                 return -HTTP_Bad_Request, "unknown " +error_text+ " at " + error_pos
+#             elif r>1:
+#                 print "nfvo.new_scenario Error more than one external_network for " +error_text+ " is present at database" 
+#                 return -HTTP_Bad_Request, "more than one external_network for " +error_text+ "at "+ error_pos + " Concrete with 'net_id'" 
+#             other_nets[k].update(net_db[0])
+#ENDIF    
     net_list={}
     net_nb=0  #Number of nets
     for con in conections_list:
@@ -928,14 +936,23 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
         try:
             if other_net_index>=0:
                 del con[other_net_index]
-#BEGIN remove this block if we do not want to check that external network exist at datacenter
+#IF we do not want to check that external network exist at datacenter
                 if other_nets[net_target]['external'] :
-                    type_='data' if len(con)>1 else 'ptp'  #an external net is connected to a external port, so it is ptp if only one connection is done to this net
-                    if type_=='data' and other_nets[net_target]['type']=="ptp":
-                        error_text = "Error connecting %d nodes on a not multipoint net %s" % (len(con), net_target)
-                        print "nfvo.new_scenario " + error_text
-                        return -HTTP_Bad_Request, error_text
-#END    
+                    if "name" not in other_nets[net_target]:
+                        other_nets[net_target]['name'] =  other_nets[net_target]['model']
+                    if other_nets[net_target]["type"] == "external_network":
+                        if vnfs[ con[0][0] ]['ifaces'][ con[0][1] ]["type"] == "data":
+                            other_nets[net_target]["type"] =  "data"
+                        else:
+                            other_nets[net_target]["type"] =  "bridge"
+#ELSE    
+#                 if other_nets[net_target]['external'] :
+#                     type_='data' if len(con)>1 else 'ptp'  #an external net is connected to a external port, so it is ptp if only one connection is done to this net
+#                     if type_=='data' and other_nets[net_target]['type']=="ptp":
+#                         error_text = "Error connecting %d nodes on a not multipoint net %s" % (len(con), net_target)
+#                         print "nfvo.new_scenario " + error_text
+#                         return -HTTP_Bad_Request, error_text
+#ENDIF    
                 for iface in con:
                     vnfs[ iface[0] ]['ifaces'][ iface[1] ]['net_key'] = net_target
             else:
@@ -998,7 +1015,6 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
         'nfvo_tenant_id':nfvo_tenant_id, 'name':topo['name'], 'description':topo.get('description',topo['name']) } )
     
     return r,c
-
 
 def new_scenario_v02(mydb, nfvo_tenant_id, scenario):
 
@@ -1080,7 +1096,6 @@ def new_scenario_v02(mydb, nfvo_tenant_id, scenario):
     r,c = mydb.new_scenario( scenario)
     
     return r,c
-
 
 def edit_scenario(mydb, nfvo_tenant_id, scenario_id, data):
     data["uuid"] = scenario_id
@@ -1330,7 +1345,6 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
         
     return mydb.get_instance_scenario(c)
 
-
 def create_instance(mydb, nfvo_tenant, instance_dict):
     print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
     scenario = instance_dict["scenario"]
@@ -1375,43 +1389,93 @@ def create_instance(mydb, nfvo_tenant, instance_dict):
     instance_name = instance_dict["name"]
     instance_description = instance_dict.get("description")
     try:
+    #0 check correct parameters
+        for descriptor_net in instance_dict.get("networks",{}).keys():
+            found=False
+            for scenario_net in scenarioDict['nets']:
+                if descriptor_net == scenario_net["name"]:
+                    found = True
+                    break
+            if not found:
+                raise NfvoException(-HTTP_Bad_Request, "Invalid scenario network name '%s' at instance:networks" % descriptor_net )
+        for descriptor_vnf in instance_dict.get("vnfs",{}).keys():
+            found=False
+            for scenario_vnf in scenarioDict['vnfs']:
+                if descriptor_vnf == scenario_vnf['name']:
+                    found = True
+                    break
+            if not found:
+                raise NfvoException(-HTTP_Bad_Request, "Invalid vnf name '%s' at instance:vnfs" % descriptor_vnf )
+        
     #1. Creating new nets (sce_nets) in the VIM"
         for sce_net in scenarioDict['nets']:
             descriptor_net =  instance_dict.get("networks",{}).get(sce_net["name"],{})
             net_name = descriptor_net.get("name")
-            if not net_name:
-                net_name = "%s.%s" %(instance_name, sce_net["name"])
-                net_name = net_name[:255]     #limit length
             net_type = sce_net['type']
-            if not sce_net["external"] or ("source" in descriptor_net and not descriptor_net["source"]):
-                result, network_id = myvim.new_tenant_network(net_name, net_type)
-                if result < 0:
-                    raise NfvoException(result, "Error creating vim network " + network_id)
-                sce_net['vim_id'] = network_id
-                auxNetDict['scenario'][sce_net['uuid']] = network_id
-                rollbackList.append({'what':'network','where':'vim','vim_id':datacenter_id,'uuid':network_id})
-            else:
-                #look for a network at datacenter
-                filter_={'shared': True, 'admin_state_up': True, 'status': 'ACTIVE'}
-                if descriptor_net.get("source"):
-                    filter_text = "'%s' at 'instance':'networks':'%s':'source'" % (descriptor_net["source"], sce_net["name"])
-                    if af.check_valid_uuid(descriptor_net["source"]):
-                        filter_["id"] = descriptor_net["source"]
-                    else: 
-                        filter_["name"] = descriptor_net["source"]
-                    net_name = descriptor_net.get("source")
+            lookfor_filter = {'admin_state_up': True, 'status': 'ACTIVE'} #'shared': True
+            if sce_net["external"]:
+                if not net_name:
+                    net_name = sce_net["name"] 
+                if "netmap-use" in descriptor_net or "netmap-create" in descriptor_net:
+                    create_network = False
+                    lookfor_network = False
+                    if "netmap-use" in descriptor_net:
+                        lookfor_network = True
+                        if af.check_valid_uuid(descriptor_net["netmap-use"]):
+                            filter_text = "scenario id '%s'" % descriptor_net["netmap-use"]
+                            lookfor_filter["id"] = descriptor_net["netmap-use"]
+                        else: 
+                            filter_text = "scenario name '%s'" % descriptor_net["netmap-use"]
+                            lookfor_filter["name"] = descriptor_net["netmap-use"]
+                    if "netmap-create" in descriptor_net:
+                        create_network = True
+                        net_vim_name = net_name
+                        if descriptor_net["netmap-create"]:
+                            net_vim_name= descriptor_net["netmap-create"]
+                        
+                elif sce_net['vim_id'] != None:
+                    #there is a netmap at datacenter_nets database
+                    create_network = False
+                    lookfor_network = True
+                    lookfor_filter["id"] = sce_net['vim_id']
+                    filter_text = "vim_id '%s' datacenter_netmap name '%s'. Try to reload vims with datacenter-net-update" % (sce_net['vim_id'], sce_net["name"])
+                    #look for network at datacenter and return error
                 else:
-                    filter_["name"] = sce_net["name"]
+                    #There is not a netmap, look at datacenter for a net with this name and create if not found
+                    create_network = True
+                    lookfor_network = True
+                    lookfor_filter["name"] = sce_net["name"]
+                    net_vim_name = sce_net["name"]
                     filter_text = "scenario name '%s'" % sce_net["name"]
-                result, vim_nets = myvim.get_network_list(filter_dict=filter_)
+            else:
+                if not net_name:
+                    net_name = "%s.%s" %(instance_name, sce_net["name"])
+                    net_name = net_name[:255]     #limit length
+                net_vim_name = net_name
+                create_network = True
+                lookfor_network = False
+                
+            if lookfor_network:
+                result, vim_nets = myvim.get_network_list(filter_dict=lookfor_filter)
                 if result < 0:
                     raise NfvoException(result, "Not possible to get vim network list " + vim_nets)
                 elif len(vim_nets) > 1:
                     raise NfvoException(-HTTP_Bad_Request, "More than one candidate VIM network found for " + filter_text )
                 elif len(vim_nets) == 0:
-                    raise NfvoException(-HTTP_Bad_Request, "No candidate VIM network found for " + filter_text )
-                sce_net['vim_id'] = vim_nets[0]['id']
-                auxNetDict['scenario'][sce_net['uuid']] = vim_nets[0]['id']
+                    if not create_network:
+                        raise NfvoException(-HTTP_Bad_Request, "No candidate VIM network found for " + filter_text )
+                else:
+                    sce_net['vim_id'] = vim_nets[0]['id']
+                    auxNetDict['scenario'][sce_net['uuid']] = vim_nets[0]['id']
+                    create_network = False
+            if create_network:
+                #if network is not external
+                result, network_id = myvim.new_tenant_network(net_vim_name, net_type)
+                if result < 0:
+                    raise NfvoException(result, "Error creating vim network " + network_id)
+                sce_net['vim_id'] = network_id
+                auxNetDict['scenario'][sce_net['uuid']] = network_id
+                rollbackList.append({'what':'network','where':'vim','vim_id':datacenter_id,'uuid':network_id})
         
     #2. Creating new nets (vnf internal nets) in the VIM"
         #For each vnf net, we create it and we add it to instanceNetlist.
@@ -1553,8 +1617,6 @@ def create_instance(mydb, nfvo_tenant, instance_dict):
         error_text += message
         print "create_instance: " + error_text
         return e.error_code, error_text
-        
-
 
 def delete_instance(mydb,nfvo_tenant,instance_id):
     print "Checking that the instance_id exists and getting the instance dictionary"
@@ -2007,7 +2069,8 @@ def deassociate_datacenter_to_tenant(mydb, nfvo_tenant, datacenter, vim_tenant_i
     return 200, "datacenter %s detached.%s" %(datacenter_id, warning)
 
 def datacenter_action(mydb, tenant_id, datacenter, action_dict):
-    #get datacenter info
+    #DEPRECATED
+    #get datacenter info    
     if af.check_valid_uuid(datacenter): 
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
     else:
@@ -2051,12 +2114,198 @@ def datacenter_action(mydb, tenant_id, datacenter, action_dict):
                                 WHERE={'datacenter_id':datacenter_id, what: net})
         return result, content
     elif 'net-delete' in action_dict:
-        net = action_dict['net-delete'].get('net')
+        net = action_dict['net-deelte'].get('net')
         what = 'vim_net_id' if af.check_valid_uuid(net) else 'name'
         result, content = mydb.delete_row_by_dict(FROM='datacenter_nets', 
                                 WHERE={'datacenter_id':datacenter_id, what: net})
         return result, content
+
     else:
         return -HTTP_Bad_Request, "Unknown action " + str(action_dict)
-    
 
+def datacenter_edit_netmap(mydb, tenant_id, datacenter, netmap, action_dict):
+    #get datacenter info
+    if af.check_valid_uuid(datacenter): 
+        result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
+    else:
+        result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_name=datacenter)
+    if result < 0:
+        print "nfvo.datacenter_action() error. Datacenter not found"
+        return result, vims
+    elif result>1:
+        print "nfvo.datacenter_action() error. Several datacenters found"
+        return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
+    datacenter_id=vims.keys()[0]
+
+    what = 'uuid' if af.check_valid_uuid(netmap) else 'name'
+    result, content = mydb.update_rows('datacenter_nets', action_dict['netmap'], 
+                            WHERE={'datacenter_id':datacenter_id, what: netmap})
+    return result, content
+
+def datacenter_new_netmap(mydb, tenant_id, datacenter, action_dict=None):
+    #get datacenter info
+    if af.check_valid_uuid(datacenter): 
+        result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
+    else:
+        result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_name=datacenter)
+    if result < 0:
+        print "nfvo.datacenter_new_netmap() error. Datacenter not found"
+        return result, vims
+    elif result>1:
+        print "nfvo.datacenter_new_netmap() error. Several datacenters found"
+        return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
+    datacenter_id=vims.keys()[0]
+    myvim=vims[datacenter_id]
+    filter_dict={}
+    if action_dict:
+        action_dict = action_dict["netmap"]
+        if 'vim_id' in action_dict:
+            filter_dict["id"] = action_dict['vim_id']
+        if 'vim_name' in action_dict:
+            filter_dict["name"] = action_dict['vim_name']
+    else:
+        filter_dict["shared"] = True
+    
+    result, content = myvim.get_network_list(filter_dict=filter_dict)
+    print content
+    if result != 200:
+        print " Not possible to get_network_list from VIM: %s " % (content)
+        return -HTTP_Internal_Server_Error, content
+    elif len(content)>1 and action_dict:
+        return -HTTP_Conflict, "more than two networks found, specify with vim_id"
+    elif len(content)==0: # and action_dict:
+        return -HTTP_Not_Found, "Not found a network at VIM with " + str(filter_dict)
+    net_list=[]
+    for net in content:
+        net_nfvo={'datacenter_id': datacenter_id}
+        if action_dict and "name" in action_dict:
+            net_nfvo['name']       = action_dict['name']
+        else:
+            net_nfvo['name']       = net['name']
+        #net_nfvo['description']= net['name']
+        net_nfvo['vim_net_id'] = net['id']
+        net_nfvo['type']       = net['type'][0:6] #change from ('ptp','data','bridge_data','bridge_man')  to ('bridge','data','ptp')
+        net_nfvo['shared']     = net['shared']
+        net_nfvo['multipoint'] = False if net['type']=='ptp' else True
+        result, content = mydb.new_row("datacenter_nets", net_nfvo, add_uuid=True)
+        if action_dict and result < 0 :
+            return result, content
+        if result < 0:
+            net_nfvo["status"] = "FAIL: " + content
+        else:
+            net_nfvo["status"] = "OK"
+            net_nfvo["uuid"] = content
+        net_list.append(net_nfvo)                         
+    return 200, net_list        
+
+def vim_action_get(mydb, tenant_id, datacenter, item, name):
+    #get datacenter info
+    if af.check_valid_uuid(datacenter): 
+        result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
+    else:
+        result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_name=datacenter)
+    if result < 0:
+        print "nfvo.datacenter_action() error. Datacenter not found"
+        return result, vims
+    elif result>1:
+        print "nfvo.datacenter_action() error. Several datacenters found"
+        return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
+    datacenter_id=vims.keys()[0]
+    myvim=vims[datacenter_id]
+    filter_dict={}
+    if name:
+        if af.check_valid_uuid(name):
+            filter_dict["id"] = name
+        else:
+            filter_dict["name"] = name
+    if item=="networks":
+        filter_dict['tenant_id'] = myvim["tenant"]
+        result, content = myvim.get_network_list(filter_dict=filter_dict)
+    elif item=="tenants":
+        result, content = myvim.get_tenant_list(filter_dict=filter_dict)
+    else:
+        return -HTTP_Method_Not_Allowed, item + "?" 
+    if result < 0:
+        print "vim_action Not possible to get_%s_list from VIM: %s " % (item, content)
+        return -HTTP_Internal_Server_Error, content
+    print "vim_action response ", content #update nets Change from VIM format to NFVO format
+    if name and len(content)==1:
+        return 200, {item[:-1]: content[0]}
+    elif name and len(content)==0:
+        return -HTTP_Not_Found, "No %s found with %s" % (item[:-1], " and ".join(map(lambda x: str(x[0])+": "+str(x[1]), filter_dict.iteritems())))
+    else:
+        return 200, {item: content}
+    
+def vim_action_delete(mydb, tenant_id, datacenter, item, name):
+    #get datacenter info
+    if af.check_valid_uuid(datacenter): 
+        result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
+    else:
+        result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_name=datacenter)
+    if result < 0:
+        print "nfvo.datacenter_action() error. Datacenter not found"
+        return result, vims
+    elif result>1:
+        print "nfvo.datacenter_action() error. Several datacenters found"
+        return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
+    datacenter_id=vims.keys()[0]
+    myvim=vims[datacenter_id]
+    #get uuid
+    if not af.check_valid_uuid(name):
+        result, content = vim_action_get(mydb, tenant_id, datacenter, item, name)
+        print content
+        if result < 0:
+            return result, content
+        items = content.values()[0]
+        if type(items)==list and len(items)==0:
+            return -HTTP_Not_Found, "Not found " + item
+        elif type(items)==list and len(items)>1:
+            return -HTTP_Not_Found, "Found more than one %s with this name. Use uuid." % item
+        else: # it is a dict
+            item_id = items["id"]
+            item_name = str(items.get("name"))
+        
+    if item=="networks":
+        result, content = myvim.delete_tenant_network(item_id)
+    elif item=="tenants":
+        result, content = myvim.delete_tenant(item_id)
+    else:
+        return -HTTP_Method_Not_Allowed, item + "?"    
+    if result < 0:
+        print "vim_action Not possible to delete %s %s from VIM: %s " % (item, name, content)
+        return result, content
+    return 200, "%s %s %s deleted" %( item[:-1], item_id,item_name)
+    
+def vim_action_create(mydb, tenant_id, datacenter, item, descriptor):
+    #get datacenter info
+    print "vim_action_create descriptor", descriptor
+    if af.check_valid_uuid(datacenter): 
+        result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
+    else:
+        result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_name=datacenter)
+    if result < 0:
+        print "nfvo.datacenter_action() error. Datacenter not found"
+        return result, vims
+    elif result>1:
+        print "nfvo.datacenter_action() error. Several datacenters found"
+        return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
+    datacenter_id=vims.keys()[0]
+    myvim=vims[datacenter_id]
+    
+    if item=="networks":
+        net = descriptor["network"]
+        net_name = net.pop("name")
+        net_type = net.pop("type", "bridge")
+        net_public=net.pop("shared", False)
+        result, content = myvim.new_tenant_network(net_name, net_type, net_public, **net)
+    elif item=="tenants":
+        tenant = descriptor["tenant"]
+        result, content = myvim.new_tenant(tenant["name"], tenant.get("description"))
+    else:
+        return -HTTP_Method_Not_Allowed, item + "?"    
+    if result < 0:
+        print "vim_action Not possible to create %s at VIM: %s " % (item, content)
+        return result, content
+    return vim_action_get(mydb, tenant_id, datacenter, item, content)
+
+    
