@@ -23,8 +23,8 @@
 ##
 
     Author: Alfonso Tierno
-    Version: 0.52
-    Date: Feb 2015
+    Version: 0.53
+    Date: Mar 2016
 -->
 
 <html>
@@ -76,8 +76,12 @@
 			<div id="aux1">
 				<div id="containerCommands">
 					<select title="Select DataCenter" id="datacenterCombo">
-						<option	value="TODO1">Datacenter 1</option>
-						<option value="TODO2">Datacenter 2</option>
+					<?php
+						global $db_server, $db_user, $db_passwd, $db_name, $mano_port, $mano_path, $mano_domain, $mano_tenant;
+						require 'get_tenants_datacenters.php';
+						getConfig();
+						getTenantDatacenter(true);
+					?>
 					</select>  
 				</div>
 				<div id="containerLogicalDrawing">
@@ -177,11 +181,14 @@ function dynamicResize() {
 
 
 var jsPlumbSelectedEndPoint;
+var datacenterCombo;
 
 jsPlumb.ready(function() {
 //dynamicResize();
 	var i = 0;
-
+	datacenterCombo = document.getElementById("datacenterCombo");
+	mano_tenant = datacenterCombo.options[datacenterCombo.selectedIndex].value;	
+	
 	for (var key in vnfsDefs){
 		//console.log("alf: draggable222  " + key);
  		$("#"+key).draggable(

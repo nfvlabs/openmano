@@ -23,8 +23,8 @@
 ##
 
     Author: Alfonso Tierno, Gerardo Garcia
-    Version: 0.52
-    Date: Feb 2015
+    Version: 0.53
+    Date: Mar 2016
 -->
 
 <html>
@@ -79,9 +79,13 @@
 			</div>
 			<div id="aux1">
 				<div id="containerCommands">
-					<select title="Select DataCenter" id="datacenterCombo" >
-						<option	value="TODO1">Datacenter 1</option>
-						<option value="TODO2">Datacenter 2</option>
+					<select title="Select Tenant Datacenter" id="datacenterCombo" >
+					<?php
+						global $db_server, $db_user, $db_passwd, $db_name, $mano_port, $mano_path, $mano_domain, $mano_tenant;
+						require 'get_tenants_datacenters.php';
+						getConfig();
+						getTenantDatacenter(true);
+					?>
 					</select>
 				</div>
 				<div id="containerLogicalDrawing"></div>
@@ -131,9 +135,10 @@
 	/* Preload VNF image so that VNFs interfaces are painted correctly*/
    	var cacheImage = document.createElement('img');
 	cacheImage.src = "images/big/vnf_default.png";
-		
+	var datacenterCombo;
 	
 	jsPlumb.ready(function() {
+		datacenterCombo = document.getElementById("datacenterCombo");
 		// Cancel default actions and handle files drag and drop over logicalview container
 		
 		$(".scenarioNew").show();
@@ -259,6 +264,7 @@
 	
 	function instance_action(action){
 		var yamlCmd = generateCommandAction(action);
+		mano_tenant = datacenterCombo.options[datacenterCombo.selectedIndex].value;	
 		if (yamlCmd.indexOf("Error")==0){
 			alert(yamlCmd);
 			return;
@@ -277,6 +283,7 @@
 	
 	function delete_scenario_instance(what){
 		var name = confirm("Delete " + what + " '" + selected_item.name + "' ?");
+		mano_tenant = datacenterCombo.options[datacenterCombo.selectedIndex].value;	
 		if (name == true) {
 		
 			$.ajaxSetup({headers:{'Accept':'application/yaml','Content-Type':'application/yaml'}});  //ALF
@@ -315,6 +322,7 @@
 		instance_action( {"pause": null } );
 	})
 	$("#updateButton").click(function(e){ 
+		mano_tenant = datacenterCombo.options[datacenterCombo.selectedIndex].value;	
 		$.ajaxSetup({headers:{'Accept':'application/yaml','Content-Type':'application/yaml'}});  //ALF
 		var jqxhr=$.get(mano_url_base + mano_tenant +"/instances/" + selected_item.uuid,
 			function(data,status){
@@ -371,6 +379,7 @@
 
 	$("#editButton").click(function(e){ 
 		var result = confirm("Save changes of scenario '" + selected_item.name + "' ?");
+		mano_tenant = datacenterCombo.options[datacenterCombo.selectedIndex].value;	
 		if (result == true) {
 			var name =        $("#scenario_name").text();
 			var description = $("#scenario_description").text();
@@ -445,6 +454,7 @@
 	
 	function start_reserve_scenario(start_reserve){
 		var prompt_;
+		mano_tenant = datacenterCombo.options[datacenterCombo.selectedIndex].value;	
 		if (start_reserve=="start")
 			prompt_ = "Deploying scenario '";
 		else

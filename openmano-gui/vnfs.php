@@ -64,8 +64,12 @@
 			<div id="aux1" >
             	<div id="containerCommands" > 
                 	<select title="Select DataCenter" id="datacenterCombo">
-						<option	value="TODO1">Datacenter 1</option>
-						<option value="TODO2">Datacenter 2</option>
+					<?php
+						global $db_server, $db_user, $db_passwd, $db_name, $mano_port, $mano_path, $mano_domain, $mano_tenant;
+						require 'get_tenants_datacenters.php';
+						getConfig();
+						getTenantDatacenter(true);
+					?>
 					</select>  
 				</div>
 				<div id="containerLogicalDrawing">
