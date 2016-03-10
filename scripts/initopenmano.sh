@@ -78,17 +78,26 @@ done
 if [[ $delete -gt 0 ]] 
 then
     todelete="instance-scenario scenario vnf"
-    [[ $delete -gt 1 ]] && todelete="${todelete} datacenter tenant"
+    showall=""
+    [[ $delete -gt 1 ]] && todelete="${todelete} datacenter tenant" && showall="--all"
     for what in $todelete
     do
         [[ $force == y ]] && echo deleting openmano ${what}s
         [[ $force != y ]] && read -e -p "Delete openmano ${what}s? (y/N)" force_
         [[ $force_ != y ]] && [[ $force_ != yes ]] && continue
-        for item in `openmano $what-list | awk '/^ *[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12} +/{print $1}'`;
+        for item in `openmano ${what}-list $showall | awk '/^ *[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12} +/{print $1}'`;
         do
             echo -n "$item   "
-            [[ $what != datacenter ]] || openmano $what-detach $item  || ! echo "fail" >&2 || $_exit 1
-            openmano $what-delete -f $item  || ! echo "fail" >&2 || $_exit 1
+            if [[ $what == datacenter ]]
+            then 
+                openmano ${what}-detach $showall $item  
+                openmano ${what}-delete  -f $item  || ! echo "fail" >&2 || $_exit 1
+            elif [[ $what == tenant ]]
+            then
+                openmano ${what}-delete  -f $item  || ! echo "fail" >&2 || $_exit 1
+            else
+                openmano ${what}-delete $showall -f $item  || ! echo "fail" >&2 || $_exit 1
+            fi
         done
     done
 
