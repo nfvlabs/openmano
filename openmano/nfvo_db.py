@@ -45,7 +45,7 @@ HTTP_Internal_Server_Error = 500
 
 tables_with_created_field=["datacenters","instance_nets","instance_scenarios","instance_vms","instance_vnfs",
                            "interfaces","nets","nfvo_tenants","scenarios","sce_interfaces","sce_nets",
-                           "sce_vnfs","tenants_datacenters","vim_tenants","vms","vnfs"]
+                           "sce_vnfs","tenants_datacenters","datacenter_tenants","vms","vnfs"]
 
 class nfvo_db():
     def __init__(self):
@@ -178,6 +178,22 @@ class nfvo_db():
         '''
         if data[1]==None:
             return str(data[0]) + " is Null"
+        
+#         if type(data[1]) is tuple:  #this can only happen in a WHERE_OR clause
+#             text =[]
+#             for d in data[1]:
+#                 if d==None:
+#                     text.append(str(data[0]) + " is Null")
+#                     continue
+#                 out=str(d)
+#                 if "'" not in out:
+#                     text.append( str(data[0]) + "='" + out + "'" )
+#                 elif '"' not in out:
+#                     text.append( str(data[0]) + '="' + out + '"' )
+#                 else:
+#                     text.append( str(data[0]) + '=' + json.dumps(out) )
+#             return " OR ".join(text)
+
         out=str(data[1])
         if "'" not in out:
             return str(data[0]) + "='" + out + "'"
@@ -377,7 +393,6 @@ class nfvo_db():
             'FROM': string of table name (Mandatory)
             'WHERE': dict of key:values, translated to key=value AND ... (Optional)
             'WHERE_NOT': dict of key:values, translated to key<>value AND ... (Optional)
-            'WHERE_NOTNULL': (list or tuple of items that must not be null in a where ... (Optional)
             'LIMIT': limit of number of rows (Optional)
         Return: the (number of items deleted, descriptive test) if ok; (negative, descriptive text) if error
         '''
@@ -391,11 +406,6 @@ class nfvo_db():
         if 'WHERE_NOT' in sql_dict and len(sql_dict['WHERE_NOT']) > 0: 
             w=sql_dict['WHERE_NOT']
             where_2 = " AND ".join(map(self.__tuple2db_format_where_not, w.iteritems()))
-            if len(where_)==0:   where_ = "WHERE " + where_2
-            else:                where_ = where_ + " AND " + where_2
-        if 'WHERE_NOTNULL' in sql_dict and len(sql_dict['WHERE_NOTNULL']) > 0: 
-            w=sql_dict['WHERE_NOTNULL']
-            where_2 = " AND ".join(map( lambda x: str(x) + " is not Null",  w) )
             if len(where_)==0:   where_ = "WHERE " + where_2
             else:                where_ = where_ + " AND " + where_2
         #print 'where_', where_
@@ -435,9 +445,10 @@ class nfvo_db():
         Attribute sql_dir: dictionary with the following key: value
             'SELECT':    list or tuple of fields to retrieve) (by default all)
             'FROM':      string of table name (Mandatory)
-            'WHERE':     dict of key:values, translated to key=value AND ... (Optional)
-            'WHERE_NOT': dict of key:values, translated to key<>value AND ... (Optional)
-            'WHERE_NOTNULL': list or tuple of items that must not be null in a where ... (Optional)
+            'WHERE':     dict of key:values, translated to key=value (key is null) AND ... (Optional)
+            'WHERE_NOT': dict of key:values, translated to key<>value (key is not null) AND ... (Optional)
+            'WHERE_OR': dict of key:values, translated to key=value OR ... (Optional)
+            'WHERE_AND_OR: str 'AND' or 'OR'(by default) mark the priority to 'WHERE AND (WHERE_OR)' or (WHERE) OR WHERE_OR' (Optional  
             'LIMIT':     limit of number of rows (Optional)
             'ORDER_BY':  list or tuple of fields to order
         Return: a list with dictionaries at each row
@@ -447,20 +458,29 @@ class nfvo_db():
         #print 'select_', select_
         from_  = "FROM " + str(sql_dict['FROM'])
         #print 'from_', from_
-        if 'WHERE' in sql_dict and len(sql_dict['WHERE']) > 0:
-            w=sql_dict['WHERE']
-            where_ = "WHERE " + " AND ".join(map(self.__tuple2db_format_where, w.iteritems() ))
-        else: where_ = ""
-        if 'WHERE_NOT' in sql_dict and len(sql_dict['WHERE_NOT']) > 0: 
-            w=sql_dict['WHERE_NOT']
-            where_2 = " AND ".join(map(self.__tuple2db_format_where_not, w.iteritems() ) )
-            if len(where_)==0:   where_ = "WHERE " + where_2
-            else:                where_ = where_ + " AND " + where_2
-        if 'WHERE_NOTNULL' in sql_dict and len(sql_dict['WHERE_NOTNULL']) > 0: 
-            w=sql_dict['WHERE_NOTNULL']
-            where_2 = " AND ".join(map( lambda x: str(x) + " is not Null",  w) )
-            if len(where_)==0:   where_ = "WHERE " + where_2
-            else:                where_ = where_ + " AND " + where_2
+        where_and = ""
+        where_or = ""
+        w=sql_dict.get('WHERE')
+        if w:
+            where_and = " AND ".join(map(self.__tuple2db_format_where, w.iteritems() ))
+        w=sql_dict.get('WHERE_NOT')
+        if w: 
+            if where_and: where_and += " AND "
+            where_and += " AND ".join(map(self.__tuple2db_format_where_not, w.iteritems() ) )
+        w=sql_dict.get('WHERE_OR')
+        if w:
+            where_or =  " OR ".join(map(self.__tuple2db_format_where, w.iteritems() ))
+        if where_and and where_or:
+            if sql_dict.get("WHERE_AND_OR") == "AND":
+                where_ = "WHERE " + where_and + " AND (" + where_or + ")"
+            else:
+                where_ = "WHERE (" + where_and + ") OR " + where_or
+        elif where_and and not where_or:
+            where_ = "WHERE " + where_and
+        elif not where_and and where_or:
+            where_ = "WHERE " + where_or
+        else:
+            where_ = ""
         #print 'where_', where_
         limit_ = "LIMIT " + str(sql_dict['LIMIT']) if 'LIMIT' in sql_dict else ""
         order_ = "ORDER BY " + ",".join(map(str,sql_dict['SELECT'])) if 'ORDER_BY' in sql_dict else ""
@@ -480,13 +500,15 @@ class nfvo_db():
                 r,c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
-    def get_table_by_uuid_name(self, table, uuid_name, error_item_text=None, allow_serveral=False):
+    def get_table_by_uuid_name(self, table, uuid_name, error_item_text=None, allow_serveral=False, WHERE_OR={}, WHERE_AND_OR="OR"):
         ''' Obtain One row from a table based on name or uuid.
         Attribute:
             table: string of table name
             uuid_name: name or uuid. If not uuid format is found, it is considered a name
             allow_severeral: if False return ERROR if more than one row are founded 
             error_item_text: in case of error it identifies the 'item' name for a proper output text 
+            'WHERE_OR': dict of key:values, translated to key=value OR ... (Optional)
+            'WHERE_AND_OR: str 'AND' or 'OR'(by default) mark the priority to 'WHERE AND (WHERE_OR)' or (WHERE) OR WHERE_OR' (Optional  
         Return: if allow_several==False, a dictionary with this row, or error if no item is found or more than one is found
                 if allow_several==True, a list of dictionaries with the row or rows, error if no item is found
         '''
@@ -494,7 +516,15 @@ class nfvo_db():
         if error_item_text==None:
             error_item_text = table
         what = 'uuid' if af.check_valid_uuid(uuid_name) else 'name'
-        cmd =  " SELECT * FROM " + table + " WHERE " + what +" ='"+uuid_name+"'"
+        cmd =  " SELECT * FROM %s WHERE %s='%s'" % (table, what, uuid_name)
+        if WHERE_OR:
+            where_or =  " OR ".join(map(self.__tuple2db_format_where, WHERE_OR.iteritems() ))
+            if WHERE_AND_OR == "AND":
+                cmd += " AND (" + where_or + ")"
+            else:
+                cmd += " OR " + where_or
+
+        
         for retry_ in range(0,2):
             try:
                 with self.con:
@@ -530,7 +560,7 @@ class nfvo_db():
                 r,c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
-    def new_vnf_as_a_whole(self,nfvo_tenant,vnf_name,vnf_descriptor_filename,vnf_descriptor,VNFCDict):
+    def new_vnf_as_a_whole(self,nfvo_tenant,vnf_name,vnf_descriptor,VNFCDict):
         print "Adding new vnf to the NFVO database"
         for retry_ in range(0,2):
             created_time = time.time()
@@ -539,11 +569,11 @@ class nfvo_db():
             
                     myVNFDict = {}
                     myVNFDict["name"] = vnf_name
-                    myVNFDict["path"] = vnf_descriptor_filename
-                    myVNFDict["physical"] = vnf_descriptor['vnf']['physical']
-                    myVNFDict["public"] = vnf_descriptor['vnf']['public']
+                    myVNFDict["descriptor"] = vnf_descriptor['vnf'].get('descriptor')
+                    myVNFDict["public"] = vnf_descriptor['vnf'].get('public', "false")
                     myVNFDict["description"] = vnf_descriptor['vnf']['description']
                     myVNFDict["class"] = vnf_descriptor['vnf'].get('class',"MISC")
+                    myVNFDict["tenant_id"] = vnf_descriptor['vnf'].get("tenant_id")
                     
                     result, vnf_id = self._new_vnf(myVNFDict,nfvo_tenant,created_time)
                     if result < 0:
@@ -697,10 +727,11 @@ class nfvo_db():
             try:
                 with self.con:
                     self.cur = self.con.cursor()
-                    tenant_id = scenario_dict['nfvo_tenant_id']
+                    tenant_id = scenario_dict.get('tenant_id')
                     #scenario
-                    INSERT_={'nfvo_tenant_id': tenant_id,
+                    INSERT_={'tenant_id': tenant_id,
                     'name': scenario_dict['name'],'description': scenario_dict['description']}
+                    
                     r,scenario_uuid =  self._new_row_internal('scenarios', INSERT_, tenant_id, True, None, True,created_time)
                     if r<0:
                         print 'nfvo_db.new_scenario Error inserting at table scenarios: ' + scenario_uuid
@@ -770,11 +801,19 @@ class nfvo_db():
                 with self.con:
                     self.cur = self.con.cursor()
                     #check that scenario exist
-                    tenant_id = scenario_dict['nfvo_tenant_id']
+                    tenant_id = scenario_dict.get('tenant_id')
                     scenario_uuid = scenario_dict['uuid']
-                    r,c = self.__get_rows("scenarios", scenario_uuid)
-                    if r==0:
-                        return -HTTP_Not_Found, "scenario %s not found" % scenario_uuid
+                    
+                    where_text = "uuid='%s'" % scenario_uuid
+                    if not tenant_id and tenant_id != "any":
+                        where_text += " AND (tenant_id='%s' OR public='True')" % (tenant_id)
+                    self.cur.execute("SELECT * FROM scenarios WHERE "+ where_text)
+                    self.cur.fetchall()
+                    if self.cur.rowcount==0:
+                        return -HTTP_Bad_Request, "No scenario found with this criteria " + where_text
+                    elif self.cur.rowcount>1:
+                        return -HTTP_Bad_Request, "More than one scenario found with this criteria " + where_text
+
                     #scenario
                     nodes = {}
                     topology = scenario_dict.pop("topology", None)
@@ -784,7 +823,7 @@ class nfvo_db():
                     if "name" in scenario_dict:        UPDATE_["name"] = scenario_dict["name"]
                     if "description" in scenario_dict: UPDATE_["description"] = scenario_dict["description"]
                     if len(UPDATE_)>0:
-                        WHERE_={'nfvo_tenant_id': tenant_id, 'uuid': scenario_uuid}
+                        WHERE_={'tenant_id': tenant_id, 'uuid': scenario_uuid}
                         r,c =  self.__update_rows('scenarios', UPDATE_, WHERE_, modified_time=modified_time)
                         if r<0:
                             print 'nfvo_db.edit_scenario Error ' + c + ' updating table scenarios: ' + scenario_uuid
@@ -809,7 +848,7 @@ class nfvo_db():
                 r,c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
-#     def get_instance_scenario(self, instance_scenario_id, nfvo_tenant_id=None):
+#     def get_instance_scenario(self, instance_scenario_id, tenant_id=None):
 #         '''Obtain the scenario instance information, filtering by one or serveral of the tenant, uuid or name
 #         instance_scenario_id is the uuid or the name if it is not a valid uuid format
 #         Only one scenario isntance must mutch the filtering or an error is returned
@@ -820,7 +859,7 @@ class nfvo_db():
 #                 self.cur = self.con.cursor(mdb.cursors.DictCursor)
 #                 #scenario table
 #                 where_list=[]
-#                 if nfvo_tenant_id is not None: where_list.append( "nfvo_tenant_id='" + nfvo_tenant_id +"'" )
+#                 if tenant_id is not None: where_list.append( "tenant_id='" + tenant_id +"'" )
 #                 if af.check_valid_uuid(instance_scenario_id):
 #                     where_list.append( "uuid='" + instance_scenario_id +"'" )
 #                 else:
@@ -860,7 +899,7 @@ class nfvo_db():
 #             print "nfvo_db.get_instance_scenario DB Exception %d: %s" % (e.args[0], e.args[1])
 #             return self.format_error(e)
 
-    def get_scenario(self, scenario_id, nfvo_tenant_id=None, datacenter_id=None):
+    def get_scenario(self, scenario_id, tenant_id=None, datacenter_id=None):
         '''Obtain the scenario information, filtering by one or serveral of the tenant, uuid or name
         scenario_id is the uuid or the name if it is not a valid uuid format
         if datacenter_id is provided, it supply aditional vim_id fields with the matching vim uuid 
@@ -871,14 +910,15 @@ class nfvo_db():
                 with self.con:
                     self.cur = self.con.cursor(mdb.cursors.DictCursor)
                     #scenario table
-                    where_list=[]
-                    if nfvo_tenant_id is not None: where_list.append( "nfvo_tenant_id='" + nfvo_tenant_id +"'" )
                     if af.check_valid_uuid(scenario_id):
-                        where_list.append( "uuid='" + scenario_id +"'" )
+                        where_text = "uuid='%s'" % scenario_id
                     else:
-                        where_list.append( "name='" + scenario_id +"'" )
-                    where_text = " AND ".join(where_list)
-                    self.cur.execute("SELECT * FROM scenarios WHERE "+ where_text)
+                        where_text = "name='%s'" % scenario_id
+                    if not tenant_id and tenant_id != "any":
+                        where_text += " AND (tenant_id='%s' OR public='True')" % (tenant_id)
+                    cmd = "SELECT * FROM scenarios WHERE "+ where_text
+                    print cmd
+                    self.cur.execute(cmd)
                     rows = self.cur.fetchall()
                     if self.cur.rowcount==0:
                         return -HTTP_Bad_Request, "No scenario found with this criteria " + where_text
@@ -972,7 +1012,7 @@ class nfvo_db():
                 r,c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
-    def delete_scenario(self, scenario_id, nfvo_tenant_id=None):
+    def delete_scenario(self, scenario_id, tenant_id=None):
         '''Deletes a scenario, filtering by one or several of the tenant, uuid or name
         scenario_id is the uuid or the name if it is not a valid uuid format
         Only one scenario must mutch the filtering or an error is returned
@@ -983,13 +1023,12 @@ class nfvo_db():
                     self.cur = self.con.cursor(mdb.cursors.DictCursor)
     
                     #scenario table
-                    where_list=[]
-                    if nfvo_tenant_id is not None: where_list.append( "nfvo_tenant_id='" + nfvo_tenant_id +"'" )
                     if af.check_valid_uuid(scenario_id):
-                        where_list.append( "uuid='" + scenario_id +"'" )
+                        where_text = "uuid='%s'" % scenario_id
                     else:
-                        where_list.append( "name='" + scenario_id +"'" )
-                    where_text = " AND ".join(where_list)
+                        where_text = "name='%s'" % scenario_id
+                    if not tenant_id and tenant_id != "any":
+                        where_text += " AND (tenant_id='%s' OR public='True')" % tenant_id
                     self.cur.execute("SELECT * FROM scenarios WHERE "+ where_text)
                     rows = self.cur.fetchall()
                     if self.cur.rowcount==0:
@@ -1016,10 +1055,10 @@ class nfvo_db():
                 with self.con:
                     self.cur = self.con.cursor()
                     #instance_scenarios
-                    vim_tenant_id = scenarioDict['vim_tenants_uuid']
+                    datacenter_tenant_id = scenarioDict['datacenter_tenant_id']
                     datacenter_id = scenarioDict['datacenter_id']
-                    INSERT_={'nfvo_tenant_id': tenant_id,
-                        'vim_tenant_id': vim_tenant_id,
+                    INSERT_={'tenant_id': tenant_id,
+                        'datacenter_tenant_id': datacenter_tenant_id,
                         'name': instance_scenario_name,
                         'description': instance_scenario_description,
                         'scenario_id' : scenarioDict['uuid'],
@@ -1035,7 +1074,7 @@ class nfvo_db():
                     for net in scenarioDict['nets']:
                         INSERT_={'vim_net_id': net['vim_id'], 'external': net['external'], 'instance_scenario_id':instance_uuid } #,  'type': net['type']
                         INSERT_['datacenter_id'] = net.get('datacenter_id', datacenter_id) 
-                        INSERT_['vim_tenant_id'] = net.get('vim_tenant_id', vim_tenant_id)
+                        INSERT_['datacenter_tenant_id'] = net.get('datacenter_tenant_id', datacenter_tenant_id)
                         if net.get("uuid"):
                             INSERT_['sce_net_id'] = net['uuid']
                         created_time += 0.00001
@@ -1050,7 +1089,7 @@ class nfvo_db():
                     for vnf in scenarioDict['vnfs']:
                         INSERT_={'instance_scenario_id': instance_uuid,  'vnf_id': vnf['vnf_id']  }
                         INSERT_['datacenter_id'] = vnf.get('datacenter_id', datacenter_id) 
-                        INSERT_['vim_tenant_id'] = vnf.get('vim_tenant_id', vim_tenant_id)
+                        INSERT_['datacenter_tenant_id'] = vnf.get('datacenter_tenant_id', datacenter_tenant_id)
                         if vnf.get("uuid"):
                             INSERT_['sce_vnf_id'] = vnf['uuid']
                         created_time += 0.00001
@@ -1064,7 +1103,7 @@ class nfvo_db():
                         for net in vnf['nets']:
                             INSERT_={'vim_net_id': net['vim_id'], 'external': 'false', 'instance_scenario_id':instance_uuid  } #,  'type': net['type']
                             INSERT_['datacenter_id'] = net.get('datacenter_id', datacenter_id) 
-                            INSERT_['vim_tenant_id'] = net.get('vim_tenant_id', vim_tenant_id)
+                            INSERT_['datacenter_tenant_id'] = net.get('datacenter_tenant_id', datacenter_tenant_id)
                             if net.get("uuid"):
                                 INSERT_['net_id'] = net['uuid']
                             created_time += 0.00001
@@ -1115,7 +1154,7 @@ class nfvo_db():
                 r,c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
-    def get_instance_scenario(self, instance_id, nfvo_tenant_id=None, verbose=False):
+    def get_instance_scenario(self, instance_id, tenant_id=None, verbose=False):
         '''Obtain the instance information, filtering by one or several of the tenant, uuid or name
         instance_id is the uuid or the name if it is not a valid uuid format
         Only one instance must mutch the filtering or an error is returned
@@ -1126,14 +1165,14 @@ class nfvo_db():
                     self.cur = self.con.cursor(mdb.cursors.DictCursor)
                     #instance table
                     where_list=[]
-                    if nfvo_tenant_id is not None: where_list.append( "inst.nfvo_tenant_id='" + nfvo_tenant_id +"'" )
+                    if tenant_id is not None: where_list.append( "inst.tenant_id='" + tenant_id +"'" )
                     if af.check_valid_uuid(instance_id):
                         where_list.append( "inst.uuid='" + instance_id +"'" )
                     else:
                         where_list.append( "inst.name='" + instance_id +"'" )
                     where_text = " AND ".join(where_list)
                     command = "SELECT inst.uuid as uuid,inst.name as name,inst.scenario_id as scenario_id, datacenter_id" +\
-                                " ,vim_tenant_id, s.name as scenario_name,inst.nfvo_tenant_id as nfvo_tenant_id" + \
+                                " ,datacenter_tenant_id, s.name as scenario_name,inst.tenant_id as tenant_id" + \
                                 " ,inst.description as description,inst.created_at as created_at" +\
                             " FROM instance_scenarios as inst join scenarios as s on inst.scenario_id=s.uuid"+\
                             " WHERE " + where_text
@@ -1146,7 +1185,7 @@ class nfvo_db():
                     instance_dict = rows[0]
                     
                     #instance_vnfs
-                    cmd = "SELECT iv.uuid as uuid,sv.vnf_id as vnf_id,sv.name as vnf_name, sce_vnf_id, datacenter_id, vim_tenant_id"\
+                    cmd = "SELECT iv.uuid as uuid,sv.vnf_id as vnf_id,sv.name as vnf_name, sce_vnf_id, datacenter_id, datacenter_tenant_id"\
                             " FROM instance_vnfs as iv join sce_vnfs as sv on iv.sce_vnf_id=sv.uuid" \
                             " WHERE iv.instance_scenario_id='%s'" \
                             " ORDER BY iv.created_at " % instance_dict['uuid']
@@ -1182,7 +1221,7 @@ class nfvo_db():
                     #from_text = "instance_nets join instance_scenarios on instance_nets.instance_scenario_id=instance_scenarios.uuid " + \
                     #            "join sce_nets on instance_scenarios.scenario_id=sce_nets.scenario_id"
                     #where_text = "instance_nets.instance_scenario_id='"+ instance_dict['uuid'] + "'"
-                    cmd = "SELECT uuid,vim_net_id,status,error_msg,vim_info,external, sce_net_id, net_id as vnf_net_id, datacenter_id, vim_tenant_id"\
+                    cmd = "SELECT uuid,vim_net_id,status,error_msg,vim_info,external, sce_net_id, net_id as vnf_net_id, datacenter_id, datacenter_tenant_id"\
                             " FROM instance_nets" \
                             " WHERE instance_scenario_id='%s' ORDER BY created_at" % instance_dict['uuid']
                     self.cur.execute(cmd)
@@ -1196,7 +1235,7 @@ class nfvo_db():
                 r,c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_==1: return r,c
         
-    def delete_instance_scenario(self, instance_id, nfvo_tenant_id=None):
+    def delete_instance_scenario(self, instance_id, tenant_id=None):
         '''Deletes a instance_Scenario, filtering by one or serveral of the tenant, uuid or name
         instance_id is the uuid or the name if it is not a valid uuid format
         Only one instance_scenario must mutch the filtering or an error is returned
@@ -1208,7 +1247,7 @@ class nfvo_db():
     
                     #instance table
                     where_list=[]
-                    if nfvo_tenant_id is not None: where_list.append( "nfvo_tenant_id='" + nfvo_tenant_id +"'" )
+                    if tenant_id is not None: where_list.append( "tenant_id='" + tenant_id +"'" )
                     if af.check_valid_uuid(instance_id):
                         where_list.append( "uuid='" + instance_id +"'" )
                     else:

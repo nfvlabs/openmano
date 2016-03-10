@@ -407,7 +407,7 @@ def http_get_datacenter_id(tenant_id, datacenter_id):
     where_[what] = datacenter_id
     select_=['uuid', 'name','vim_url', 'vim_url_admin', 'type', 'config', 'description', 'd.created_at as created_at']
     if tenant_id != 'any':
-        select_.append("vim_tenant_id")
+        select_.append("datacenter_tenant_id")
         where_['td.nfvo_tenant_id']= tenant_id
         from_='datacenters as d join tenants_datacenters as td on d.uuid=td.datacenter_id'
     else:
@@ -429,10 +429,10 @@ def http_get_datacenter_id(tenant_id, datacenter_id):
         #get vim tenant info
         result, content2 = mydb.get_table(
                 SELECT=("vim_tenant_name", "vim_tenant_id", "user"),
-                FROM="vim_tenants",
-                WHERE={"uuid": content[0]["vim_tenant_id"]},
+                FROM="datacenter_tenants",
+                WHERE={"uuid": content[0]["datacenter_tenant_id"]},
                 ORDER_BY=("created", ) )
-        del content[0]["vim_tenant_id"]
+        del content[0]["datacenter_tenant_id"]
         if result < 0:
             print "http_get_datacenter_id vim_tenant_info error %d %s" % (result, content2)
             bottle.abort(-result, content2)
@@ -685,19 +685,23 @@ def http_post_vim_items(tenant_id, datacenter_id, item):
 @bottle.route(url_base + '/<tenant_id>/vnfs', method='GET')
 def http_get_vnfs(tenant_id):
     #check valid tenant_id
-    if not nfvo.check_tenant(mydb, tenant_id): 
+    if tenant_id != "any" and not nfvo.check_tenant(mydb, tenant_id): 
         print 'httpserver.http_get_vnf_id() tenant %s not found' % tenant_id
         bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
         return
     select_,where_,limit_ = filter_query_string(bottle.request.query, None,
-            ('uuid','name','description','path','physical','public', "created_at") )
-    result, content = mydb.get_table(FROM='vnfs', SELECT=select_,WHERE=where_,LIMIT=limit_)
+            ('uuid','name','description','public', "tenant_id", "created_at") )
+    where_or = {}
+    if tenant_id != "any":
+        where_or["tenant_id"] = tenant_id
+        where_or["public"] = True
+    result, content = mydb.get_table(FROM='vnfs', SELECT=select_,WHERE=where_,WHERE_OR=where_or, WHERE_AND_OR="AND",LIMIT=limit_)
     if result < 0:
         print "http_get_vnfs Error", content
         bottle.abort(-result, content)
     else:
         #change_keys_http2db(content, http2db_vnf, reverse=True)
-        af.convert_str2boolean(content, ('physical','public',))
+        af.convert_str2boolean(content, ('public',))
         convert_datetime2str(content)
         data={'vnfs' : content}
         return format_out(data)
@@ -705,65 +709,13 @@ def http_get_vnfs(tenant_id):
 @bottle.route(url_base + '/<tenant_id>/vnfs/<vnf_id>', method='GET')
 def http_get_vnf_id(tenant_id,vnf_id):
     '''get vnf details, can use both uuid or name'''
-    #check valid tenant_id
-    if not nfvo.check_tenant(mydb, tenant_id): 
-        print 'httpserver.http_get_vnf_id() tenant %s not found' % tenant_id
-        bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
-        return
-    #obtain data
-    result, content = mydb.get_table_by_uuid_name('vnfs', vnf_id, "VNF") 
+    result, data = nfvo.get_vnf_id(mydb,tenant_id,vnf_id)
     if result < 0:
-        print "http_get_vnf_id error %d %s" % (result, content)
-        bottle.abort(-result, content)
+        print "http_post_vnfs error %d %s" % (-result, data)
+        bottle.abort(-result, data)
 
-    
-    vnf_id=content["uuid"]
-    filter_keys = ('uuid','name','description','path','physical','public', "created_at")
-    filtered_content = dict( (k,v) for k,v in content.iteritems() if k in filter_keys )
-    #change_keys_http2db(filtered_content, http2db_vnf, reverse=True)
-    af.convert_str2boolean(filtered_content, ('physical','public',))
-    convert_datetime2str(filtered_content)
-    data={'vnf' : filtered_content}
-    #GET VM
-    result,content = mydb.get_table(FROM='vnfs join vms on vnfs.uuid=vms.vnf_id',
-            SELECT=('vms.uuid as uuid','vms.name as name', 'vms.description as description'), 
-            WHERE={'vnfs.uuid': vnf_id} )
-    if result < 0:
-        print "http_get_vnf_id error %d %s" % (result, content)
-        bottle.abort(-result, content)
-    elif result==0:
-        print "http_get_vnf_id vnf '%s' not found" % vnf_id
-        bottle.abort(HTTP_Not_Found, "vnf %s not found" % vnf_id)
-
-    data['vnf']['VNFC'] = content
-    #GET NET
-    result,content = mydb.get_table(FROM='vnfs join nets on vnfs.uuid=nets.vnf_id', 
-                                    SELECT=('nets.uuid as uuid','nets.name as name','nets.description as description', 'nets.type as type', 'nets.multipoint as multipoint'),
-                                    WHERE={'vnfs.uuid': vnf_id} )
-    print content
-    if result < 0:
-        print "http_get_vnf_id error %d %s" % (result, content)
-        bottle.abort(-result, content)
-    else:
-        if result==0:
-            data['vnf']['nets'] = []
-        else:
-            data['vnf']['nets'] = content
-    #GET Interfaces
-    result,content = mydb.get_table(FROM='vnfs join vms on vnfs.uuid=vms.vnf_id join interfaces on vms.uuid=interfaces.vm_id',\
-                                    SELECT=('interfaces.uuid as uuid','interfaces.external_name as external_name', 'vms.name as vm_name', 'interfaces.vm_id as vm_id', \
-                                            'interfaces.internal_name as internal_name', 'interfaces.type as type', 'interfaces.vpci as vpci','interfaces.bw as bw'),\
-                                    WHERE={'vnfs.uuid': vnf_id}, 
-                                    WHERE_NOTNULL=('interfaces.external_name',) )
-    print content
-    if result < 0:
-        print "http_get_vnf_id error %d %s" % (result, content)
-        bottle.abort(-result, content)
-    else:
-        if result==0:
-            data['vnf']['external-connections'] = []
-        else:
-            data['vnf']['external-connections'] = content
+    af.convert_str2boolean(data, ('public',))
+    convert_datetime2str(data)
     return format_out(data)
 
 @bottle.route(url_base + '/<tenant_id>/vnfs', method='POST')
@@ -792,7 +744,6 @@ def http_delete_vnf_id(tenant_id,vnf_id):
     else:
         #print json.dumps(data, indent=4)
         return format_out({"result":"VNF " + data + " deleted"})
-    
 
 #@bottle.route(url_base + '/<tenant_id>/hosts/topology', method='GET')
 #@bottle.route(url_base + '/<tenant_id>/physicalview/Madrid-Alcantara', method='GET')
@@ -940,14 +891,17 @@ def http_post_scenario_action(tenant_id, scenario_id):
 def http_get_scenarios(tenant_id):
     '''get scenarios list'''
     #check valid tenant_id
-    if not nfvo.check_tenant(mydb, tenant_id): 
-        print 'httpserver.http_get_scenarios() tenant %s not found' % tenant_id
-        bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
+    if tenant_id != "any" and not nfvo.check_tenant(mydb, tenant_id): 
+        print "httpserver.http_get_scenarios() tenant '%s' not found" % tenant_id
+        bottle.abort(HTTP_Not_Found, "Tenant '%s' not found" % tenant_id)
         return
     #obtain data
-    s,w,l=filter_query_string(bottle.request.query, None, ('uuid', 'name', 'description', 'created_at', 'public'))
-    w['nfvo_tenant_id'] = tenant_id
-    result, data = mydb.get_table(SELECT=s, WHERE=w, LIMIT=l, FROM='scenarios')
+    s,w,l=filter_query_string(bottle.request.query, None, ('uuid', 'name', 'description', 'tenant_id', 'created_at', 'public'))
+    where_or={}
+    if tenant_id != "any":
+        where_or["tenant_id"] = tenant_id
+        where_or["public"] = True
+    result, data = mydb.get_table(SELECT=s, WHERE=w, WHERE_OR=where_or, WHERE_AND_OR="AND", LIMIT=l, FROM='scenarios')
     if result < 0:
         print "http_get_scenarios error %d %s" % (-result, data)
         bottle.abort(-result, data)
@@ -955,16 +909,16 @@ def http_get_scenarios(tenant_id):
         convert_datetime2str(data)
         af.convert_str2boolean(data, ('public',) )
         scenarios={'scenarios':data}
-        print json.dumps(scenarios, indent=4)
+        #print json.dumps(scenarios, indent=4)
         return format_out(scenarios)
 
 @bottle.route(url_base + '/<tenant_id>/scenarios/<scenario_id>', method='GET')
 def http_get_scenario_id(tenant_id, scenario_id):
     '''get scenario details, can use both uuid or name'''
     #check valid tenant_id
-    if not nfvo.check_tenant(mydb, tenant_id): 
-        print 'httpserver.http_get_scenario_id() tenant %s not found' % tenant_id
-        bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
+    if tenant_id != "any" and not nfvo.check_tenant(mydb, tenant_id): 
+        print "httpserver.http_get_scenario_id() tenant '%s' not found" % tenant_id
+        bottle.abort(HTTP_Not_Found, "Tenant '%s' not found" % tenant_id)
         return
     #obtain data
     result, content = mydb.get_scenario(scenario_id, tenant_id)
@@ -981,9 +935,9 @@ def http_get_scenario_id(tenant_id, scenario_id):
 def http_delete_scenario_id(tenant_id, scenario_id):
     '''delete a scenario from database, can use both uuid or name'''
     #check valid tenant_id
-    if not nfvo.check_tenant(mydb, tenant_id): 
-        print 'httpserver.http_delete_scenario_id() tenant %s not found' % tenant_id
-        bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
+    if tenant_id != "any" and not nfvo.check_tenant(mydb, tenant_id): 
+        print "httpserver.http_delete_scenario_id() tenant '%s' not found" % tenant_id
+        bottle.abort(HTTP_Not_Found, "Tenant '%s' not found" % tenant_id)
         return
     #obtain data
     result, data = mydb.delete_scenario(scenario_id, tenant_id)
@@ -1013,8 +967,6 @@ def http_put_scenario_id(tenant_id, scenario_id):
         #return format_out(data)
         return http_get_scenario_id(tenant_id,data)
 
-
-
 @bottle.route(url_base + '/<tenant_id>/instances', method='POST')
 def http_post_instances(tenant_id):
     '''take an action over a scenario'''
@@ -1034,7 +986,6 @@ def http_post_instances(tenant_id):
     else:
         return format_out(data)
 
-
 #
 # INSTANCES
 #
@@ -1042,13 +993,15 @@ def http_post_instances(tenant_id):
 def http_get_instances(tenant_id):
     '''get instance list'''
     #check valid tenant_id
-    if not nfvo.check_tenant(mydb, tenant_id): 
+    if tenant_id != "any" and not nfvo.check_tenant(mydb, tenant_id): 
         print 'httpserver.http_get_instances() tenant %s not found' % tenant_id
         bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
         return
     #obtain data
-    s,w,l=filter_query_string(bottle.request.query, None, ('uuid', 'name', 'scenario_id', 'description', 'created_at'))
-    w['nfvo_tenant_id'] = tenant_id
+    s,w,l=filter_query_string(bottle.request.query, None, ('uuid', 'name', 'scenario_id', 'tenant_id', 'description', 'created_at'))
+    where_or={}
+    if tenant_id != "any":
+        w['tenant_id'] = tenant_id
     result, data = mydb.get_table(SELECT=s, WHERE=w, LIMIT=l, FROM='instance_scenarios')
     if result < 0:
         print "http_get_instances error %d %s" % (-result, data)
@@ -1064,10 +1017,12 @@ def http_get_instances(tenant_id):
 def http_get_instance_id(tenant_id, instance_id):
     '''get instances details, can use both uuid or name'''
     #check valid tenant_id
-    if not nfvo.check_tenant(mydb, tenant_id): 
+    if tenant_id != "any" and not nfvo.check_tenant(mydb, tenant_id): 
         print 'httpserver.http_get_instance_id() tenant %s not found' % tenant_id
         bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
         return
+    if tenant_id == "any":
+        tenant_id = None
   
     #obtain data (first time is only to check that the instance exists)
     result, data = mydb.get_instance_scenario(instance_id, tenant_id, verbose=True)
@@ -1093,10 +1048,12 @@ def http_get_instance_id(tenant_id, instance_id):
 def http_delete_instance_id(tenant_id, instance_id):
     '''delete instance from VIM and from database, can use both uuid or name'''
     #check valid tenant_id
-    if not nfvo.check_tenant(mydb, tenant_id): 
+    if tenant_id != "any" and not nfvo.check_tenant(mydb, tenant_id): 
         print 'httpserver.http_delete_instance_id() tenant %s not found' % tenant_id
         bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
         return
+    if tenant_id == "any":
+        tenant_id = None
     #obtain data
     result, message = nfvo.delete_instance(mydb, tenant_id,instance_id)
     if result < 0:

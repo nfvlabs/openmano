@@ -163,6 +163,7 @@ DATABASE_TARGET_VER_NUM=0
 [ $OPENMANO_VER_NUM -ge 4003 ] && DATABASE_TARGET_VER_NUM=7   #0.4.3 =>  7
 [ $OPENMANO_VER_NUM -ge 4032 ] && DATABASE_TARGET_VER_NUM=8   #0.4.32=>  8
 [ $OPENMANO_VER_NUM -ge 4033 ] && DATABASE_TARGET_VER_NUM=9   #0.4.33=>  9
+[ $OPENMANO_VER_NUM -ge 4036 ] && DATABASE_TARGET_VER_NUM=10  #0.4.36=>  10
 #TODO ... put next versions here
 
 
@@ -500,17 +501,51 @@ function downgrade_from_9(){
     echo "ALTER TABLE instance_vms CHANGE COLUMN status status ENUM('ACTIVE','INACTIVE','BUILD','ERROR','VIM_ERROR','PAUSED','SUSPENDED','DELETED') NOT NULL DEFAULT 'BUILD';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     echo "DELETE FROM schema_version WHERE version_int='9';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
-function upgrade_to_X(){
+function upgrade_to_10(){
     echo "    upgrade database from version 0.9 to version 0.10"
+    echo "      add tenant to 'vnfs'"
+    echo "ALTER TABLE vnfs ADD COLUMN tenant_id VARCHAR(36) NULL DEFAULT NULL AFTER name, ADD CONSTRAINT FK_vnfs_nfvo_tenants FOREIGN KEY (tenant_id) REFERENCES nfvo_tenants (uuid) ON UPDATE CASCADE ON DELETE SET NULL, CHANGE COLUMN public public ENUM('true','false') NOT NULL DEFAULT 'false' AFTER physical, DROP INDEX name, DROP INDEX path, DROP COLUMN path;"  | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE scenarios DROP FOREIGN KEY FK_scenarios_nfvo_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE scenarios CHANGE COLUMN nfvo_tenant_id tenant_id VARCHAR(36) NULL DEFAULT NULL after name, ADD CONSTRAINT FK_scenarios_nfvo_tenants FOREIGN KEY (tenant_id) REFERENCES nfvo_tenants (uuid);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_scenarios DROP FOREIGN KEY FK_instance_scenarios_nfvo_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_scenarios CHANGE COLUMN nfvo_tenant_id tenant_id VARCHAR(36) NULL DEFAULT NULL after name, ADD CONSTRAINT FK_instance_scenarios_nfvo_tenants FOREIGN KEY (tenant_id) REFERENCES nfvo_tenants (uuid);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      rename 'vim_tenants' table to 'datacenter_tenants'"
+    echo "RENAME TABLE vim_tenants TO datacenter_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    for table in tenants_datacenters instance_scenarios instance_vnfs instance_nets
+    do
+        echo "ALTER TABLE ${table} DROP FOREIGN KEY FK_${table}_vim_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+        echo "ALTER TABLE ${table} ALTER vim_tenant_id DROP DEFAULT;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+        echo "ALTER TABLE ${table} CHANGE COLUMN vim_tenant_id datacenter_tenant_id VARCHAR(36) NOT NULL AFTER datacenter_id, ADD CONSTRAINT FK_${table}_datacenter_tenants FOREIGN KEY (datacenter_tenant_id) REFERENCES datacenter_tenants (uuid); " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    done    
+    echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (10, '0.10', '0.4.36', 'tenant management of vnfs,scenarios', '2016-03-08');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+
+function downgrade_from_10(){
+    echo "    downgrade database from version 0.10 to version 0.9"
+    echo "      remove tenant from 'vnfs'"
+    echo "ALTER TABLE vnfs DROP COLUMN tenant_id, DROP FOREIGN KEY FK_vnfs_nfvo_tenants, ADD UNIQUE INDEX name (name), ADD COLUMN path VARCHAR(100) NULL DEFAULT NULL COMMENT 'Path where the YAML descriptor of the VNF can be found. NULL if it is a physical network function.' AFTER name, ADD UNIQUE INDEX path (path), CHANGE COLUMN public public ENUM('true','false') NOT NULL DEFAULT 'true' AFTER physical;"  | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE scenarios DROP FOREIGN KEY FK_scenarios_nfvo_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE scenarios CHANGE COLUMN tenant_id nfvo_tenant_id VARCHAR(36) NULL DEFAULT NULL after name, ADD CONSTRAINT FK_scenarios_nfvo_tenants FOREIGN KEY (nfvo_tenant_id) REFERENCES nfvo_tenants (uuid);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_scenarios DROP FOREIGN KEY FK_instance_scenarios_nfvo_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE instance_scenarios CHANGE COLUMN tenant_id nfvo_tenant_id VARCHAR(36) NULL DEFAULT NULL after name, ADD CONSTRAINT FK_instance_scenarios_nfvo_tenants FOREIGN KEY (nfvo_tenant_id) REFERENCES nfvo_tenants (uuid);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "      rename back 'datacenter_tenants' table to 'vim_tenants'"
+    echo "RENAME TABLE datacenter_tenants TO vim_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    for table in tenants_datacenters instance_scenarios instance_vnfs instance_nets
+    do
+        echo "ALTER TABLE ${table} DROP FOREIGN KEY FK_${table}_datacenter_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+        echo "ALTER TABLE ${table} ALTER datacenter_tenant_id DROP DEFAULT;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+        echo "ALTER TABLE ${table} CHANGE COLUMN datacenter_tenant_id vim_tenant_id VARCHAR(36) NOT NULL AFTER datacenter_id, ADD CONSTRAINT FK_${table}_vim_tenants FOREIGN KEY (vim_tenant_id) REFERENCES vim_tenants (uuid); " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    done    
+    echo "DELETE FROM schema_version WHERE version_int='10';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+}
+
+function upgrade_to_X(){
     echo "      change 'datacenter_nets'"
     echo "ALTER TABLE datacenter_nets ADD COLUMN vim_tenant_id VARCHAR(36) NOT NULL AFTER datacenter_id, DROP INDEX name_datacenter_id, ADD UNIQUE INDEX name_datacenter_id (name, datacenter_id, vim_tenant_id);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
-    echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (10, '0.10', '0.4.XCCCC', 'Change datacenter_nets', '2016-02-17');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 function downgrade_from_X(){
-    echo "    downgrade database from version 0.10 to version 0.9"
     echo "      Change back 'datacenter_nets'"
-    echo "TODO ALTER TABLE instance_vms CHANGE COLUMN status status ENUM('ACTIVE','INACTIVE','BUILD','ERROR','VIM_ERROR','PAUSED','SUSPENDED','DELETED') NOT NULL DEFAULT 'BUILD';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
-    echo "DELETE FROM schema_version WHERE version_int='10';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+    echo "ALTER TABLE datacenter_nets DROP COLUMN vim_tenant_id, DROP INDEX name_datacenter_id, ADD UNIQUE INDEX name_datacenter_id (name, datacenter_id);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
 #TODO ... put funtions here
 

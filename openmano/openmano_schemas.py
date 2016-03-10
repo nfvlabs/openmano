@@ -414,6 +414,7 @@ vnfd_schema_v01 = {
                 "class": nameshort_schema,
                 "public": {"type" : "boolean"},
                 "physical": {"type" : "boolean"},
+                "tenant_id": id_schema, #only valid for admin
                 "external-connections": {"type" : "array", "items": external_connection_schema, "minItems":1},
                 "internal-connections": {"type" : "array", "items": internal_connection_schema, "minItems":1},
                 "VNFC":{"type" : "array", "items": vnfc_schema, "minItems":1}
@@ -479,6 +480,7 @@ nsd_schema_v01 = {
     "properties":{
         "name":name_schema,
         "description": description_schema,
+        "tenant_id": id_schema, #only valid for admin
         "topology":{
             "type":"object",
             "properties":{
@@ -531,6 +533,7 @@ nsd_schema_v02 = {
         "schema_version": {"type": "string", "enum": ["0.2"]},
         "name":name_schema,
         "description": description_schema,
+        "tenant_id": id_schema, #only valid for admin
         "vnfs": {
             "type":"object",
             "patternProperties":{

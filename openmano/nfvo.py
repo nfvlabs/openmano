@@ -30,7 +30,6 @@ __date__ ="$16-sep-2014 22:05:01$"
 import imp
 #import json
 import yaml
-import os
 from utils import auxiliary_functions as af
 from nfvo_db import HTTP_Unauthorized, HTTP_Bad_Request, HTTP_Internal_Server_Error, HTTP_Not_Found,\
     HTTP_Conflict, HTTP_Method_Not_Allowed
@@ -105,11 +104,11 @@ def get_vim(mydb, nfvo_tenant=None, datacenter_id=None, datacenter_name=None, vi
     if nfvo_tenant     is not None:  WHERE_dict['nfvo_tenant_id'] = nfvo_tenant
     if datacenter_id   is not None:  WHERE_dict['d.uuid']  = datacenter_id
     if datacenter_name is not None:  WHERE_dict['d.name']  = datacenter_name
-    if vim_tenant      is not None:  WHERE_dict['vt.vim_tenant_id']  = vim_tenant
+    if vim_tenant      is not None:  WHERE_dict['dt.vim_tenant_id']  = vim_tenant
     if nfvo_tenant or vim_tenant:
-        from_= 'tenants_datacenters as td join datacenters as d on td.datacenter_id=d.uuid join vim_tenants as vt on td.vim_tenant_id=vt.uuid'
+        from_= 'tenants_datacenters as td join datacenters as d on td.datacenter_id=d.uuid join datacenter_tenants as dt on td.datacenter_tenant_id=dt.uuid'
         select_ = ('type','config','d.uuid as datacenter_id', 'vim_url', 'vim_url_admin', 'd.name as datacenter_name',
-                   'vt.uuid as vim_tenants_uuid','vt.vim_tenant_name as vim_tenant_name','vt.vim_tenant_id as vim_tenant_id',
+                   'dt.uuid as datacenter_tenant_id','dt.vim_tenant_name as vim_tenant_name','dt.vim_tenant_id as vim_tenant_id',
                    'user','passwd')
     else:
         from_ = 'datacenters as d'
@@ -118,13 +117,13 @@ def get_vim(mydb, nfvo_tenant=None, datacenter_id=None, datacenter_name=None, vi
     if result < 0:
         print "nfvo.get_vim error %d %s" % (result, content)
         return result, content
-    elif result==0:
-        print "nfvo.get_vim not found a valid VIM with the input params " + str(WHERE_dict)
-        return -HTTP_Not_Found, "datacenter not found for " +  str(WHERE_dict)
+    #elif result==0:
+    #    print "nfvo.get_vim not found a valid VIM with the input params " + str(WHERE_dict)
+    #    return -HTTP_Not_Found, "datacenter not found for " +  str(WHERE_dict)
     #print content
     vim_dict={}
     for vim in content:
-        extra={'vim_tenants_uuid': vim.get('vim_tenants_uuid')}
+        extra={'datacenter_tenant_id': vim.get('datacenter_tenant_id')}
         if vim["config"] != None:
             extra.update(yaml.load(vim["config"]))
         if vim["type"] not in vimconn_imported:
@@ -256,10 +255,6 @@ def check_vnf_descriptor(vnf_descriptor):
                 return -HTTP_Bad_Request, "Error at vnf:internal-connections[name:'%s']:elements[]:local_iface_name, value '%s' does not match any interface of this VNFC" %(internal_connection["name"], port["local_iface_name"])
 
     
-    #check if the path where we should store the YAML file already exists. In that case, we should return error. 
-    vnf_filename=global_config['vnf_repository'] + "/" +vnf_descriptor['vnf']['name'] + ".vnfd"
-    if os.path.exists(vnf_filename):
-        print "WARNING: The VNF descriptor already exists in the VNF repository"
     return 200, None
 
 def create_or_use_image(mydb, vims, image_dict, rollback_list, only_create_at_vim=False, return_on_error = False):
@@ -455,11 +450,8 @@ def create_or_use_flavor(mydb, vims, flavor_dict, rollback_list, only_create_at_
             
     return 1, flavor_vim_id if only_create_at_vim else flavor_mano_id
 
-def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacenter=None,vim_tenant=None):
+def new_vnf(mydb, tenant_id, vnf_descriptor):
     global global_config
-    
-    # With future versions of the VNFD, different code might be applied for each version.
-    # Depending on the new structure of the VNFD (identified by version in vnf_descriptor), we should have separate code for each version, or integrated code with small changes.  
     
     # Step 1. Check the VNF descriptor
     result, message = check_vnf_descriptor(vnf_descriptor)
@@ -467,25 +459,33 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
         print "new_vnf error: %s" %message
         return result, message
 
-    print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
-
-    # Step 2. Get the URL of the VIM from the nfvo_tenant and the datacenter
-    result, vims = get_vim(mydb, nfvo_tenant, datacenter, None, vim_tenant)
-    if result < 0:
-        print "nfvo.new_vnf() error. Datacenter not found"
-        return result, vims
+    # Step 2. Check tenant exist
+    if tenant_id != "any":
+        if not check_tenant(mydb, tenant_id): 
+            print 'nfvo.new_vnf() tenant %s not found' % tenant_id
+            return -HTTP_Not_Found, 'Tenant %s not found' % tenant_id
+        if "tenant_id" in vnf_descriptor["vnf"]:
+            if vnf_descriptor["vnf"]["tenant_id"] != tenant_id:
+                print "nfvo.new_vnf() tenant '%s' not found" % tenant_id
+                return -HTTP_Unauthorized, "VNF can not have a different tenant owner '%s', must be '%s'" %(vnf_descriptor["vnf"]["tenant_id"], tenant_id)
+        else:
+            vnf_descriptor['vnf']['tenant_id'] = tenant_id
+        # Step 3. Get the URL of the VIM from the nfvo_tenant and the datacenter
+        result, vims = get_vim(mydb, tenant_id)
+        if result < 0:
+            print "nfvo.new_vnf() error. Datacenter not found"
+            return result, vims
+    else:
+        vims={}
 
     # Step 4. Review the descriptor and add missing  fields
     #print vnf_descriptor
-    print "Refactoring VNF descriptor with fields: description, physical (default: false), public (default: true)"
+    print "Refactoring VNF descriptor with fields: description, public (default: true)"
     vnf_name = vnf_descriptor['vnf']['name']
     vnf_descriptor['vnf']['description'] = vnf_descriptor['vnf'].get("description", vnf_name)
-    vnf_descriptor['vnf']['physical'] = vnf_descriptor['vnf'].get("physical", False)
-    vnf_descriptor['vnf']['public'] = vnf_descriptor['vnf'].get("public", True)
-    print vnf_descriptor
-    #TODO:
-    #If VNF is public, we should take it into account when creating images and flavors
-    
+    if "physical" in vnf_descriptor['vnf']:
+        del vnf_descriptor['vnf']['physical']
+    #print vnf_descriptor
     # Step 5. Check internal connections
     # TODO: to be moved to step 1????
     internal_connections=vnf_descriptor['vnf'].get('internal_connections',[])
@@ -582,17 +582,13 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
         _, message = rollback(mydb, vims, rollback_list)
         return -HTTP_Internal_Server_Error, "Error while creating a VNF. KeyError " + str(e) + "." + message
         
-    # Step 7. Storing the VNF in the repository
-    print "Storing YAML file of the VNF"
-    vnf_descriptor_filename = global_config['vnf_repository'] + "/" + vnf_name + ".vnfd"
-    if not os.path.exists(vnf_descriptor_filename):
-        f = file(vnf_descriptor_filename, "w")
-        yaml.safe_dump(vnf_descriptor, stream=f, indent=4, explicit_start=True, default_flow_style=False) 
-        f.close()
+    # Step 7. Storing the VNF descriptor in the repository
+    if "descriptor" not in vnf_descriptor["vnf"]:
+        vnf_descriptor["vnf"]["descriptor"] = yaml.safe_dump(vnf_descriptor, indent=4, explicit_start=True, default_flow_style=False)
 
     # Step 8. Adding the VNF to the NFVO DB
     try:
-        result, vnf_id = mydb.new_vnf_as_a_whole(nfvo_tenant,vnf_name,vnf_descriptor_filename,vnf_descriptor,VNFCDict)
+        result, vnf_id = mydb.new_vnf_as_a_whole(tenant_id,vnf_name,vnf_descriptor,VNFCDict)
     except KeyError as e:
         print "Error while creating a VNF. KeyError: " + str(e)
         _, message = rollback(mydb, vims, rollback_list)
@@ -604,23 +600,94 @@ def new_vnf(mydb,nfvo_tenant,vnf_descriptor,public=True,physical=False,datacente
 
     return 200,vnf_id
 
-def delete_vnf(mydb,nfvo_tenant,vnf_id,datacenter=None,vim_tenant=None):
-    print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
-    result, vims = get_vim(mydb, nfvo_tenant, datacenter, None, vim_tenant)
+def get_vnf_id(mydb, tenant_id, vnf_id):
+    #check valid tenant_id
+    if tenant_id != "any" and not check_tenant(mydb, tenant_id): 
+        print 'nfvo.get_vnf_id() tenant %s not found' % tenant_id
+        return -HTTP_Not_Found, "Tenant '%s' not found" % tenant_id
+    #obtain data
+    where_or = {}
+    if tenant_id != "any":
+        where_or["tenant_id"] = tenant_id
+        where_or["public"] = True
+    result, content = mydb.get_table_by_uuid_name('vnfs', vnf_id, "VNF", WHERE_OR=where_or, WHERE_AND_OR="AND") 
     if result < 0:
-        return -HTTP_Unauthorized, "delete_vnf error. No VIM found for tenant '%s'" % nfvo_tenant
+        print "nfvo.get_vnf_id() error %d %s" % (result, content)
+        return (result, content)
 
-    print "Checking if it is a valid uuid and, if not, getting the uuid assuming that the name was provided"
-    if not af.check_valid_uuid(vnf_id):
-        result,vnf_id = mydb.get_uuid_from_name('vnfs',vnf_id)
-        if result==0:
-            return -HTTP_Not_Found, "No VNF found for tenant. '%s'" % vnf_id
-        elif result<0:
-            return -HTTP_Internal_Server_Error, "delete_vnf error. Internal server error. %s" % vnf_id
-        elif result>1:
-            return -HTTP_Not_Found, "Found more than one VNF. %s" % vnf_id 
     
-    print "Getting the list of flavors and tenants of the VNF"
+    vnf_id=content["uuid"]
+    filter_keys = ('uuid','name','description','public', "tenant_id", "created_at")
+    filtered_content = dict( (k,v) for k,v in content.iteritems() if k in filter_keys )
+    #change_keys_http2db(filtered_content, http2db_vnf, reverse=True)
+    data={'vnf' : filtered_content}
+    #GET VM
+    result,content = mydb.get_table(FROM='vnfs join vms on vnfs.uuid=vms.vnf_id',
+            SELECT=('vms.uuid as uuid','vms.name as name', 'vms.description as description'), 
+            WHERE={'vnfs.uuid': vnf_id} )
+    if result < 0:
+        print "nfvo.get_vnf_id error %d %s" % (result, content)
+        return (result, content)
+    elif result==0:
+        print "nfvo.get_vnf_id vnf '%s' not found" % vnf_id
+        return (-HTTP_Not_Found, "vnf %s not found" % vnf_id)
+
+    data['vnf']['VNFC'] = content
+    #GET NET
+    result,content = mydb.get_table(FROM='vnfs join nets on vnfs.uuid=nets.vnf_id', 
+                                    SELECT=('nets.uuid as uuid','nets.name as name','nets.description as description', 'nets.type as type', 'nets.multipoint as multipoint'),
+                                    WHERE={'vnfs.uuid': vnf_id} )
+    if result < 0:
+        print "nfvo.get_vnf_id error %d %s" % (result, content)
+        return (result, content)
+    else:
+        if result==0:
+            data['vnf']['nets'] = []
+        else:
+            data['vnf']['nets'] = content
+    #GET Interfaces
+    result,content = mydb.get_table(FROM='vnfs join vms on vnfs.uuid=vms.vnf_id join interfaces on vms.uuid=interfaces.vm_id',\
+                                    SELECT=('interfaces.uuid as uuid','interfaces.external_name as external_name', 'vms.name as vm_name', 'interfaces.vm_id as vm_id', \
+                                            'interfaces.internal_name as internal_name', 'interfaces.type as type', 'interfaces.vpci as vpci','interfaces.bw as bw'),\
+                                    WHERE={'vnfs.uuid': vnf_id}, 
+                                    WHERE_NOT={'interfaces.external_name': None} )
+    #print content
+    if result < 0:
+        print "nfvo.get_vnf_id error %d %s" % (result, content)
+        return (result, content)
+    else:
+        if result==0:
+            data['vnf']['external-connections'] = []
+        else:
+            data['vnf']['external-connections'] = content
+    return 0, data
+
+
+def delete_vnf(mydb,tenant_id,vnf_id,datacenter=None,vim_tenant=None):
+    # Check tenant exist
+    if tenant_id != "any":
+        if not check_tenant(mydb, tenant_id): 
+            print 'nfvo.delete_vnf() tenant %s not found' % tenant_id
+            return -HTTP_Not_Found, 'Tenant %s not found' % tenant_id
+        # Get the URL of the VIM from the nfvo_tenant and the datacenter
+        result, vims = get_vim(mydb, tenant_id)
+        if result < 0:
+            print "nfvo.delete_vnf() error. Datacenter not found"
+            return result, vims
+    else:
+        vims={}
+
+    # Checking if it is a valid uuid and, if not, getting the uuid assuming that the name was provided"
+    where_or = {}
+    if tenant_id != "any":
+        where_or["tenant_id"] = tenant_id
+        where_or["public"] = True
+    result, content = mydb.get_table_by_uuid_name('vnfs', vnf_id, "VNF", WHERE_OR=where_or, WHERE_AND_OR="AND") 
+    if result < 0: 
+        return result, content
+    vnf_id = content["uuid"]
+    
+    # "Getting the list of flavors and tenants of the VNF"
     result,flavorList = get_flavorlist(mydb, vnf_id) 
     if result < 0:
         print flavorList
@@ -634,7 +701,7 @@ def delete_vnf(mydb,nfvo_tenant,vnf_id,datacenter=None,vim_tenant=None):
     elif result==0:
         print "delete_vnf error. No images found for the VNF id '%s'" % vnf_id
     
-    result, content = mydb.delete_row('vnfs', vnf_id, nfvo_tenant)
+    result, content = mydb.delete_row('vnfs', vnf_id, tenant_id)
     if result == 0:
         return -HTTP_Not_Found, content
     elif result >0:
@@ -711,6 +778,8 @@ def get_hosts_info(mydb, nfvo_tenant_id, datacenter_name=None):
     result, vims = get_vim(mydb, nfvo_tenant_id, None, datacenter_name)
     if result < 0:
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % datacenter_name
     myvim = vims.values()[0]
     result,servers =  myvim.get_hosts_info()
     if result < 0:
@@ -722,6 +791,8 @@ def get_hosts(mydb, nfvo_tenant_id):
     result, vims = get_vim(mydb, nfvo_tenant_id)
     if result < 0:
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "No datacenter found"
     myvim = vims.values()[0]
     result,hosts =  myvim.get_hosts()
     if result < 0:
@@ -749,12 +820,23 @@ def get_hosts(mydb, nfvo_tenant_id):
     #print 'datacenters '+ json.dumps(datacenter, indent=4)
     return result, datacenter
 
-def new_scenario(mydb, nfvo_tenant_id, topo):
+def new_scenario(mydb, tenant_id, topo):
 
-#    result, vims = get_vim(mydb, nfvo_tenant_id)
+#    result, vims = get_vim(mydb, tenant_id)
 #    if result < 0:
 #        return result, vims
 #1: parse input
+    if tenant_id != "any":
+        if not check_tenant(mydb, tenant_id): 
+            print 'nfvo.new_scenario() tenant %s not found' % tenant_id
+            return -HTTP_Not_Found, 'Tenant %s not found' % tenant_id
+        if "tenant_id" in topo:
+            if topo["tenant_id"] != tenant_id:
+                print "nfvo.new_scenario() tenant '%s' not found" % tenant_id
+                return -HTTP_Unauthorized, "VNF can not have a different tenant owner '%s', must be '%s'" %(topo["tenant_id"], tenant_id)
+    else:
+        tenant_id=None
+
 #1.1: get VNFs and external_networks (other_nets). 
     vnfs={}
     other_nets={}  #external_networks, bridge_networks and data_networkds
@@ -798,7 +880,7 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
         #get external interfaces
         r,ext_ifaces = mydb.get_table(SELECT=('external_name as name','i.uuid as iface_uuid', 'i.type as type'), 
             FROM='vnfs join vms on vnfs.uuid=vms.vnf_id join interfaces as i on vms.uuid=i.vm_id', 
-            WHERE={'vnfs.uuid':vnf['uuid']}, WHERE_NOTNULL=('external_name',) )
+            WHERE={'vnfs.uuid':vnf['uuid']}, WHERE_NOT={'external_name':None} )
         if r<0:
             print "nfvo.new_scenario Error getting external interfaces of vnfs",r,ext_ifaces
             return -HTTP_Internal_Server_Error, "Error getting external interfaces of vnfs: " + ext_ifaces
@@ -1012,11 +1094,22 @@ def new_scenario(mydb, nfvo_tenant_id, topo):
 
 #2: insert scenario. filling tables scenarios,sce_vnfs,sce_interfaces,sce_nets
     r,c = mydb.new_scenario( { 'vnfs':vnfs, 'nets':net_list,
-        'nfvo_tenant_id':nfvo_tenant_id, 'name':topo['name'], 'description':topo.get('description',topo['name']) } )
+        'tenant_id':tenant_id, 'name':topo['name'], 'description':topo.get('description',topo['name']) } )
     
     return r,c
 
-def new_scenario_v02(mydb, nfvo_tenant_id, scenario):
+def new_scenario_v02(mydb, tenant_id, scenario):
+
+    if tenant_id != "any":
+        if not check_tenant(mydb, tenant_id): 
+            print 'nfvo.new_scenario_v02() tenant %s not found' % tenant_id
+            return -HTTP_Not_Found, 'Tenant %s not found' % tenant_id
+        if "tenant_id" in scenario:
+            if scenario["tenant_id"] != tenant_id:
+                print "nfvo.new_scenario_v02() tenant '%s' not found" % tenant_id
+                return -HTTP_Unauthorized, "VNF can not have a different tenant owner '%s', must be '%s'" %(scenario["tenant_id"], tenant_id)
+    else:
+        tenant_id=None
 
 #1: Check that VNF are present at database table vnfs and update content into scenario dict
     for name,vnf in scenario["vnfs"].iteritems():
@@ -1046,7 +1139,7 @@ def new_scenario_v02(mydb, nfvo_tenant_id, scenario):
         #get external interfaces
         r,ext_ifaces = mydb.get_table(SELECT=('external_name as name','i.uuid as iface_uuid', 'i.type as type'), 
             FROM='vnfs join vms on vnfs.uuid=vms.vnf_id join interfaces as i on vms.uuid=i.vm_id', 
-            WHERE={'vnfs.uuid':vnf['uuid']}, WHERE_NOTNULL=('external_name',) )
+            WHERE={'vnfs.uuid':vnf['uuid']}, WHERE_NOT={'external_name':None} )
         if r<0:
             print "nfvo.new_scenario Error getting external interfaces of vnfs",r,ext_ifaces
             return -HTTP_Internal_Server_Error, "Error getting external interfaces of vnfs: " + ext_ifaces
@@ -1092,18 +1185,18 @@ def new_scenario_v02(mydb, nfvo_tenant_id, scenario):
 
 #3: insert at database
     scenario["nets"] = scenario["networks"]
-    scenario['nfvo_tenant_id'] = nfvo_tenant_id
+    scenario['tenant_id'] = tenant_id
     r,c = mydb.new_scenario( scenario)
     
     return r,c
 
-def edit_scenario(mydb, nfvo_tenant_id, scenario_id, data):
+def edit_scenario(mydb, tenant_id, scenario_id, data):
     data["uuid"] = scenario_id
-    data["nfvo_tenant_id"] = nfvo_tenant_id
+    data["tenant_id"] = tenant_id
     r,c = mydb.edit_scenario( data )
     return r,c
 
-def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, instance_scenario_description, datacenter=None,vim_tenant=None, startvms=True):
+def start_scenario(mydb, tenant_id, scenario_id, instance_scenario_name, instance_scenario_description, datacenter=None,vim_tenant=None, startvms=True):
     print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
     datacenter_id = None
     datacenter_name=None
@@ -1112,10 +1205,12 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
             datacenter_id = datacenter
         else:
             datacenter_name = datacenter
-    result, vims = get_vim(mydb, nfvo_tenant, datacenter_id, datacenter_name, vim_tenant)
+    result, vims = get_vim(mydb, tenant_id, datacenter_id, datacenter_name, vim_tenant)
     if result < 0:
         print "start_scenario error. Datacenter not found"
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % str(datacenter)
     elif result > 1:
         print "start_scenario error. Several datacenters available, you must concrete"
         return -HTTP_Bad_Request, "Several datacenters available, you must concrete"
@@ -1123,11 +1218,11 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
     myvim_tenant = myvim['tenant']
     datacenter_id = myvim['id']
     datacenter_name = myvim['name']
-    vim_tenants_uuid = myvim['config']['vim_tenants_uuid']
+    datacenter_tenant_id = myvim['config']['datacenter_tenant_id']
     rollbackList=[]
 
     print "Checking that the scenario_id exists and getting the scenario dictionary"
-    result, scenarioDict = mydb.get_scenario(scenario_id, nfvo_tenant, datacenter_id)
+    result, scenarioDict = mydb.get_scenario(scenario_id, tenant_id, datacenter_id)
     if result < 0:
         print "start_scenario error. Error interacting with NFVO DB"
         return result, scenarioDict
@@ -1135,7 +1230,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
         print "start_scenario error. Scenario not found"
         return result, scenarioDict
 
-    scenarioDict['vim_tenant_id'] = myvim_tenant
+    scenarioDict['datacenter_tenant_id'] = datacenter_tenant_id
     scenarioDict['datacenter_id'] = datacenter_id
     print '================scenarioDict======================='
     #print json.dumps(scenarioDict, indent=4)
@@ -1332,10 +1427,9 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
                             break
     
     print "==================Deployment done=========="
-    scenarioDict['vim_tenants_uuid'] = vim_tenants_uuid
     print yaml.safe_dump(scenarioDict, indent=4, default_flow_style=False)
     #r,c = mydb.new_instance_scenario_as_a_whole(nfvo_tenant,scenarioDict['name'],scenarioDict)
-    result,c = mydb.new_instance_scenario_as_a_whole(nfvo_tenant,instance_scenario_name, instance_scenario_description, scenarioDict)
+    result,c = mydb.new_instance_scenario_as_a_whole(tenant_id,instance_scenario_name, instance_scenario_description, scenarioDict)
     if result <0:
         error_text = c + "." 
         _, message = rollback(mydb, vims, rollbackList)
@@ -1345,7 +1439,7 @@ def start_scenario(mydb, nfvo_tenant, scenario_id, instance_scenario_name, insta
         
     return mydb.get_instance_scenario(c)
 
-def create_instance(mydb, nfvo_tenant, instance_dict):
+def create_instance(mydb, tenant_id, instance_dict):
     print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
     scenario = instance_dict["scenario"]
     datacenter_id = None
@@ -1356,22 +1450,24 @@ def create_instance(mydb, nfvo_tenant, instance_dict):
             datacenter_id = datacenter
         else:
             datacenter_name = datacenter
-    result, vims = get_vim(mydb, nfvo_tenant, datacenter_id, datacenter_name, vim_tenant=None)
+    result, vims = get_vim(mydb, tenant_id, datacenter_id, datacenter_name, vim_tenant=None)
     if result < 0:
         print "start_scenario error. Datacenter not found"
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % str(datacenter)
     elif result > 1:
         print "start_scenario error. Several datacenters available, you must concrete"
         return -HTTP_Bad_Request, "Several datacenters available, you must concrete"
     myvim = vims.values()[0]
-    myvim_tenant = myvim['tenant']
+    #myvim_tenant = myvim['tenant']
     datacenter_id = myvim['id']
     datacenter_name = myvim['name']
-    vim_tenants_uuid = myvim['config']['vim_tenants_uuid']
+    datacenter_tenant_id = myvim['config']['datacenter_tenant_id']
     rollbackList=[]
 
     print "Checking that the scenario exists and getting the scenario dictionary"
-    result, scenarioDict = mydb.get_scenario(scenario, nfvo_tenant, datacenter_id)
+    result, scenarioDict = mydb.get_scenario(scenario, tenant_id, datacenter_id)
     if result < 0:
         print "start_scenario error. Error interacting with NFVO DB"
         return result, scenarioDict
@@ -1379,7 +1475,7 @@ def create_instance(mydb, nfvo_tenant, instance_dict):
         print "start_scenario error. Scenario not found"
         return result, scenarioDict
 
-    scenarioDict['vim_tenant_id'] = myvim_tenant
+    scenarioDict['datacenter_tenant_id'] = datacenter_tenant_id
     scenarioDict['datacenter_id'] = datacenter_id
     
     auxNetDict = {}   #Auxiliar dictionary. First key:'scenario' or sce_vnf uuid. Second Key: uuid of the net/sce_net. Value: vim_net_id
@@ -1603,10 +1699,9 @@ def create_instance(mydb, nfvo_tenant, instance_dict):
                                 iface["vim_id"]=net["vim_id"]
                                 break
         print "==================Deployment done=========="
-        scenarioDict['vim_tenants_uuid'] = vim_tenants_uuid
         print yaml.safe_dump(scenarioDict, indent=4, default_flow_style=False)
         #r,c = mydb.new_instance_scenario_as_a_whole(nfvo_tenant,scenarioDict['name'],scenarioDict)
-        result,c = mydb.new_instance_scenario_as_a_whole(nfvo_tenant,instance_name, instance_description, scenarioDict)
+        result,c = mydb.new_instance_scenario_as_a_whole(tenant_id,instance_name, instance_description, scenarioDict)
         if result <0:
             raise NfvoException(result, c)
             
@@ -1618,9 +1713,9 @@ def create_instance(mydb, nfvo_tenant, instance_dict):
         print "create_instance: " + error_text
         return e.error_code, error_text
 
-def delete_instance(mydb,nfvo_tenant,instance_id):
+def delete_instance(mydb, tenant_id, instance_id):
     print "Checking that the instance_id exists and getting the instance dictionary"
-    result, instanceDict = mydb.get_instance_scenario(instance_id, nfvo_tenant)
+    result, instanceDict = mydb.get_instance_scenario(instance_id, tenant_id)
     if result < 0:
         print "nfvo.delete_instance() error. Error getting info from database"
         return result, instanceDict
@@ -1628,28 +1723,37 @@ def delete_instance(mydb,nfvo_tenant,instance_id):
         print "delete_instance error. Instance not found"
         return result, instanceDict
     print yaml.safe_dump(instanceDict, indent=4, default_flow_style=False)
-    
+    tenant_id = instanceDict["tenant_id"]
     print "Checking that nfvo_tenant_id exists and getting the VIM URI and the VIM tenant_id"
-    result, vims = get_vim(mydb, nfvo_tenant, instanceDict['datacenter_id'])
+    result, vims = get_vim(mydb, tenant_id, instanceDict['datacenter_id'])
     if result < 0:
         print "nfvo.delete_instance() error. Datacenter not found"
         return result, vims
-    myvim = vims.values()[0]
+    elif result == 0:
+        print "!!!!!! nfvo.delete_instance() datacenter not found!!!!" 
+        myvim = None
+    else:
+        myvim = vims.values()[0]
     
     
     #1. Delete from Database
 
     #result,c = mydb.delete_row('instance_scenarios', instance_id, nfvo_tenant)
-    result,c = mydb.delete_instance_scenario(instance_id, nfvo_tenant)
+    result,c = mydb.delete_instance_scenario(instance_id, tenant_id)
     if result<0:
         return result, c
 
     #2. delete from VIM
-    error_msg = ""
+    if not myvim:
+        error_msg = "Not possible to delete VIM VMs and networks. Datacenter not found at database!!!"
+    else:
+        error_msg = ""
 
     #2.1 deleting VMs
     #vm_fail_list=[]
     for sce_vnf in instanceDict['vnfs']:
+        if not myvim:
+            continue
         for vm in sce_vnf['vms']:
             result, vm_id = myvim.delete_tenant_vminstance(vm['vim_vm_id'])
             if result < 0:
@@ -1662,6 +1766,8 @@ def delete_instance(mydb,nfvo_tenant,instance_id):
     for net in instanceDict['nets']:
         if net['external']:
             continue #skip not created nets
+        if not myvim:
+            continue
         result, net_id = myvim.delete_tenant_network(net['vim_net_id'])
         if result < 0:
             error_msg += "\n    Error: " + str(-result) + " NET id=" + net['vim_net_id']
@@ -1688,6 +1794,8 @@ def refresh_instance(mydb, nfvo_tenant, instanceDict, datacenter=None, vim_tenan
     if result < 0:
         print "nfvo.refresh_instance() error. Datacenter not found"
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % str(instanceDict['datacenter_id'])
     myvim = vims.values()[0]
      
     # 1. Getting the status of all VMs
@@ -1795,6 +1903,8 @@ def instance_action(mydb,nfvo_tenant,instance_id, action_dict):
     if result < 0:
         print "nfvo.instance_action() error. Datacenter not found"
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % str(instanceDict['datacenter_id'])
     myvim = vims.values()[0]
     
 
@@ -1948,6 +2058,8 @@ def associate_datacenter_to_tenant(mydb, nfvo_tenant, datacenter, vim_tenant_id=
     if result < 0:
         print "nfvo.associate_datacenter_to_tenant() error. Datacenter not found"
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % str(datacenter)
     elif result>1:
         print "nfvo.associate_datacenter_to_tenant() error. Several datacenters found"
         #print result, vims
@@ -1981,44 +2093,44 @@ def associate_datacenter_to_tenant(mydb, nfvo_tenant, datacenter, vim_tenant_id=
         if vim_tenant_name!=None:
             where_["vim_tenant_name"] = vim_tenant_name
         #check if vim_tenant_id is already at database
-        result,vim_tenants_dict = mydb.get_table(FROM='vim_tenants', WHERE=where_)
+        result,datacenter_tenants_dict = mydb.get_table(FROM='datacenter_tenants', WHERE=where_)
         if result < 0:
-            return result, vim_tenants_dict
+            return result, datacenter_tenants_dict
         elif result>=1:
-            vim_tenants_dict = vim_tenants_dict[0]
+            datacenter_tenants_dict = datacenter_tenants_dict[0]
             vim_tenant_id_exist_atdb=True
-            #TODO check if a field has changed and edit entry at vim_tenants at DB
+            #TODO check if a field has changed and edit entry at datacenter_tenants at DB
         else: #result=0
-            vim_tenants_dict = {}
-            #insert at table vim_tenants
+            datacenter_tenants_dict = {}
+            #insert at table datacenter_tenants
     else: #if vim_tenant_id==None:
         #create tenant at VIM if not provided
         res, vim_tenant_id = myvim.new_tenant(vim_tenant_name, "created by openmano for datacenter "+datacenter_name)
         if res < 0:
             return res, "Not possible to create vim_tenant in VIM " + vim_tenant_id
-        vim_tenants_dict = {}
-        vim_tenants_dict["created"]="true"
+        datacenter_tenants_dict = {}
+        datacenter_tenants_dict["created"]="true"
     
-    #fill vim_tenants table
+    #fill datacenter_tenants table
     if not vim_tenant_id_exist_atdb:
-        vim_tenants_dict["vim_tenant_id"]   = vim_tenant_id
-        vim_tenants_dict["vim_tenant_name"] = vim_tenant_name
-        vim_tenants_dict["user"]            = vim_username
-        vim_tenants_dict["passwd"]          = vim_password
-        vim_tenants_dict["datacenter_id"]   = datacenter_id
-        res,id_ = mydb.new_row('vim_tenants', vim_tenants_dict, tenant_dict['uuid'], True, True)
+        datacenter_tenants_dict["vim_tenant_id"]   = vim_tenant_id
+        datacenter_tenants_dict["vim_tenant_name"] = vim_tenant_name
+        datacenter_tenants_dict["user"]            = vim_username
+        datacenter_tenants_dict["passwd"]          = vim_password
+        datacenter_tenants_dict["datacenter_id"]   = datacenter_id
+        res,id_ = mydb.new_row('datacenter_tenants', datacenter_tenants_dict, tenant_dict['uuid'], True, True)
         if res<1:
-            return -HTTP_Bad_Request, "Not possible to add %s to database vim_tenants table %s " %(vim_tenant_id, id_)
-        vim_tenants_dict["uuid"] = id_
+            return -HTTP_Bad_Request, "Not possible to add %s to database datacenter_tenants table %s " %(vim_tenant_id, id_)
+        datacenter_tenants_dict["uuid"] = id_
     
     #fill tenants_datacenters table
-    tenants_datacenter_dict["vim_tenant_id"]=vim_tenants_dict["uuid"]
+    tenants_datacenter_dict["datacenter_tenant_id"]=datacenter_tenants_dict["uuid"]
     res,id_ = mydb.new_row('tenants_datacenters', tenants_datacenter_dict, tenant_dict['uuid'], False, True)
     if res<1:
-        return -HTTP_Bad_Request, "Not possible to create vim_tenant at database " + id_
+        return -HTTP_Bad_Request, "Not possible to create an entry at database table datacenter_tenants: " + id_
     return 200, datacenter_id
 
-def deassociate_datacenter_to_tenant(mydb, nfvo_tenant, datacenter, vim_tenant_id=None):
+def deassociate_datacenter_to_tenant(mydb, tenant_id, datacenter, vim_tenant_id=None):
     #get datacenter info
     if af.check_valid_uuid(datacenter): 
         result, vims = get_vim(mydb, datacenter_id=datacenter)
@@ -2027,6 +2139,8 @@ def deassociate_datacenter_to_tenant(mydb, nfvo_tenant, datacenter, vim_tenant_i
     if result < 0:
         print "nfvo.deassociate_datacenter_to_tenant() error. Datacenter not found"
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % str(datacenter)
     elif result>1:
         print "nfvo.deassociate_datacenter_to_tenant() error. Several datacenters found"
         return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
@@ -2034,14 +2148,20 @@ def deassociate_datacenter_to_tenant(mydb, nfvo_tenant, datacenter, vim_tenant_i
     myvim=vims[datacenter_id]
 
     #get nfvo_tenant info
-    result,tenant_dict = mydb.get_table_by_uuid_name('nfvo_tenants', nfvo_tenant)
-    if result < 0:
-        return result, tenant_dict
+    if not tenant_id or tenant_id=="any":
+        tenant_uuid = None
+    else:
+        result,tenant_dict = mydb.get_table_by_uuid_name('nfvo_tenants', tenant_id)
+        if result < 0:
+            return result, tenant_dict
+        tenant_uuid = tenant_dict['uuid']
 
     #check that this association exist before
-    tenants_datacenter_dict={"nfvo_tenant_id":tenant_dict['uuid'], "datacenter_id":datacenter_id }
+    tenants_datacenter_dict={"datacenter_id":datacenter_id }
+    if tenant_uuid:
+        tenants_datacenter_dict["nfvo_tenant_id"] = tenant_uuid
     result,tenant_datacenter_list = mydb.get_table(FROM='tenants_datacenters', WHERE=tenants_datacenter_dict)
-    if result==0:
+    if result==0 and tenant_uuid:
         return -HTTP_Not_Found, "datacenter %s and tenant %s are not  attached" %(datacenter_id, tenant_dict['uuid'])
     elif result<0:
         return result, tenant_datacenter_list
@@ -2053,18 +2173,19 @@ def deassociate_datacenter_to_tenant(mydb, nfvo_tenant, datacenter, vim_tenant_i
 
     #get vim_tenant info and deletes
     warning=''
-    result,vim_tenant_dict = mydb.get_table_by_uuid_name('vim_tenants', tenant_datacenter_list[0]['vim_tenant_id'])
-    if result > 0:
-        #try to delete vim:tenant
-        result,data = mydb.delete_row('vim_tenants', tenant_datacenter_list[0]['vim_tenant_id'], tenant_dict['uuid'])
-        if result<0:
-            pass #the error will be caused because dependencies, vim_tenant can not be deleted
-        elif vim_tenant_dict['created']=='true':
-            #delete tenant at VIM if created by NFVO
-            res, vim_tenant_id = myvim.delete_tenant(vim_tenant_dict['vim_tenant_id'])
-            if res < 0:
-                warning = " Not possible to delete vim_tenant %s from VIM: %s " % (vim_tenant_dict['vim_tenant_id'], vim_tenant_id)
-                print res, warning
+    for tenant_datacenter_item in tenant_datacenter_list:
+        result,vim_tenant_dict = mydb.get_table_by_uuid_name('datacenter_tenants', tenant_datacenter_item['datacenter_tenant_id'])
+        if result > 0:
+            #try to delete vim:tenant
+            result,data = mydb.delete_row('datacenter_tenants', tenant_datacenter_item['datacenter_tenant_id'], tenant_uuid)
+            if result<0:
+                pass #the error will be caused because dependencies, vim_tenant can not be deleted
+            elif vim_tenant_dict['created']=='true':
+                #delete tenant at VIM if created by NFVO
+                res, vim_tenant_id = myvim.delete_tenant(vim_tenant_dict['vim_tenant_id'])
+                if res < 0:
+                    warning = " Not possible to delete vim_tenant id %s name %s from VIM: %s " % (vim_tenant_dict['vim_tenant_id'], vim_tenant_dict['vim_tenant_name'], vim_tenant_id)
+                    print res, warning
 
     return 200, "datacenter %s detached.%s" %(datacenter_id, warning)
 
@@ -2078,6 +2199,8 @@ def datacenter_action(mydb, tenant_id, datacenter, action_dict):
     if result < 0:
         print "nfvo.datacenter_action() error. Datacenter not found"
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % str(datacenter)
     elif result>1:
         print "nfvo.datacenter_action() error. Several datacenters found"
         return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
@@ -2132,6 +2255,8 @@ def datacenter_edit_netmap(mydb, tenant_id, datacenter, netmap, action_dict):
     if result < 0:
         print "nfvo.datacenter_action() error. Datacenter not found"
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % str(datacenter)
     elif result>1:
         print "nfvo.datacenter_action() error. Several datacenters found"
         return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
@@ -2151,6 +2276,8 @@ def datacenter_new_netmap(mydb, tenant_id, datacenter, action_dict=None):
     if result < 0:
         print "nfvo.datacenter_new_netmap() error. Datacenter not found"
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % str(datacenter)
     elif result>1:
         print "nfvo.datacenter_new_netmap() error. Several datacenters found"
         return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
@@ -2207,6 +2334,8 @@ def vim_action_get(mydb, tenant_id, datacenter, item, name):
     if result < 0:
         print "nfvo.datacenter_action() error. Datacenter not found"
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % str(datacenter)
     elif result>1:
         print "nfvo.datacenter_action() error. Several datacenters found"
         return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
@@ -2245,6 +2374,8 @@ def vim_action_delete(mydb, tenant_id, datacenter, item, name):
     if result < 0:
         print "nfvo.datacenter_action() error. Datacenter not found"
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % str(datacenter)
     elif result>1:
         print "nfvo.datacenter_action() error. Several datacenters found"
         return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
@@ -2286,6 +2417,8 @@ def vim_action_create(mydb, tenant_id, datacenter, item, descriptor):
     if result < 0:
         print "nfvo.datacenter_action() error. Datacenter not found"
         return result, vims
+    elif result == 0:
+        return -HTTP_Not_Found, "datacenter '%s' not found" % str(datacenter)
     elif result>1:
         print "nfvo.datacenter_action() error. Several datacenters found"
         return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
