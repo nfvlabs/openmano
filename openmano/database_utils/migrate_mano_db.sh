@@ -513,9 +513,11 @@ function upgrade_to_10(){
     echo "RENAME TABLE vim_tenants TO datacenter_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     for table in tenants_datacenters instance_scenarios instance_vnfs instance_nets
     do
+        NULL="NOT NULL"
+        [[ $table == instance_vnfs ]] && NULL="NULL DEFAULT NULL"
         echo "ALTER TABLE ${table} DROP FOREIGN KEY FK_${table}_vim_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
         echo "ALTER TABLE ${table} ALTER vim_tenant_id DROP DEFAULT;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
-        echo "ALTER TABLE ${table} CHANGE COLUMN vim_tenant_id datacenter_tenant_id VARCHAR(36) NOT NULL AFTER datacenter_id, ADD CONSTRAINT FK_${table}_datacenter_tenants FOREIGN KEY (datacenter_tenant_id) REFERENCES datacenter_tenants (uuid); " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+        echo "ALTER TABLE ${table} CHANGE COLUMN vim_tenant_id datacenter_tenant_id VARCHAR(36)  ${NULL} AFTER datacenter_id, ADD CONSTRAINT FK_${table}_datacenter_tenants FOREIGN KEY (datacenter_tenant_id) REFERENCES datacenter_tenants (uuid); " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     done    
     echo "INSERT INTO schema_version (version_int, version, openmano_ver, comments, date) VALUES (10, '0.10', '0.4.36', 'tenant management of vnfs,scenarios', '2016-03-08');" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
@@ -533,8 +535,10 @@ function downgrade_from_10(){
     for table in tenants_datacenters instance_scenarios instance_vnfs instance_nets
     do
         echo "ALTER TABLE ${table} DROP FOREIGN KEY FK_${table}_datacenter_tenants;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+        NULL="NOT NULL"
+        [[ $table == instance_vnfs ]] && NULL="NULL DEFAULT NULL"
         echo "ALTER TABLE ${table} ALTER datacenter_tenant_id DROP DEFAULT;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
-        echo "ALTER TABLE ${table} CHANGE COLUMN datacenter_tenant_id vim_tenant_id VARCHAR(36) NOT NULL AFTER datacenter_id, ADD CONSTRAINT FK_${table}_vim_tenants FOREIGN KEY (vim_tenant_id) REFERENCES vim_tenants (uuid); " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
+        echo "ALTER TABLE ${table} CHANGE COLUMN datacenter_tenant_id vim_tenant_id VARCHAR(36) $NULL AFTER datacenter_id, ADD CONSTRAINT FK_${table}_vim_tenants FOREIGN KEY (vim_tenant_id) REFERENCES vim_tenants (uuid); " | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
     done    
     echo "DELETE FROM schema_version WHERE version_int='10';" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
 }
