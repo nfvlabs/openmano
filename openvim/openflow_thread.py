@@ -531,11 +531,11 @@ class openflow_thread(threading.Thread):
             action_number = 0
             for action in flow_broadcast['actions']:
                 if action[0] != previous_vlan:
-                    action_number += 1
                     final_actions.append( ('vlan', action[0]) )
                     previous_vlan = action[0]
                     if self.pmp_with_same_vlan and action_number:
-                        return -1, "Can not interconect different vlan tags in a network when flag 'of_controller_nets_with_same_vlan' is True."
+                        return -1, "Can not interconnect different vlan tags in a network when flag 'of_controller_nets_with_same_vlan' is True."
+                    action_number += 1
                 final_actions.append( ('out', action[1]) )
             flow_broadcast['actions'] = final_actions
 
