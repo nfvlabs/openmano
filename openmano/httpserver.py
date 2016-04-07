@@ -783,7 +783,7 @@ def http_post_deploy(tenant_id):
     '''post topology deploy.'''
     print "http_post_deploy by tenant " + tenant_id 
 
-    http_content, used_schema = format_in( nsd_schema_v01, ("version",), {"v0.2": nsd_schema_v02})
+    http_content, used_schema = format_in( nsd_schema_v01, ("schema_version",), {2: nsd_schema_v02})
     #r = af.remove_extra_items(http_content, used_schema)
     #if r is not None: print "http_post_deploy: Warning: remove extra items ", r
     print "http_post_deploy input: ",  http_content
@@ -816,7 +816,7 @@ def http_post_verify(tenant_id):
 def http_post_scenarios(tenant_id):
     '''add a scenario into the catalogue. Creates the scenario and its internal structure in the OPENMANO DB'''
     print "http_post_scenarios by tenant " + tenant_id 
-    http_content, used_schema = format_in( nsd_schema_v01, ("schema_version",), {"0.2": nsd_schema_v02})
+    http_content, used_schema = format_in( nsd_schema_v01, ("schema_version",), {2: nsd_schema_v02})
     #r = af.remove_extra_items(http_content, used_schema)
     #if r is not None: print "http_post_scenarios: Warning: remove extra items ", r
     print "http_post_scenarios input: ",  http_content

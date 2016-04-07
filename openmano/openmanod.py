@@ -33,8 +33,8 @@ It loads the configuration file and launches the http_server thread that will li
 '''
 __author__="Alfonso Tierno, Gerardo Garcia, Pablo Montes"
 __date__ ="$26-aug-2014 11:09:29$"
-__version__="0.4.36-r467"
-version_date="Mar 2016"
+__version__="0.4.37-r469"
+version_date="Apr 2016"
 database_version="0.10"      #expected database schema version
 
 import httpserver
@@ -123,7 +123,7 @@ if __name__=="__main__":
     # Read parameters and configuration file 
     try:
         opts, args = getopt.getopt(sys.argv[1:], "hvc:V:p:P:", ["config", "help", "version", "port", "vnf-repository", "adminport"])
-    except getopt.GetoptError, err:
+    except getopt.GetoptError as err:
         # print help information and exit:
         print "Error:", err # will print something like "option -a not recognized"
         usage()

@@ -28,6 +28,7 @@ __author__="Alfonso Tierno, Gerardo Garcia"
 __date__ ="$09-oct-2014 09:09:48$"
 
 #Basis schemas
+patern_name="^[ -~]+$"
 passwd_schema={"type" : "string", "minLength":1, "maxLength":60}
 nameshort_schema={"type" : "string", "minLength":1, "maxLength":60, "pattern" : "^[^,;()'\"]+$"}
 name_schema={"type" : "string", "minLength":1, "maxLength":255, "pattern" : "^[^,;()'\"]+$"}
@@ -41,7 +42,7 @@ bandwidth_schema={"type":"string", "pattern" : "^[0-9]+ *([MG]bps)?$"}
 memory_schema={"type":"string", "pattern" : "^[0-9]+ *([MG]i?[Bb])?$"}
 integer0_schema={"type":"integer","minimum":0}
 integer1_schema={"type":"integer","minimum":1}
-path_schema={"type":"string", "pattern":"^(\.(\.?))?(/[^/"":{}\ \(\)]+)+$"}
+path_schema={"type":"string", "pattern":"^(\.){0,2}(/[^/\"':{}\(\)]+)+$"}
 vlan_schema={"type":"integer","minimum":1,"maximum":4095}
 vlan1000_schema={"type":"integer","minimum":1000,"maximum":4095}
 mac_schema={"type":"string", "pattern":"^[0-9a-fA-F][02468aceACE](:[0-9a-fA-F]{2}){5}$"}  #must be unicast LSB bit of MSB byte ==0 
@@ -49,6 +50,7 @@ mac_schema={"type":"string", "pattern":"^[0-9a-fA-F][02468aceACE](:[0-9a-fA-F]{2
 ip_schema={"type":"string","pattern":"^([0-9]{1,3}.){3}[0-9]{1,3}$"}
 port_schema={"type":"integer","minimum":1,"maximum":65534}
 object_schema={"type":"object"}
+schema_version_2={"type":"integer","minimum":2,"maximum":2}
 
 metadata_schema={
     "type":"object",
@@ -433,7 +435,7 @@ vnfd_schema_v02 = {
     "$schema": "http://json-schema.org/draft-04/schema#",
     "type":"object",
     "properties":{
-        "version": {"type": "string", "pattern":"^v0.2$"},
+        "schema_version": schema_version_2,
         "vnf":{
             "type":"object",
             "properties":{
@@ -443,7 +445,7 @@ vnfd_schema_v02 = {
             "additionalProperties": True
         }
     },
-    "required": ["vnf", "version"],
+    "required": ["vnf", "schema_version"],
     "additionalProperties": False
 }
 
@@ -481,6 +483,7 @@ nsd_schema_v01 = {
         "name":name_schema,
         "description": description_schema,
         "tenant_id": id_schema, #only valid for admin
+        "public": {"type": "boolean"},
         "topology":{
             "type":"object",
             "properties":{
@@ -530,40 +533,50 @@ nsd_schema_v02 = {
     "$schema": "http://json-schema.org/draft-04/schema#",
     "type":"object",
     "properties":{
-        "schema_version": {"type": "string", "enum": ["0.2"]},
-        "name":name_schema,
-        "description": description_schema,
-        "tenant_id": id_schema, #only valid for admin
-        "vnfs": {
+        "schema_version": schema_version_2,
+        "scenario":{
             "type":"object",
-            "patternProperties":{
-                ".": {
-                    "type": "object",
-                    "properties":{
-                        "vnf_id": id_schema,
-                        "graph": graph_schema,
-                        "vnf_model": name_schema,
+            "properties":{
+                "name":name_schema,
+                "description": description_schema,
+                "tenant_id": id_schema, #only valid for admin
+                "public": {"type": "boolean"},
+                "vnfs": {
+                    "type":"object",
+                    "patternProperties":{
+                        ".": {
+                            "type": "object",
+                            "properties":{
+                                "vnf_id": id_schema,
+                                "graph": graph_schema,
+                                "vnf_name": name_schema,
+                            },
+                        }
                     },
-                }
-            },
-            "minProperties": 1
-        },
-        "networks": {
-            "type":"object",
-            "patternProperties":{
-                ".": {
-                    "type": "object",
-                    "properties":{
-                        "interfaces":{"type":"array", "minLength":1},
-                        "type": {"type": "string", "enum":["link", "external_network", "dataplane_net", "bridge_net"]},
-                        "graph": graph_schema
-                    },
-                    "required": ["interfaces"]
+                    "minProperties": 1
                 },
-            }
-        },
+                "networks": {
+                    "type":"object",
+                    "patternProperties":{
+                        ".": {
+                            "type": "object",
+                            "properties":{
+                                "interfaces":{"type":"array", "minLength":1},
+                                "type": {"type": "string", "enum":["dataplane", "bridge"]},
+                                "external" : {"type": "boolean"},
+                                "graph": graph_schema
+                            },
+                            "required": ["interfaces"]
+                        },
+                    }
+                },
+            
+            },
+            "required": ["vnfs", "networks","name"],
+            "additionalProperties": False
+        }
     },
-    "required": ["vnfs", "networks","name", "schema_version"],
+    "required": ["scenario","schema_version"],
     "additionalProperties": False
 }
 

@@ -730,7 +730,9 @@ class nfvo_db():
                     tenant_id = scenario_dict.get('tenant_id')
                     #scenario
                     INSERT_={'tenant_id': tenant_id,
-                    'name': scenario_dict['name'],'description': scenario_dict['description']}
+                    'name': scenario_dict['name'],
+                    'description': scenario_dict['description'],
+                    'public': scenario_dict.get('public', "false")}
                     
                     r,scenario_uuid =  self._new_row_internal('scenarios', INSERT_, tenant_id, True, None, True,created_time)
                     if r<0:

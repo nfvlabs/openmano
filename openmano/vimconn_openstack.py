@@ -54,12 +54,12 @@ netStatus2manoFormat={'ACTIVE':'ACTIVE','PAUSED':'PAUSED','INACTIVE':'INACTIVE',
                      }
 
 class vimconnector(vimconn.vimconnector):
-    def __init__(self, uuid, name, tenant, url, url_admin=None, user=None, passwd=None, debug=True, config={}):
+    def __init__(self, uuid, name, tenant_id, tenant_name, url, url_admin=None, user=None, passwd=None, debug=True, config={}):
         '''using common constructor parameters. In this case 
         'url' is the keystone authorization url,
         'url_admin' is not use
         '''
-        vimconn.vimconnector.__init__(self, uuid, name, tenant, url, url_admin, user, passwd, debug, config)
+        vimconn.vimconnector.__init__(self, uuid, name, tenant_id, tenant_name, url, url_admin, user, passwd, debug, config)
         
         self.k_creds={}
         self.n_creds={}
@@ -67,9 +67,12 @@ class vimconnector(vimconn.vimconnector):
             raise TypeError, 'url param can not be NoneType'
         self.k_creds['auth_url'] = url
         self.n_creds['auth_url'] = url
-        if tenant:
-            self.k_creds['tenant_name'] = tenant
-            self.n_creds['project_id']  = tenant
+        if tenant_name:
+            self.k_creds['tenant_name'] = tenant_name
+            self.n_creds['project_id']  = tenant_name
+        if tenant_id:
+            self.k_creds['tenant_id'] = tenant_id
+            self.n_creds['tenant_id']  = tenant_id
         if user:
             self.k_creds['username'] = user
             self.n_creds['username'] = user
@@ -82,9 +85,18 @@ class vimconnector(vimconn.vimconnector):
         '''Set individuals parameters 
         Throw TypeError, KeyError
         '''
-        if index=='tenant':
+        if index=='tenant_id':
             self.reload_client=True
-            self.tenant = value
+            self.tenant_id = value
+            if value:
+                self.k_creds['tenant_id'] = value
+                self.n_creds['tenant_id']  = value
+            else:
+                del self.k_creds['tenant_name']
+                del self.n_creds['project_id']
+        elif index=='tenant_name':
+            self.reload_client=True
+            self.tenant_name = value
             if value:
                 self.k_creds['tenant_name'] = value
                 self.n_creds['project_id']  = value
@@ -258,7 +270,7 @@ class vimconnector(vimconn.vimconnector):
         '''Adds a tenant network to VIM'''
         '''Returns the network identifier'''
         if self.debug:
-            print "osconnector: Adding a new tenant network to VIM (tenant: " + self.tenant + ", type: " + net_type + "): "+ net_name
+            print "osconnector: Adding a new tenant network to VIM (tenant: " + str(self.tenant_name) + ", type: " + net_type + "): "+ net_name
         try:
             self._reload_connection()
             network_dict = {'name': net_name, 'admin_state_up': True}
@@ -359,7 +371,7 @@ class vimconnector(vimconn.vimconnector):
         '''Deletes a tenant network from VIM'''
         '''Returns the network identifier'''
         if self.debug:
-            print "osconnector: Deleting a new tenant network from VIM tenant: " + self.tenant + ", id: " + net_id
+            print "osconnector: Deleting a new tenant network from VIM tenant: " + str(self.tenant_name) + ", id: " + net_id
         try:
             self._reload_connection()
             #delete VM ports attached to this networks before the network

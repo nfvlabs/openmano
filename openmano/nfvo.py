@@ -140,14 +140,11 @@ def get_vim(mydb, nfvo_tenant=None, datacenter_id=None, datacenter_name=None, vi
                 return -HTTP_Bad_Request, "Unknown vim type %s" % vim["type"]
 
         try:
-            tenant=vim.get('vim_tenant_id')
-            if not tenant:
-                tenant=vim.get('vim_tenant_name')
             #if not tenant:
             #    return -HTTP_Bad_Request, "You must provide a valid tenant name or uuid for VIM  %s" % ( vim["type"])
             vim_dict[ vim['datacenter_id'] ] = vimconn_imported[ vim["type"] ].vimconnector(
                             uuid=vim['datacenter_id'], name=vim['datacenter_name'],
-                            tenant=tenant, 
+                            tenant_id=vim.get('vim_tenant_id'), tenant_name=vim.get('vim_tenant_name'),
                             url=vim['vim_url'], url_admin=vim['vim_url_admin'], 
                             user=vim.get('user'), passwd=vim.get('passwd'),
                             config=extra
@@ -1094,12 +1091,15 @@ def new_scenario(mydb, tenant_id, topo):
 
 #2: insert scenario. filling tables scenarios,sce_vnfs,sce_interfaces,sce_nets
     r,c = mydb.new_scenario( { 'vnfs':vnfs, 'nets':net_list,
-        'tenant_id':tenant_id, 'name':topo['name'], 'description':topo.get('description',topo['name']) } )
+        'tenant_id':tenant_id, 'name':topo['name'],
+         'description':topo.get('description',topo['name']),
+         'public': topo.get('public', False)
+         })
     
     return r,c
 
-def new_scenario_v02(mydb, tenant_id, scenario):
-
+def new_scenario_v02(mydb, tenant_id, scenario_dict):
+    scenario = scenario_dict["scenario"]
     if tenant_id != "any":
         if not check_tenant(mydb, tenant_id): 
             print 'nfvo.new_scenario_v02() tenant %s not found' % tenant_id
@@ -1119,9 +1119,9 @@ def new_scenario_v02(mydb, tenant_id, scenario):
         if 'vnf_id' in vnf:
             error_text += " 'vnf_id' " +  vnf['vnf_id']
             WHERE_['uuid'] = vnf['vnf_id']
-        if 'vnf_model' in vnf:
-            error_text += " 'vnf_model' " +  vnf['vnf_model']
-            WHERE_['name'] = vnf['vnf_model']
+        if 'vnf_name' in vnf:
+            error_text += " 'vnf_name' " +  vnf['vnf_name']
+            WHERE_['name'] = vnf['vnf_name']
         if len(WHERE_) == 0:
             return -HTTP_Bad_Request, "needed a 'vnf_id' or 'VNF model' at " + error_pos
         r,vnf_db = mydb.get_table(SELECT=('uuid','name','description'), FROM='vnfs', WHERE=WHERE_)
@@ -2348,7 +2348,7 @@ def vim_action_get(mydb, tenant_id, datacenter, item, name):
         else:
             filter_dict["name"] = name
     if item=="networks":
-        filter_dict['tenant_id'] = myvim["tenant"]
+        #filter_dict['tenant_id'] = myvim["tenant"]
         result, content = myvim.get_network_list(filter_dict=filter_dict)
     elif item=="tenants":
         result, content = myvim.get_tenant_list(filter_dict=filter_dict)
@@ -2367,6 +2367,9 @@ def vim_action_get(mydb, tenant_id, datacenter, item, name):
     
 def vim_action_delete(mydb, tenant_id, datacenter, item, name):
     #get datacenter info
+    if tenant_id == "any":
+        tenant_id=None
+
     if af.check_valid_uuid(datacenter): 
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
     else:
@@ -2381,20 +2384,19 @@ def vim_action_delete(mydb, tenant_id, datacenter, item, name):
         return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
     datacenter_id=vims.keys()[0]
     myvim=vims[datacenter_id]
-    #get uuid
-    if not af.check_valid_uuid(name):
-        result, content = vim_action_get(mydb, tenant_id, datacenter, item, name)
-        print content
-        if result < 0:
-            return result, content
-        items = content.values()[0]
-        if type(items)==list and len(items)==0:
-            return -HTTP_Not_Found, "Not found " + item
-        elif type(items)==list and len(items)>1:
-            return -HTTP_Not_Found, "Found more than one %s with this name. Use uuid." % item
-        else: # it is a dict
-            item_id = items["id"]
-            item_name = str(items.get("name"))
+    #get uuid name
+    result, content = vim_action_get(mydb, tenant_id, datacenter, item, name)
+    print content
+    if result < 0:
+        return result, content
+    items = content.values()[0]
+    if type(items)==list and len(items)==0:
+        return -HTTP_Not_Found, "Not found " + item
+    elif type(items)==list and len(items)>1:
+        return -HTTP_Not_Found, "Found more than one %s with this name. Use uuid." % item
+    else: # it is a dict
+        item_id = items["id"]
+        item_name = str(items.get("name"))
         
     if item=="networks":
         result, content = myvim.delete_tenant_network(item_id)
@@ -2410,6 +2412,9 @@ def vim_action_delete(mydb, tenant_id, datacenter, item, name):
 def vim_action_create(mydb, tenant_id, datacenter, item, descriptor):
     #get datacenter info
     print "vim_action_create descriptor", descriptor
+    if tenant_id == "any":
+        tenant_id=None
+
     if af.check_valid_uuid(datacenter): 
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
     else:

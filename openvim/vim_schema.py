@@ -31,7 +31,7 @@ __date__ ="$10-jul-2014 12:07:15$"
 # SCHEMAS to validate input data
 #
 
-path_schema={"type":"string", "pattern":"^(\.(\.?))?(/[^/"":{}\ \(\)]+)+$"}
+path_schema={"type":"string", "pattern":"^(\.){0,2}(/[^/\"':{}\(\)]+)+$"}
 port_schema={"type":"integer","minimum":1,"maximun":65534}
 ip_schema={"type":"string","pattern":"^([0-9]{1,3}.){3}[0-9]{1,3}$"}
 cidr_schema={"type":"string","pattern":"^([0-9]{1,3}.){3}[0-9]{1,3}/[0-9]{1,2}$"}
@@ -39,7 +39,7 @@ name_schema={"type" : "string", "minLength":1, "maxLength":255, "pattern" : "^[^
 nameshort_schema={"type" : "string", "minLength":1, "maxLength":64, "pattern" : "^[^,;()'\"]+$"}
 nametiny_schema={"type" : "string", "minLength":1, "maxLength":12, "pattern" : "^[^,;()'\"]+$"}
 xml_text_schema={"type" : "string", "minLength":1, "maxLength":1000, "pattern" : "^[^']+$"}
-description_schema={"type" : ["string","null"], "maxLength":200, "pattern" : "^[^'\"]+$"}
+description_schema={"type" : ["string","null"], "maxLength":255, "pattern" : "^[^'\"]+$"}
 id_schema_fake = {"type" : "string", "minLength":2, "maxLength":36 }  #"pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$"
 id_schema = {"type" : "string", "pattern": "^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$"}
 pci_schema={"type":"string", "pattern":"^[0-9a-fA-F]{4}(:[0-9a-fA-F]{2}){2}\.[0-9a-fA-F]$"}

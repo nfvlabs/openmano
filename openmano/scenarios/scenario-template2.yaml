@@ -1,0 +1,35 @@
+---
+schema_version:  2
+scenario:
+  name:          insert a name for the scenario
+  description:   insert a description for the scenario
+  public:        false      # if available for other tenants
+  vnfs:
+    vnf1:                     # vnf name in the scenario
+      #identify an already openmano uploaded VNF either by vnf_id (uuid, prefered) or vnf_name
+      vnf_id:    fb356022-f664-11e5-a1e7-0800273e724c                  #prefered id method
+      #vnf_name:  openmano_vnf_name   #can fail if several vnfs matches this name 
+      #graph:     {"y":399,"x":332,"ifaces":{"left":[["xe0","d"],["xe1","d"]],"bottom":[["eth0","v"],["eth1","m"]]}}
+    vnf2:
+      vnf_name:  vnf_name_2 # can fail if several vnfs matches this name 
+      graph:     {"y":399,"x":632,"ifaces":{"left":[["xe0","d"],["xe1","d"]],"bottom":[["eth0","v"],["eth1","m"]]}}
+  networks:                
+    net1:                     # network name in the scenario
+      #optional type, deduced from interfaces
+      type:      dataplane # "dataplane", "bridge"  
+      #graph:     {}
+      interfaces:                  # nodes that will be connected: one or several vnfs
+      -  vnf1:   xe0            # First node and its interface to be connected (interfaces must match to one in the VNF descriptor)
+      -  vnf2:   xe0            # Second node and its interface
+    control net:
+      # Control plane connections must include a bridge network in the list of nodes
+      interfaces:
+      -   vnf1:  eth1
+      -   vnf2:  eth1
+    out:
+      # Connections based on external networks (datacenter nets) must include the external network in the list of nodes
+      type:      dataplane
+      external:  true       #this will be connected outside
+      interfaces:
+      -   vnf1:  xe1
+

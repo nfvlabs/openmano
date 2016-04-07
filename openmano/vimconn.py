@@ -38,26 +38,31 @@ HTTP_Conflict = 409
 HTTP_Service_Unavailable = 503 
 HTTP_Internal_Server_Error = 500 
 
+class vimconnectorException(Exception):
+    pass
 
 class vimconnector():
     '''Abstract base class for all the VIM connector plugins
     These plugins must implement a vimconnector class deribed from this 
     and all these methods
     ''' 
-    def __init__(self, uuid, name, tenant, url, url_admin=None, user=None, passwd=None,debug=True,config={}):
+    def __init__(self, uuid, name, tenant_id, tenant_name, url, url_admin=None, user=None, passwd=None,debug=True,config={}):
         self.id        = uuid
         self.name      = name
         self.url       = url
         self.url_admin = url_admin
-        self.tenant    = tenant
+        self.tenant_id = tenant_id
+        self.tenant_name = tenant_name
         self.user      = user
         self.passwd    = passwd
         self.config    = config
         self.debug     = debug
     
     def __getitem__(self,index):
-        if index=='tenant':
-            return self.tenant
+        if index=='tenant_id':
+            return self.tenant_id
+        if index=='tenant_name':
+            return self.tenant_name
         elif index=='id':
             return self.id
         elif index=='name':
@@ -76,8 +81,10 @@ class vimconnector():
             raise KeyError("Invalid key '%s'" %str(index))
         
     def __setitem__(self,index, value):
-        if index=='tenant':
-            self.tenant = value
+        if index=='tenant_id':
+            self.tenant_id = value
+        if index=='tenant_name':
+            self.tenant_name = value
         elif index=='id':
             self.id = value
         elif index=='name':

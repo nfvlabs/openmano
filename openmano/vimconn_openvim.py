@@ -306,9 +306,40 @@ get_processor_rankings_response_schema = {
 }
 
 class vimconnector(vimconn.vimconnector):
-    def __init__(self, uuid, name, tenant, url, url_admin=None, user=None, passwd=None,debug=True,config={}):
-        vimconn.vimconnector.__init__(self, uuid, name, tenant, url, url_admin, user, passwd, debug, config)
-    
+    def __init__(self, uuid, name, tenant_id, tenant_name, url, url_admin=None, user=None, passwd=None,debug=True,config={}):
+        vimconn.vimconnector.__init__(self, uuid, name, tenant_id, tenant_name, url, url_admin, user, passwd, debug, config)
+        self.tenant = None
+        self.headers_req = {'content-type': 'application/json'}
+        if tenant_id:
+            self.tenant = tenant_id
+
+    def __setitem__(self,index, value):
+        '''Set individuals parameters 
+        Throw TypeError, KeyError
+        '''
+        if index=='tenant_id':
+            self.tenant = value
+        elif index=='tenant_name':
+            self.tenant = None
+        vimconn.vimconnector.__setitem__(self,index, value)    
+
+    def _get_my_tenant(self):
+        '''Obtain uuid of my tenant from name
+        '''
+        if self.tenant:
+            return self.tenant
+
+        vim_response = requests.get(self.url+'/tenants?name='+ self.tenant_name, headers = self.headers_req)
+        if vim_response.status_code != 200:
+            raise vimconn.vimconnectorException ("_get_my_tenant response " + str(vim_response.status_code))
+        tenant_list = vim_response.json()["tenants"]
+        if len(tenant_list) == 0:
+            raise vimconn.vimconnectorException ("No tenant found for name '%s'" % str(self.tenant_name))
+        elif len(tenant_list) > 1:
+            raise vimconn.vimconnectorException ("More that one tenant found for name '%s'" % str(self.tenant_name))
+        self.tenant = tenant_list[0]["id"]
+        return self.tenant 
+
     def _format_jsonerror(self,http_response):
         try:
             data = http_response.json()
@@ -348,10 +379,9 @@ class vimconnector(vimconn.vimconnector):
         '''Adds a new host to VIM'''
         '''Returns status code of the VIM response'''
         print "VIMConnector: Adding a new host"
-        headers_req = {'content-type': 'application/json'}
         payload_req = host_data
         try:
-            vim_response = requests.post(self.url_admin+'/hosts', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url_admin+'/hosts', headers = self.headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_host Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -381,10 +411,9 @@ class vimconnector(vimconn.vimconnector):
         '''Adds a external port to VIM'''
         '''Returns the port identifier'''
         print "VIMConnector: Adding a new external port"
-        headers_req = {'content-type': 'application/json'}
         payload_req = port_data
         try:
-            vim_response = requests.post(self.url_admin+'/ports', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url_admin+'/ports', headers = self.headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_external_port Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -415,10 +444,9 @@ class vimconnector(vimconn.vimconnector):
         '''Returns the network identifier'''
         print "VIMConnector: Adding external shared network to VIM (type " + net_type + "): "+ net_name
         
-        headers_req = {'content-type': 'application/json'}
         payload_req = '{"network":{"name": "' + net_name + '","shared":true,"type": "' + net_type + '"}}'
         try:
-            vim_response = requests.post(self.url+'/networks', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url+'/networks', headers = self.headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_external_network Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -449,7 +477,6 @@ class vimconnector(vimconn.vimconnector):
         '''Returns status code of the VIM response'''
         print "VIMConnector: Connecting external port to network"
         
-        headers_req = {'content-type': 'application/json'}
         payload_req = '{"port":{"network_id":"' + network_id + '"}}'
         if admin:
             if self.url_admin==None:
@@ -458,7 +485,7 @@ class vimconnector(vimconn.vimconnector):
         else:
             url= self.url
         try:
-            vim_response = requests.put(url +'/ports/'+port_id, headers = headers_req, data=payload_req)
+            vim_response = requests.put(url +'/ports/'+port_id, headers = self.headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "connect_port_network Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -488,13 +515,12 @@ class vimconnector(vimconn.vimconnector):
         '''Adds a new tenant to VIM'''
         '''Returns the tenant identifier'''
         print "VIMConnector: Adding a new tenant to VIM"
-        headers_req = {'content-type': 'application/json'}
         payload_dict = {"tenant": {"name":tenant_name,"description": tenant_description, "enabled": True}}
         payload_req = json.dumps(payload_dict)
         #print payload_req
 
         try:
-            vim_response = requests.post(self.url+'/tenants', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url+'/tenants', headers = self.headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_tenant Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -523,9 +549,8 @@ class vimconnector(vimconn.vimconnector):
         '''Delete a tenant from VIM'''
         '''Returns the tenant identifier'''
         print "VIMConnector: Deleting  a  tenant from VIM"
-        headers_req = {'content-type': 'application/json'}
         try:
-            vim_response = requests.delete(self.url+'/tenants/'+tenant_id, headers = headers_req)
+            vim_response = requests.delete(self.url+'/tenants/'+tenant_id, headers = self.headers_req)
         except requests.exceptions.RequestException, e:
             print "delete_tenant Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -542,16 +567,19 @@ class vimconnector(vimconn.vimconnector):
     def new_tenant_network(self,net_name,net_type,public=False, **vim_specific):
         '''Adds a tenant network to VIM'''
         '''Returns the network identifier'''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         print "vim_specific", vim_specific
         if net_type=="bridge":
             net_type="bridge_data"
-        print "VIMConnector: Adding a new tenant network to VIM (tenant: " + self.tenant + ", type: " + net_type + "): "+ net_name
+        print "VIMConnector: Adding a new tenant network to VIM (tenant: " + str(self.tenant) + ", type: " + net_type + "): "+ net_name
 
-        headers_req = {'content-type': 'application/json'}
         payload_req = {"name": net_name, "type": net_type, "tenant_id": self.tenant, "shared": public}
         payload_req.update(vim_specific)
         try:
-            vim_response = requests.post(self.url+'/networks', headers = headers_req, data=json.dumps({"network": payload_req}) )
+            vim_response = requests.post(self.url+'/networks', headers = self.headers_req, data=json.dumps({"network": payload_req}) )
         except requests.exceptions.RequestException, e:
             print "new_tenant_network Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -591,10 +619,9 @@ class vimconnector(vimconn.vimconnector):
             filterquery.append(str(k)+'='+str(v))
         if len(filterquery)>0:
             filterquery_text='?'+ '&'.join(filterquery)
-        headers_req = {'content-type': 'application/json'}
         try:
             print self.url+'/tenants'+filterquery_text
-            vim_response = requests.get(self.url+'/tenants'+filterquery_text, headers = headers_req)
+            vim_response = requests.get(self.url+'/tenants'+filterquery_text, headers = self.headers_req)
         except requests.exceptions.RequestException, e:
             print "get_tenant_list Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -624,6 +651,8 @@ class vimconnector(vimconn.vimconnector):
             status: 'ACTIVE'
         Returns the network list of dictionaries
         '''
+        
+        filter_dict["tenant_id"] = self._get_my_tenant()
         print "VIMConnector.get_network_list: Getting tenant network from VIM (filter: " + str(filter_dict) + "): "
         filterquery=[]
         filterquery_text=''
@@ -631,10 +660,9 @@ class vimconnector(vimconn.vimconnector):
             filterquery.append(str(k)+'='+str(v))
         if len(filterquery)>0:
             filterquery_text='?'+ '&'.join(filterquery)
-        headers_req = {'content-type': 'application/json'}
         try:
             print self.url+'/networks'+filterquery_text
-            vim_response = requests.get(self.url+'/networks'+filterquery_text, headers = headers_req)
+            vim_response = requests.get(self.url+'/networks'+filterquery_text, headers = self.headers_req)
         except requests.exceptions.RequestException, e:
             print "get_network_list Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -673,11 +701,14 @@ class vimconnector(vimconn.vimconnector):
     def delete_tenant_network(self, net_id):
         '''Deletes a tenant network from VIM'''
         '''Returns the network identifier'''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         print "VIMConnector: Deleting a new tenant network from VIM tenant: " + self.tenant + ", id: " + net_id
 
-        headers_req = {'content-type': 'application/json'}
         try:
-            vim_response = requests.delete(self.url+'/networks/'+net_id, headers=headers_req)
+            vim_response = requests.delete(self.url+'/networks/'+net_id, headers=self.headers_req)
         except requests.exceptions.RequestException, e:
             print "delete_tenant_network Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -703,13 +734,16 @@ class vimconnector(vimconn.vimconnector):
         '''Obtain flavor details from the  VIM
             Returns the flavor dict details
         '''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         print "VIMConnector: Getting flavor from VIM"
         #print "VIM URL:",self.url
         #print "Tenant id:",self.tenant
         #print "Flavor:",flavor_data
-        headers_req = {'content-type': 'application/json'}
         try:
-            vim_response = requests.get(self.url+'/'+self.tenant+'/flavors/'+flavor_id, headers = headers_req)
+            vim_response = requests.get(self.url+'/'+self.tenant+'/flavors/'+flavor_id, headers = self.headers_req)
         except requests.exceptions.RequestException, e:
             print "get_tenant_flavor Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -739,14 +773,17 @@ class vimconnector(vimconn.vimconnector):
     def new_tenant_flavor(self, flavor_data):
         '''Adds a tenant flavor to VIM'''
         '''Returns the flavor identifier'''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         print "VIMConnector: Adding a new flavor to VIM"
         #print "VIM URL:",self.url
         #print "Tenant id:",self.tenant
         #print "Flavor:",flavor_data
-        headers_req = {'content-type': 'application/json'}
         payload_req = json.dumps({'flavor': flavor_data})
         try:
-            vim_response = requests.post(self.url+'/'+self.tenant+'/flavors', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url+'/'+self.tenant+'/flavors', headers = self.headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_tenant_flavor Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -776,11 +813,14 @@ class vimconnector(vimconn.vimconnector):
     def delete_tenant_flavor(self,flavor_id):
         '''Deletes a tenant flavor from VIM'''
         '''Returns the HTTP response code and a message indicating details of the success or fail'''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         print "VIMConnector: Deleting a flavor from VIM"
         print "VIM URL:",self.url
         print "Tenant id:",self.tenant
         print "Flavor id:",flavor_id
-        #headers_req = {'content-type': 'application/json'}
         #payload_req = flavor_data
         try:
             vim_response = requests.delete(self.url+'/'+self.tenant+'/flavors/'+flavor_id)
@@ -806,8 +846,11 @@ class vimconnector(vimconn.vimconnector):
             200, image-id        if the image is created
             <0, message          if there is an error
         '''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         print "VIMConnector: Adding a new image to VIM", image_dict['location']
-        headers_req = {'content-type': 'application/json'}
         new_image_dict={'name': image_dict['name']}
         if 'description' in image_dict and image_dict['description'] != None:
             new_image_dict['description'] = image_dict['description']
@@ -818,7 +861,7 @@ class vimconnector(vimconn.vimconnector):
         payload_req = json.dumps({"image":new_image_dict})
         url=self.url + '/' + self.tenant + '/images'
         try:
-            vim_response = requests.post(url, headers = headers_req, data=payload_req)
+            vim_response = requests.post(url, headers = self.headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_tenant_image Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -847,8 +890,11 @@ class vimconnector(vimconn.vimconnector):
     def delete_tenant_image(self, image_id):
         '''Deletes a tenant image from VIM'''
         '''Returns the HTTP response code and a message indicating details of the success or fail'''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         print "VIMConnector: Deleting an image from VIM"
-        #headers_req = {'content-type': 'application/json'}
         #payload_req = flavor_data
         url=self.url + '/'+ self.tenant +'/images/'+image_id
         try:
@@ -871,11 +917,14 @@ class vimconnector(vimconn.vimconnector):
     def new_tenant_vminstancefromJSON(self, vm_data):
         '''Adds a VM instance to VIM'''
         '''Returns the instance identifier'''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         print "VIMConnector: Adding a new VM instance from JSON to VIM"
-        headers_req = {'content-type': 'application/json'}
         payload_req = vm_data
         try:
-            vim_response = requests.post(self.url+'/'+self.tenant+'/servers', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url+'/'+self.tenant+'/servers', headers = self.headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_tenant_vminstancefromJSON Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -919,8 +968,11 @@ class vimconnector(vimconn.vimconnector):
         Returns >=0, the instance identifier
                 <0, error_text
         '''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         print "VIMConnector: Adding a new VM instance to VIM"
-        headers_req = {'content-type': 'application/json'}
         
 #         net_list = []
 #         for k,v in net_dict.items():
@@ -949,7 +1001,7 @@ class vimconnector(vimconn.vimconnector):
         payload_req = json.dumps({"server": payload_dict})
         print self.url+'/'+self.tenant+'/servers'+payload_req
         try:
-            vim_response = requests.post(self.url+'/'+self.tenant+'/servers', headers = headers_req, data=payload_req)
+            vim_response = requests.post(self.url+'/'+self.tenant+'/servers', headers = self.headers_req, data=payload_req)
         except requests.exceptions.RequestException, e:
             print "new_tenant_vminstance Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -1007,13 +1059,16 @@ class vimconnector(vimconn.vimconnector):
         
     def get_tenant_vminstance(self,vm_id):
         '''Returns the VM instance information from VIM'''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         print "VIMConnector: Getting tenant VM instance information from VIM"
-        headers_req = {'content-type': 'application/json'}
         
         url = self.url+'/'+self.tenant+'/servers/'+vm_id
         print url
         try:
-            vim_response = requests.get(url, headers = headers_req)
+            vim_response = requests.get(url, headers = self.headers_req)
         except requests.exceptions.RequestException, e:
             print "get_tenant_vminstance Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -1038,11 +1093,14 @@ class vimconnector(vimconn.vimconnector):
     def delete_tenant_vminstance(self, vm_id):
         '''Removes a VM instance from VIM'''
         '''Returns the instance identifier'''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         print "VIMConnector: Delete a VM instance from VIM " + vm_id
-        headers_req = {'content-type': 'application/json'}
         
         try:
-            vim_response = requests.delete(self.url+'/'+self.tenant+'/servers/'+vm_id, headers = headers_req)
+            vim_response = requests.delete(self.url+'/'+self.tenant+'/servers/'+vm_id, headers = self.headers_req)
         except requests.exceptions.RequestException, e:
             print "delete_tenant_vminstance Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -1066,6 +1124,10 @@ class vimconnector(vimconn.vimconnector):
                       <0 if error (foreseen)
             - error_msg: text with reference to possible errors
         '''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         #vms_refreshed = []
         #nets_refreshed = []
         vms_unrefreshed = []
@@ -1073,12 +1135,11 @@ class vimconnector(vimconn.vimconnector):
         for vm_id in vmDict:
             vmDict[vm_id]={'error_msg':None, 'vim_info':None}
             print "VIMConnector refresh_tenant_vms and nets: Getting tenant VM instance information from VIM"
-            headers_req = {'content-type': 'application/json'}
         
             url = self.url+'/'+self.tenant+'/servers/'+ vm_id
             print url
             try:
-                vim_response = requests.get(url, headers = headers_req)
+                vim_response = requests.get(url, headers = self.headers_req)
             except requests.exceptions.RequestException, e:
                 print "VIMConnector refresh_tenant_elements. Exception: ", e.args
                 vmDict[vm_id]['status'] = "VIM_ERROR"
@@ -1102,7 +1163,7 @@ class vimconnector(vimconn.vimconnector):
                         #get interfaces info
                         url2 = self.url+'/ports?device_id='+ vm_id
                         try:
-                            vim_response2 = requests.get(url2, headers = headers_req)
+                            vim_response2 = requests.get(url2, headers = self.headers_req)
                             if vim_response.status_code == 200:
                                 client_data = vim_response2.json()
                                 for port in client_data.get("ports"):
@@ -1148,7 +1209,6 @@ class vimconnector(vimconn.vimconnector):
         for net_id in netDict:
             netDict[net_id] = {'error_msg':None, 'vim_info':None}
             print "VIMConnector refresh_tenant_vms_and_nets: Getting tenant network from VIM (tenant: " + str(self.tenant) + "): "
-            headers_req = {'content-type': 'application/json'}
             r,c = self.get_tenant_network(net_id)
             if r<0:
                 print "VIMconnector refresh_tenant_network. Error getting net_id '%s' status: %s" % (net_id, c)
@@ -1185,14 +1245,17 @@ class vimconnector(vimconn.vimconnector):
     def action_tenant_vminstance(self, vm_id, action_dict):
         '''Send and action over a VM instance from VIM'''
         '''Returns the status'''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         print "VIMConnector: Action over VM instance from VIM " + vm_id
-        headers_req = {'content-type': 'application/json'}
         
         try:
             if "console" in action_dict:
                 return -vimconn.HTTP_Service_Unavailable, "getting console is not available at openvim"
             
-            vim_response = requests.post(self.url+'/'+self.tenant+'/servers/'+vm_id+"/action", headers = headers_req, data=json.dumps(action_dict) )
+            vim_response = requests.post(self.url+'/'+self.tenant+'/servers/'+vm_id+"/action", headers = self.headers_req, data=json.dumps(action_dict) )
         except requests.exceptions.RequestException, e:
             print "action_tenant_vminstance Exception: ", e.args
             return -vimconn.HTTP_Not_Found, str(e.args[0])
@@ -1358,6 +1421,10 @@ class vimconnector(vimconn.vimconnector):
              1,image-id            if there is one image with that path
              <0,message            if there was an error (Image not found, error contacting VIM, more than 1 image with that path, etc.) 
         '''
+        try:
+            self._get_my_tenant()
+        except Exception as e:
+            return -vimconn.HTTP_Not_Found, str(e)
         url=self.url + '/' + self.tenant + '/images?path='+path
         try:
             vim_response = requests.get(url)
