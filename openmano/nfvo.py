@@ -2294,8 +2294,8 @@ def datacenter_new_netmap(mydb, tenant_id, datacenter, action_dict=None):
         filter_dict["shared"] = True
     
     result, content = myvim.get_network_list(filter_dict=filter_dict)
-    print content
-    if result != 200:
+    print result, content
+    if result <0:
         print " Not possible to get_network_list from VIM: %s " % (content)
         return -HTTP_Internal_Server_Error, content
     elif len(content)>1 and action_dict:

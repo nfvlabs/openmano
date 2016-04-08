@@ -766,7 +766,7 @@ def tenant_create(args):
 def tenant_list(args):
     #print "tenant-list",args
     if args.name:
-        toshow = _get_item_uuid("vnfs", args.name)
+        toshow = _get_item_uuid("tenants", args.name)
         URLrequest = "http://%s:%s/openmano/tenants/%s" %(mano_host, mano_port, toshow)
     else:
         URLrequest = "http://%s:%s/openmano/tenants" %(mano_host, mano_port)

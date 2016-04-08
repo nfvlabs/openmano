@@ -156,7 +156,9 @@ then
     echo OK
 
     printf "%-50s" "Updating external nets in openmano: "
-    result=`openmano datacenter-net-update -f TOS-dc`
+    result=`openmano datacenter-netmap-delete -f --all`
+    [[ $? != 0 ]] && echo  "FAIL" && echo "    $result"  && $_exit 1
+    result=`openmano datacenter-netmap-upload -f`
     [[ $? != 0 ]] && echo  "FAIL" && echo "    $result"  && $_exit 1
     echo OK
 
@@ -240,7 +242,7 @@ then
     for sce in simple complex2
     do 
       printf "%-50s" "Deploying scenario '$sce':"
-      result=`openmano scenario-deploy $sce ${sce}-instance`
+      result=`openmano instance-scenario-create --scenario $sce --name ${sce}-instance`
       instance=`echo $result |gawk '{print $1}'`
       ! is_valid_uuid $instance && echo FAIL && echo "    $result" && $_exit 1
       echo $instance
