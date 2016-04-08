@@ -1215,7 +1215,7 @@ def start_scenario(mydb, tenant_id, scenario_id, instance_scenario_name, instanc
         print "start_scenario error. Several datacenters available, you must concrete"
         return -HTTP_Bad_Request, "Several datacenters available, you must concrete"
     myvim = vims.values()[0]
-    myvim_tenant = myvim['tenant']
+    myvim_tenant = myvim['tenant_id']
     datacenter_id = myvim['id']
     datacenter_name = myvim['name']
     datacenter_tenant_id = myvim['config']['datacenter_tenant_id']
@@ -1460,7 +1460,7 @@ def create_instance(mydb, tenant_id, instance_dict):
         print "start_scenario error. Several datacenters available, you must concrete"
         return -HTTP_Bad_Request, "Several datacenters available, you must concrete"
     myvim = vims.values()[0]
-    #myvim_tenant = myvim['tenant']
+    #myvim_tenant = myvim['tenant_id']
     datacenter_id = myvim['id']
     datacenter_name = myvim['name']
     datacenter_tenant_id = myvim['config']['datacenter_tenant_id']
@@ -2348,7 +2348,7 @@ def vim_action_get(mydb, tenant_id, datacenter, item, name):
         else:
             filter_dict["name"] = name
     if item=="networks":
-        #filter_dict['tenant_id'] = myvim["tenant"]
+        #filter_dict['tenant_id'] = myvim['tenant_id']
         result, content = myvim.get_network_list(filter_dict=filter_dict)
     elif item=="tenants":
         result, content = myvim.get_tenant_list(filter_dict=filter_dict)
