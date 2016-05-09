@@ -22,7 +22,7 @@
 ##
 
 #ONLY TESTED for Ubuntu 14.10 14.04, CentOS7 and RHEL7
-#Get needed packets, source code and configure to run openvim, openmano and floodlight
+#Get needed packages, source code and configure to run openvim, openmano and floodlight
 #Ask for database user and password if not provided
 #        $1: database user
 #        $2: database password 
@@ -31,19 +31,19 @@ function usage(){
     echo  -e "usage: sudo $0 [db-user [db-passwd]]\n  Install source code in ./openmano"
 }
 
-function install_packets(){
+function install_packages(){
     [ -x /usr/bin/apt-get ] && apt-get install -y $*
     [ -x /usr/bin/yum ]     && yum install -y $*   
     
     #check properly installed
-    for PACKET in $*
+    for PACKAGE in $*
     do
-        PACKET_INSTALLED="no"
-        [ -x /usr/bin/apt-get ] && dpkg -l $PACKET            &>> /dev/null && PACKET_INSTALLED="yes"
-        [ -x /usr/bin/yum ]     && yum list installed $PACKET &>> /dev/null && PACKET_INSTALLED="yes" 
-        if [ "$PACKET_INSTALLED" = "no" ]
+        PACKAGE_INSTALLED="no"
+        [ -x /usr/bin/apt-get ] && dpkg -l $PACKAGE            &>> /dev/null && PACKAGE_INSTALLED="yes"
+        [ -x /usr/bin/yum ]     && yum list installed $PACKAGE &>> /dev/null && PACKAGE_INSTALLED="yes" 
+        if [ "$PACKAGE_INSTALLED" = "no" ]
         then
-            echo "failed to install packet '$PACKET'. Revise network connectivity and try again"
+            echo "failed to install package '$PACKAGE'. Revise network connectivity and try again"
             exit -1
        fi
     done
@@ -109,14 +109,14 @@ echo '
 
 echo '
 #################################################################
-#####        INSTALL LAMP   PACKETS                         #####
+#####               INSTALL LAMP PACKAGES                   #####
 #################################################################'
-[ "$_DISTRO" == "Ubuntu" ] && install_packets "apache2 mysql-server           php5 php-pear php5-mysql" #TODO revise if php-pear is needed
-[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && install_packets "httpd   mariadb mariadb-server php           php-mysql"
+[ "$_DISTRO" == "Ubuntu" ] && install_packages "apache2 mysql-server php5 php-pear php5-mysql" #TODO revise if php-pear is needed
+[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && install_packages "httpd mariadb mariadb-server php php-mysql"
 
 if [ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ]
 then
-    #start sercices. By default CentOS does not start services
+    #start services. By default CentOS does not start services
     service mariadb start
     service httpd   start
     systemctl enable mariadb
@@ -151,17 +151,17 @@ done
 
 echo '
 #################################################################
-#####        INSTALL PYTHON PACKETS                         #####
+#####        INSTALL PYTHON PACKAGES                        #####
 #################################################################'
-[ "$_DISTRO" == "Ubuntu" ] && install_packets "python-yaml python-libvirt python-bottle python-mysqldb python-jsonschema python-paramiko python-argcomplete python-requests git screen wget"
-[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && install_packets "PyYAML      libvirt-python               MySQL-python   python-jsonschema python-paramiko python-argcomplete python-requests git screen wget"
+[ "$_DISTRO" == "Ubuntu" ] && install_packages "python-yaml python-libvirt python-bottle python-mysqldb python-jsonschema python-paramiko python-argcomplete python-requests git screen wget"
+[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && install_packages "PyYAML libvirt-python MySQL-python python-jsonschema python-paramiko python-argcomplete python-requests git screen wget"
 
 #The only way to install python-bottle on Centos7 is with easy_install or pip
 [ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && easy_install -U bottle
 
 #install openstack client needed for using openstack as a VIM
-[ "$_DISTRO" == "Ubuntu" ] && install_packets "python-novaclient python-keystoneclient python-glanceclient python-neutronclient"
-[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && install_packets "python-devel" && easy_install python-novaclient python-keystoneclient python-glanceclient python-neutronclient #TODO revise if gcc python-pip is needed
+[ "$_DISTRO" == "Ubuntu" ] && install_packages "python-novaclient python-keystoneclient python-glanceclient python-neutronclient"
+[ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && install_packages "python-devel" && easy_install python-novaclient python-keystoneclient python-glanceclient python-neutronclient #TODO revise if gcc python-pip is needed
 
 echo '
 #################################################################
@@ -210,8 +210,8 @@ then
     #su $SUDO_USER -c 'tar xvzf v01.1.tar.gz'
     
     #Install Java JDK and Ant packages at the VM 
-    [ "$_DISTRO" == "Ubuntu" ] && install_packets "build-essential default-jdk ant python-dev" #TODO revise if packets are needed apart from ant
-    [ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && install_packets "                            ant "
+    [ "$_DISTRO" == "Ubuntu" ] && install_packages "build-essential default-jdk ant python-dev" #TODO revise if packages are needed apart from ant
+    [ "$_DISTRO" == "CentOS" -o "$_DISTRO" == "Red" ] && install_package "                            ant "
 
     #Configure Java environment variables. It is seem that is not needed!!!
     #export JAVA_HOME=/usr/lib/jvm/default-java" >> /home/${SUDO_USER}/.bashr
@@ -308,10 +308,10 @@ ln -s ${PWD}/openmano/scripts/service-openmano.sh  /home/${SUDO_USER}/bin/servic
 #fi
 
 #configure arg-autocomplete for this user
-#in case of minmal instalation this packet is not installed by default
+#in case of minmal instalation this package is not installed by default
 [[ "$_DISTRO" == "CentOS" || "$_DISTRO" == "Red" ]] && yum install -y bash-completion
-su $SUDO_USER -c 'mkdir -p ~/.bash_completion.d'
-su $SUDO_USER -c 'activate-global-python-argcomplete --dest=/home/${USER}/.bash_completion.d'
+#su $SUDO_USER -c 'mkdir -p ~/.bash_completion.d'
+su $SUDO_USER -c 'activate-global-python-argcomplete --user'
 if ! grep -q bash_completion.d/python-argcomplete.sh /home/${SUDO_USER}/.bashrc
 then
     echo "    inserting .bash_completion.d/python-argcomplete.sh execution at .bashrc"
