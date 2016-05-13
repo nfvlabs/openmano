@@ -22,6 +22,28 @@
 ##
 
 
+LICENSE_HEAD='/**
+* Copyright 2015 Telefónica Investigación y Desarrollo, S.A.U.
+* This file is part of openmano
+* All Rights Reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License"); you may
+* not use this file except in compliance with the License. You may obtain
+* a copy of the License at
+*
+*         http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+* WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+* License for the specific language governing permissions and limitations
+* under the License.
+*
+* For those usages not covered by the Apache License, Version 2.0 please
+* contact with: nfvlabs@tid.es
+**/
+'
+
 DBUSER="mano"
 DBPASS=""
 DBHOST="localhost"
@@ -105,18 +127,20 @@ do
         echo
 done
 
- 
 #echo structure, including the content of schema_version
-mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --no-data --add-drop-table --add-drop-database --routines --databases $DBNAME > ${DIRNAME}/${DBNAME}_structure.sql
+echo "$LICENSE_HEAD" > ${DIRNAME}/${DBNAME}_structure.sql
+mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --no-data --add-drop-table --add-drop-database --routines --databases $DBNAME >> ${DIRNAME}/${DBNAME}_structure.sql
 echo -e "\n\n\n\n" >> ${DIRNAME}/${DBNAME}_structure.sql
 mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --no-create-info $DBNAME --tables schema_version 2>/dev/null  >> ${DIRNAME}/${DBNAME}_structure.sql
 echo "    ${DIRNAME}/${DBNAME}_structure.sql"
 
 #echo only data
-mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --no-create-info $DBNAME > ${DIRNAME}/${DBNAME}_data.sql
+echo "$LICENSE_HEAD" > ${DIRNAME}/${DBNAME}_data.sql #copy my own header
+mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --no-create-info $DBNAME >> ${DIRNAME}/${DBNAME}_data.sql
 echo "    ${DIRNAME}/${DBNAME}_data.sql"
 
 #echo all
-mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --add-drop-table --add-drop-database --routines --databases $DBNAME > ${DIRNAME}/${DBNAME}_all.sql
+echo "$LICENSE_HEAD" > ${DIRNAME}/${DBNAME}_all.sql #copy my own header
+mysqldump $DBHOST_ $DBPORT_ $DBUSER_ $DBPASS_ --add-drop-table --add-drop-database --routines --databases $DBNAME >> ${DIRNAME}/${DBNAME}_all.sql
 echo "    ${DIRNAME}/${DBNAME}_all.sql"
 
