@@ -24,8 +24,7 @@ The relevant releases/branches in openmano are the following:
         wget https://github.com/nfvlabs/openmano/raw/v0.4/scripts/install-openmano.sh
         chmod +x install-openmano.sh
         sudo ./install-openmano.sh [<database-root-user> [<database-password>]]
-        #NOTE: you can provide optionally the root user and password of the database.
-        #In case the image does not have a mysql/mariadb it will be installed
+        #NOTE: you can provide optionally the DB root user and password.
 
 Manual installation can be done following these [instructions](https://github.com/nfvlabs/openmano/wiki/Getting-started#manual-installation). 
 
