@@ -203,7 +203,7 @@ CREATE TABLE `logs` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `tenant_id` varchar(36) DEFAULT NULL,
-  `related` enum('hosts','images','flavors','tenants','ports','instances') DEFAULT NULL,
+  `related` enum('hosts','images','flavors','tenants','ports','instances','nets') DEFAULT NULL,
   `uuid` varchar(36) DEFAULT NULL COMMENT 'uuid of host, image, etc that log relates to',
   `level` enum('panic','error','info','debug','verbose') NOT NULL,
   `description` varchar(200) NOT NULL,
