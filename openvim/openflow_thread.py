@@ -421,6 +421,7 @@ class openflow_thread(threading.Thread):
         nb_ports = 0
 
         # Check switch_port information is right
+        self.logger.debug("_compute_net_flows nets: %s", str(nets))
         for net in nets:
             for port in net['ports']:
                 nb_ports += 1
@@ -545,7 +546,31 @@ class openflow_thread(threading.Thread):
             
             new_flows.append(flow_broadcast)        
         
+        #UNIFY openflow rules with the same input port and vlan and the same output actions
+        #These flows differ at the dst_mac; and they are unified by not filtering by dst_mac
+        #this can happen if there is only two ports. It is converted to a point to point connection
+        flow_dict={} # use as key vlan_id+ingress_port and as value the list of flows matching these values
+        for flow in new_flows:
+            key = str(flow.get("vlan_id"))+":"+flow["ingress_port"]
+            if key in flow_dict:
+                flow_dict[key].append(flow)
+            else:
+                flow_dict[key]=[ flow ]
+        new_flows2=[]
+        for flow_list in flow_dict.values():
+            convert2ptp=False
+            if len (flow_list)>=2:
+                convert2ptp=True
+                for f in flow_list:
+                    if f['actions'] != flow_list[0]['actions']:
+                        convert2ptp=False
+                        break
+            if convert2ptp: # add only one unified rule without dst_mac
+                self.logger.debug("Convert flow rules to NON mac dst_address " + str(flow_list) )
+                flow_list[0].pop('dst_mac')
+                flow_list[0]["priority"] -= 5
+                new_flows2.append(flow_list[0])
+            else:  # add all the rules
+                new_flows2 += flow_list
+        return 0, new_flows2
         
-            
-        return 0, new_flows
-

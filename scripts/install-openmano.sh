@@ -121,7 +121,7 @@ then
     service httpd   start
     systemctl enable mariadb
     systemctl enable httpd
-    read -e -p "Do you want to configure mariadb (recomended if not done before) (Y/n)" KK
+    read -e -p "Do you want to configure mariadb (recommended if not done before) (Y/n)" KK
     [ "$KK" != "n" -a  "$KK" != "no" ] && mysql_secure_installation
 
     read -e -p "Do you want to set firewall to grant web access port 80,443  (Y/n)" KK
@@ -308,7 +308,7 @@ ln -s ${PWD}/openmano/scripts/service-openmano.sh  /home/${SUDO_USER}/bin/servic
 #fi
 
 #configure arg-autocomplete for this user
-#in case of minmal instalation this package is not installed by default
+#in case of minimal instalation this package is not installed by default
 [[ "$_DISTRO" == "CentOS" || "$_DISTRO" == "Red" ]] && yum install -y bash-completion
 #su $SUDO_USER -c 'mkdir -p ~/.bash_completion.d'
 su $SUDO_USER -c 'activate-global-python-argcomplete --user'

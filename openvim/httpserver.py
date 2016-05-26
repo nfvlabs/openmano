@@ -1677,6 +1677,7 @@ def http_post_networks():
         if int(net_bind_type[5:]) > 4095 or int(net_bind_type[5:])<=0 :
             bottle.abort(HTTP_Bad_Request, "bad format for 'bind_type', must be 'vlan:<tag>' with a tag between 1 and 4095")
             return
+        network["bind_type"] = net_bind_type
     
     if net_provider!=None:
         if net_provider[:9]=="openflow:":
