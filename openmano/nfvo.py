@@ -30,7 +30,7 @@ __date__ ="$16-sep-2014 22:05:01$"
 import imp
 #import json
 import yaml
-from utils import auxiliary_functions as af
+import utils
 from nfvo_db import HTTP_Unauthorized, HTTP_Bad_Request, HTTP_Internal_Server_Error, HTTP_Not_Found,\
     HTTP_Conflict, HTTP_Method_Not_Allowed
 import console_proxy_thread as cli
@@ -1201,7 +1201,7 @@ def start_scenario(mydb, tenant_id, scenario_id, instance_scenario_name, instanc
     datacenter_id = None
     datacenter_name=None
     if datacenter != None:
-        if af.check_valid_uuid(datacenter): 
+        if utils.check_valid_uuid(datacenter): 
             datacenter_id = datacenter
         else:
             datacenter_name = datacenter
@@ -1446,7 +1446,7 @@ def create_instance(mydb, tenant_id, instance_dict):
     datacenter_name=None
     datacenter = instance_dict.get("datacenter")
     if datacenter:
-        if af.check_valid_uuid(datacenter): 
+        if utils.check_valid_uuid(datacenter): 
             datacenter_id = datacenter
         else:
             datacenter_name = datacenter
@@ -1517,7 +1517,7 @@ def create_instance(mydb, tenant_id, instance_dict):
                     lookfor_network = False
                     if "netmap-use" in descriptor_net:
                         lookfor_network = True
-                        if af.check_valid_uuid(descriptor_net["netmap-use"]):
+                        if utils.check_valid_uuid(descriptor_net["netmap-use"]):
                             filter_text = "scenario id '%s'" % descriptor_net["netmap-use"]
                             lookfor_filter["id"] = descriptor_net["netmap-use"]
                         else: 
@@ -2051,7 +2051,7 @@ def delete_datacenter(mydb, datacenter):
 
 def associate_datacenter_to_tenant(mydb, nfvo_tenant, datacenter, vim_tenant_id=None, vim_tenant_name=None, vim_username=None, vim_password=None):
     #get datacenter info
-    if af.check_valid_uuid(datacenter): 
+    if utils.check_valid_uuid(datacenter): 
         result, vims = get_vim(mydb, datacenter_id=datacenter)
     else:
         result, vims = get_vim(mydb, datacenter_name=datacenter)
@@ -2132,7 +2132,7 @@ def associate_datacenter_to_tenant(mydb, nfvo_tenant, datacenter, vim_tenant_id=
 
 def deassociate_datacenter_to_tenant(mydb, tenant_id, datacenter, vim_tenant_id=None):
     #get datacenter info
-    if af.check_valid_uuid(datacenter): 
+    if utils.check_valid_uuid(datacenter): 
         result, vims = get_vim(mydb, datacenter_id=datacenter)
     else:
         result, vims = get_vim(mydb, datacenter_name=datacenter)
@@ -2192,7 +2192,7 @@ def deassociate_datacenter_to_tenant(mydb, tenant_id, datacenter, vim_tenant_id=
 def datacenter_action(mydb, tenant_id, datacenter, action_dict):
     #DEPRECATED
     #get datacenter info    
-    if af.check_valid_uuid(datacenter): 
+    if utils.check_valid_uuid(datacenter): 
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
     else:
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_name=datacenter)
@@ -2232,13 +2232,13 @@ def datacenter_action(mydb, tenant_id, datacenter, action_dict):
         return 200, result
     elif 'net-edit' in action_dict:
         net = action_dict['net-edit'].pop('net')
-        what = 'vim_net_id' if af.check_valid_uuid(net) else 'name'
+        what = 'vim_net_id' if utils.check_valid_uuid(net) else 'name'
         result, content = mydb.update_rows('datacenter_nets', action_dict['net-edit'], 
                                 WHERE={'datacenter_id':datacenter_id, what: net})
         return result, content
     elif 'net-delete' in action_dict:
         net = action_dict['net-deelte'].get('net')
-        what = 'vim_net_id' if af.check_valid_uuid(net) else 'name'
+        what = 'vim_net_id' if utils.check_valid_uuid(net) else 'name'
         result, content = mydb.delete_row_by_dict(FROM='datacenter_nets', 
                                 WHERE={'datacenter_id':datacenter_id, what: net})
         return result, content
@@ -2248,7 +2248,7 @@ def datacenter_action(mydb, tenant_id, datacenter, action_dict):
 
 def datacenter_edit_netmap(mydb, tenant_id, datacenter, netmap, action_dict):
     #get datacenter info
-    if af.check_valid_uuid(datacenter): 
+    if utils.check_valid_uuid(datacenter): 
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
     else:
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_name=datacenter)
@@ -2262,14 +2262,14 @@ def datacenter_edit_netmap(mydb, tenant_id, datacenter, netmap, action_dict):
         return -HTTP_Conflict, "More than one datacenters found, try to identify with uuid"
     datacenter_id=vims.keys()[0]
 
-    what = 'uuid' if af.check_valid_uuid(netmap) else 'name'
+    what = 'uuid' if utils.check_valid_uuid(netmap) else 'name'
     result, content = mydb.update_rows('datacenter_nets', action_dict['netmap'], 
                             WHERE={'datacenter_id':datacenter_id, what: netmap})
     return result, content
 
 def datacenter_new_netmap(mydb, tenant_id, datacenter, action_dict=None):
     #get datacenter info
-    if af.check_valid_uuid(datacenter): 
+    if utils.check_valid_uuid(datacenter): 
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
     else:
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_name=datacenter)
@@ -2327,7 +2327,7 @@ def datacenter_new_netmap(mydb, tenant_id, datacenter, action_dict=None):
 
 def vim_action_get(mydb, tenant_id, datacenter, item, name):
     #get datacenter info
-    if af.check_valid_uuid(datacenter): 
+    if utils.check_valid_uuid(datacenter): 
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
     else:
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_name=datacenter)
@@ -2343,7 +2343,7 @@ def vim_action_get(mydb, tenant_id, datacenter, item, name):
     myvim=vims[datacenter_id]
     filter_dict={}
     if name:
-        if af.check_valid_uuid(name):
+        if utils.check_valid_uuid(name):
             filter_dict["id"] = name
         else:
             filter_dict["name"] = name
@@ -2370,7 +2370,7 @@ def vim_action_delete(mydb, tenant_id, datacenter, item, name):
     if tenant_id == "any":
         tenant_id=None
 
-    if af.check_valid_uuid(datacenter): 
+    if utils.check_valid_uuid(datacenter): 
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
     else:
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_name=datacenter)
@@ -2415,7 +2415,7 @@ def vim_action_create(mydb, tenant_id, datacenter, item, descriptor):
     if tenant_id == "any":
         tenant_id=None
 
-    if af.check_valid_uuid(datacenter): 
+    if utils.check_valid_uuid(datacenter): 
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_id=datacenter)
     else:
         result, vims = get_vim(mydb, nfvo_tenant=tenant_id, datacenter_name=datacenter)

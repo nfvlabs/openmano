@@ -45,7 +45,7 @@ import getopt
 import yaml
 import nfvo_db
 from jsonschema import validate as js_v, exceptions as js_e
-from utils import auxiliary_functions as af
+import utils
 from openmano_schemas import config_schema
 import nfvo
 
@@ -59,7 +59,7 @@ def load_configuration(configuration_file):
             return (False, "Error: Configuration file '"+configuration_file+"' does not exists.")
             
         #Read file
-        (return_status, code) = af.read_file(configuration_file)
+        (return_status, code) = utils.read_file(configuration_file)
         if not return_status:
             return (return_status, "Error loading configuration file '"+configuration_file+"': "+code)
         #Parse configuration file

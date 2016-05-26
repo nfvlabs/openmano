@@ -29,7 +29,7 @@ __date__ ="$28-aug-2014 10:05:01$"
 
 import MySQLdb as mdb
 import uuid as myUuid
-from utils import auxiliary_functions as af
+import utils
 import json
 import yaml
 import time
@@ -515,7 +515,7 @@ class nfvo_db():
 
         if error_item_text==None:
             error_item_text = table
-        what = 'uuid' if af.check_valid_uuid(uuid_name) else 'name'
+        what = 'uuid' if utils.check_valid_uuid(uuid_name) else 'name'
         cmd =  " SELECT * FROM %s WHERE %s='%s'" % (table, what, uuid_name)
         if WHERE_OR:
             where_or =  " OR ".join(map(self.__tuple2db_format_where, WHERE_OR.iteritems() ))
@@ -604,7 +604,7 @@ class nfvo_db():
                         dataifacesDict[vm['name']] = {}
                         for numa in vm.get('numas', []):
                             for dataiface in numa.get('interfaces',[]):
-                                af.convert_bandwidth(dataiface)
+                                utils.convert_bandwidth(dataiface)
                                 dataifacesDict[vm['name']][dataiface['name']] = {}
                                 dataifacesDict[vm['name']][dataiface['name']]['vpci'] = dataiface['vpci']
                                 dataifacesDict[vm['name']][dataiface['name']]['bw'] = dataiface['bandwidth']
@@ -616,7 +616,7 @@ class nfvo_db():
                         if 'bridge-ifaces' in  vm:
                             bridgeInterfacesDict[vm['name']] = {}
                             for bridgeiface in vm['bridge-ifaces']:
-                                af.convert_bandwidth(bridgeiface)
+                                utils.convert_bandwidth(bridgeiface)
                                 bridgeInterfacesDict[vm['name']][bridgeiface['name']] = {}
                                 bridgeInterfacesDict[vm['name']][bridgeiface['name']]['vpci'] = bridgeiface.get('vpci',None)
                                 bridgeInterfacesDict[vm['name']][bridgeiface['name']]['mac'] = bridgeiface.get('mac_address',None)
@@ -862,7 +862,7 @@ class nfvo_db():
 #                 #scenario table
 #                 where_list=[]
 #                 if tenant_id is not None: where_list.append( "tenant_id='" + tenant_id +"'" )
-#                 if af.check_valid_uuid(instance_scenario_id):
+#                 if utils.check_valid_uuid(instance_scenario_id):
 #                     where_list.append( "uuid='" + instance_scenario_id +"'" )
 #                 else:
 #                     where_list.append( "name='" + instance_scenario_id +"'" )
@@ -893,8 +893,8 @@ class nfvo_db():
 #                 self.cur.execute("SELECT uuid, vim_interface_id, instance_vm_id, instance_net_id FROM instance_interfaces WHERE instance_scenario_id='"+ instance_scenario_dict['uuid'] + "'")
 #                 instance_scenario_dict['instance_interfaces'] = self.cur.fetchall()
 #                 
-#                 af.convert_datetime2str(instance_scenario_dict)
-#                 af.convert_str2boolean(instance_scenario_dict, ('public','shared','external') )
+#                 utils.convert_datetime2str(instance_scenario_dict)
+#                 utils.convert_str2boolean(instance_scenario_dict, ('public','shared','external') )
 #                 print "2******************************************************************"
 #                 return 1, instance_scenario_dict
 #         except (mdb.Error, AttributeError), e:
@@ -912,7 +912,7 @@ class nfvo_db():
                 with self.con:
                     self.cur = self.con.cursor(mdb.cursors.DictCursor)
                     #scenario table
-                    if af.check_valid_uuid(scenario_id):
+                    if utils.check_valid_uuid(scenario_id):
                         where_text = "uuid='%s'" % scenario_id
                     else:
                         where_text = "name='%s'" % scenario_id
@@ -986,8 +986,8 @@ class nfvo_db():
                         else:
                             net['vim_id']=d_net['vim_net_id']
                     
-                    af.convert_datetime2str(scenario_dict)
-                    af.convert_str2boolean(scenario_dict, ('public','shared','external') )
+                    utils.convert_datetime2str(scenario_dict)
+                    utils.convert_str2boolean(scenario_dict, ('public','shared','external') )
                     return 1, scenario_dict
             except (mdb.Error, AttributeError), e:
                 print "nfvo_db.get_scenario DB Exception %d: %s" % (e.args[0], e.args[1])
@@ -1025,7 +1025,7 @@ class nfvo_db():
                     self.cur = self.con.cursor(mdb.cursors.DictCursor)
     
                     #scenario table
-                    if af.check_valid_uuid(scenario_id):
+                    if utils.check_valid_uuid(scenario_id):
                         where_text = "uuid='%s'" % scenario_id
                     else:
                         where_text = "name='%s'" % scenario_id
@@ -1168,7 +1168,7 @@ class nfvo_db():
                     #instance table
                     where_list=[]
                     if tenant_id is not None: where_list.append( "inst.tenant_id='" + tenant_id +"'" )
-                    if af.check_valid_uuid(instance_id):
+                    if utils.check_valid_uuid(instance_id):
                         where_list.append( "inst.uuid='" + instance_id +"'" )
                     else:
                         where_list.append( "inst.name='" + instance_id +"'" )
@@ -1229,8 +1229,8 @@ class nfvo_db():
                     self.cur.execute(cmd)
                     instance_dict['nets'] = self.cur.fetchall()
                     
-                    af.convert_datetime2str(instance_dict)
-                    af.convert_str2boolean(instance_dict, ('public','shared','external') )
+                    utils.convert_datetime2str(instance_dict)
+                    utils.convert_str2boolean(instance_dict, ('public','shared','external') )
                     return 1, instance_dict
             except (mdb.Error, AttributeError), e:
                 print "nfvo_db.get_instance_scenario DB Exception %d: %s" % (e.args[0], e.args[1])
@@ -1250,7 +1250,7 @@ class nfvo_db():
                     #instance table
                     where_list=[]
                     if tenant_id is not None: where_list.append( "tenant_id='" + tenant_id +"'" )
-                    if af.check_valid_uuid(instance_id):
+                    if utils.check_valid_uuid(instance_id):
                         where_list.append( "uuid='" + instance_id +"'" )
                     else:
                         where_list.append( "name='" + instance_id +"'" )

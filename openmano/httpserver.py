@@ -43,7 +43,7 @@ from openmano_schemas import vnfd_schema_v01, vnfd_schema_v02, \
                             datacenter_schema, datacenter_edit_schema, datacenter_action_schema, datacenter_associate_schema,\
                             object_schema, netmap_new_schema, netmap_edit_schema
 import nfvo
-from utils import auxiliary_functions as af
+import utils
 
 global mydb
 global url_base
@@ -316,7 +316,7 @@ def http_post_tenants():
     '''insert a tenant into the catalogue. '''
     #parse input data
     http_content,_ = format_in( tenant_schema )
-    r = af.remove_extra_items(http_content, tenant_schema)
+    r = utils.remove_extra_items(http_content, tenant_schema)
     if r is not None: print "http_post_tenants: Warning: remove extra items ", r
     result, data = nfvo.new_tenant(mydb, http_content['tenant'])
     if result < 0:
@@ -330,7 +330,7 @@ def http_edit_tenant_id(tenant_id):
     '''edit tenant details, can use both uuid or name'''
     #parse input data
     http_content,_ = format_in( tenant_edit_schema )
-    r = af.remove_extra_items(http_content, tenant_edit_schema)
+    r = utils.remove_extra_items(http_content, tenant_edit_schema)
     if r is not None: print "http_edit_tenant_id: Warning: remove extra items ", r
     
     #obtain data, check that only one exist
@@ -402,7 +402,7 @@ def http_get_datacenter_id(tenant_id, datacenter_id):
             bottle.abort(HTTP_Not_Found, 'Tenant %s not found' % tenant_id)
             return
     #obtain data
-    what = 'uuid' if af.check_valid_uuid(datacenter_id) else 'name'
+    what = 'uuid' if utils.check_valid_uuid(datacenter_id) else 'name'
     where_={}
     where_[what] = datacenter_id
     select_=['uuid', 'name','vim_url', 'vim_url_admin', 'type', 'config', 'description', 'd.created_at as created_at']
@@ -455,7 +455,7 @@ def http_post_datacenters():
     '''insert a tenant into the catalogue. '''
     #parse input data
     http_content,_ = format_in( datacenter_schema )
-    r = af.remove_extra_items(http_content, datacenter_schema)
+    r = utils.remove_extra_items(http_content, datacenter_schema)
     if r is not None: print "http_post_tenants: Warning: remove extra items ", r
     result, data = nfvo.new_datacenter(mydb, http_content['datacenter'])
     if result < 0:
@@ -469,7 +469,7 @@ def http_edit_datacenter_id(datacenter_id_name):
     '''edit datacenter details, can use both uuid or name'''
     #parse input data
     http_content,_ = format_in( datacenter_edit_schema )
-    r = af.remove_extra_items(http_content, datacenter_edit_schema)
+    r = utils.remove_extra_items(http_content, datacenter_edit_schema)
     if r is not None: print "http_edit_datacenter_id: Warning: remove extra items ", r
     
     
@@ -492,7 +492,7 @@ def http_getnetmap_datacenter_id(tenant_id, datacenter_id, netmap_id=None):
         bottle.abort(-result, datacenter_dict)
     where_= {"datacenter_id":datacenter_dict['uuid']}
     if netmap_id:
-        if af.check_valid_uuid(netmap_id):
+        if utils.check_valid_uuid(netmap_id):
             where_["uuid"] = netmap_id
         else:
             where_["name"] = netmap_id
@@ -504,7 +504,7 @@ def http_getnetmap_datacenter_id(tenant_id, datacenter_id, netmap_id=None):
         bottle.abort(-result, content)
 
     convert_datetime2str(content)
-    af.convert_str2boolean(content, ('shared', 'multipoint') )
+    utils.convert_str2boolean(content, ('shared', 'multipoint') )
     if netmap_id and len(content)==1:
         data={'netmap' : content[0]}
     elif netmap_id and len(content)==0:
@@ -525,7 +525,7 @@ def http_delnetmap_datacenter_id(tenant_id, datacenter_id, netmap_id=None):
         bottle.abort(-result, datacenter_dict)
     where_= {"datacenter_id":datacenter_dict['uuid']}
     if netmap_id:
-        if af.check_valid_uuid(netmap_id):
+        if utils.check_valid_uuid(netmap_id):
             where_["uuid"] = netmap_id
         else:
             where_["name"] = netmap_id
@@ -549,7 +549,7 @@ def http_uploadnetmap_datacenter_id(tenant_id, datacenter_id):
         print "http_postnetmap_datacenter_id error %d %s" % (result, content)
         bottle.abort(-result, content)
     convert_datetime2str(content)
-    af.convert_str2boolean(content, ('shared', 'multipoint') )
+    utils.convert_str2boolean(content, ('shared', 'multipoint') )
     print content
     data={'netmaps' : content}
     return format_out(data)
@@ -559,7 +559,7 @@ def http_postnetmap_datacenter_id(tenant_id, datacenter_id):
     '''creates a new netmap'''
     #parse input data
     http_content,_ = format_in( netmap_new_schema )
-    r = af.remove_extra_items(http_content, netmap_new_schema)
+    r = utils.remove_extra_items(http_content, netmap_new_schema)
     if r is not None: print "http_action_datacenter_id: Warning: remove extra items ", r
     
     #obtain data, check that only one exist
@@ -568,7 +568,7 @@ def http_postnetmap_datacenter_id(tenant_id, datacenter_id):
         print "http_postnetmap_datacenter_id error %d %s" % (result, content)
         bottle.abort(-result, content)
     convert_datetime2str(content)
-    af.convert_str2boolean(content, ('shared', 'multipoint') )
+    utils.convert_str2boolean(content, ('shared', 'multipoint') )
     print content
     data={'netmaps' : content}
     return format_out(data)
@@ -578,7 +578,7 @@ def http_putnettmap_datacenter_id(tenant_id, datacenter_id, netmap_id):
     '''edit a  netmap'''
     #parse input data
     http_content,_ = format_in( netmap_edit_schema )
-    r = af.remove_extra_items(http_content, netmap_edit_schema)
+    r = utils.remove_extra_items(http_content, netmap_edit_schema)
     if r is not None: print "http_putnettmap_datacenter_id: Warning: remove extra items ", r
     
     #obtain data, check that only one exist
@@ -595,7 +595,7 @@ def http_action_datacenter_id(tenant_id, datacenter_id):
     '''perform an action over datacenter, can use both uuid or name'''
     #parse input data
     http_content,_ = format_in( datacenter_action_schema )
-    r = af.remove_extra_items(http_content, datacenter_action_schema)
+    r = utils.remove_extra_items(http_content, datacenter_action_schema)
     if r is not None: print "http_action_datacenter_id: Warning: remove extra items ", r
     
     #obtain data, check that only one exist
@@ -626,7 +626,7 @@ def http_associate_datacenters(tenant_id, datacenter_id):
     '''associate an existing datacenter to a this tenant. '''
     #parse input data
     http_content,_ = format_in( datacenter_associate_schema )
-    r = af.remove_extra_items(http_content, datacenter_associate_schema)
+    r = utils.remove_extra_items(http_content, datacenter_associate_schema)
     if r != None: print "http_associate_datacenters: Warning: remove extra items ", r
     result, data = nfvo.associate_datacenter_to_tenant(mydb, tenant_id, datacenter_id, 
                                 http_content['datacenter'].get('vim_tenant'),
@@ -701,7 +701,7 @@ def http_get_vnfs(tenant_id):
         bottle.abort(-result, content)
     else:
         #change_keys_http2db(content, http2db_vnf, reverse=True)
-        af.convert_str2boolean(content, ('public',))
+        utils.convert_str2boolean(content, ('public',))
         convert_datetime2str(content)
         data={'vnfs' : content}
         return format_out(data)
@@ -714,7 +714,7 @@ def http_get_vnf_id(tenant_id,vnf_id):
         print "http_post_vnfs error %d %s" % (-result, data)
         bottle.abort(-result, data)
 
-    af.convert_str2boolean(data, ('public',))
+    utils.convert_str2boolean(data, ('public',))
     convert_datetime2str(data)
     return format_out(data)
 
@@ -724,7 +724,7 @@ def http_post_vnfs(tenant_id):
     print "Parsing the YAML file of the VNF"
     #parse input data
     http_content, used_schema = format_in( vnfd_schema_v01, ("version",), {"v0.2": vnfd_schema_v02})
-    r = af.remove_extra_items(http_content, used_schema)
+    r = utils.remove_extra_items(http_content, used_schema)
     if r is not None: print "http_post_vnfs: Warning: remove extra items ", r
     result, data = nfvo.new_vnf(mydb,tenant_id,http_content)
     if result < 0:
@@ -784,7 +784,7 @@ def http_post_deploy(tenant_id):
     print "http_post_deploy by tenant " + tenant_id 
 
     http_content, used_schema = format_in( nsd_schema_v01, ("schema_version",), {2: nsd_schema_v02})
-    #r = af.remove_extra_items(http_content, used_schema)
+    #r = utils.remove_extra_items(http_content, used_schema)
     #if r is not None: print "http_post_deploy: Warning: remove extra items ", r
     print "http_post_deploy input: ",  http_content
     
@@ -817,7 +817,7 @@ def http_post_scenarios(tenant_id):
     '''add a scenario into the catalogue. Creates the scenario and its internal structure in the OPENMANO DB'''
     print "http_post_scenarios by tenant " + tenant_id 
     http_content, used_schema = format_in( nsd_schema_v01, ("schema_version",), {2: nsd_schema_v02})
-    #r = af.remove_extra_items(http_content, used_schema)
+    #r = utils.remove_extra_items(http_content, used_schema)
     #if r is not None: print "http_post_scenarios: Warning: remove extra items ", r
     print "http_post_scenarios input: ",  http_content
     if http_content.get("schema_version") == None:
@@ -842,7 +842,7 @@ def http_post_scenario_action(tenant_id, scenario_id):
         return
     #parse input data
     http_content,_ = format_in( scenario_action_schema )
-    r = af.remove_extra_items(http_content, scenario_action_schema)
+    r = utils.remove_extra_items(http_content, scenario_action_schema)
     if r is not None: print "http_post_scenario_action: Warning: remove extra items ", r
     if "start" in http_content:
         result, data = nfvo.start_scenario(mydb, tenant_id, scenario_id, http_content['start']['instance_name'], \
@@ -907,7 +907,7 @@ def http_get_scenarios(tenant_id):
         bottle.abort(-result, data)
     else:
         convert_datetime2str(data)
-        af.convert_str2boolean(data, ('public',) )
+        utils.convert_str2boolean(data, ('public',) )
         scenarios={'scenarios':data}
         #print json.dumps(scenarios, indent=4)
         return format_out(scenarios)
@@ -954,7 +954,7 @@ def http_put_scenario_id(tenant_id, scenario_id):
     '''edit an existing scenario id'''
     print "http_put_scenarios by tenant " + tenant_id 
     http_content,_ = format_in( scenario_edit_schema )
-    #r = af.remove_extra_items(http_content, scenario_edit_schema)
+    #r = utils.remove_extra_items(http_content, scenario_edit_schema)
     #if r is not None: print "http_put_scenario_id: Warning: remove extra items ", r
     print "http_put_scenario_id input: ",  http_content
     
@@ -977,7 +977,7 @@ def http_post_instances(tenant_id):
         return
     #parse input data
     http_content,used_schema = format_in( instance_scenario_create_schema)
-    r = af.remove_extra_items(http_content, used_schema)
+    r = utils.remove_extra_items(http_content, used_schema)
     if r is not None: print "http_post_instances: Warning: remove extra items ", r
     result, data = nfvo.create_instance(mydb, tenant_id, http_content["instance"])
     if result < 0:
@@ -1008,7 +1008,7 @@ def http_get_instances(tenant_id):
         bottle.abort(-result, data)
     else:
         convert_datetime2str(data)
-        af.convert_str2boolean(data, ('public',) )
+        utils.convert_str2boolean(data, ('public',) )
         instances={'instances':data}
         print json.dumps(instances, indent=4)
         return format_out(instances)
@@ -1073,7 +1073,7 @@ def http_post_instance_scenario_action(tenant_id, instance_id):
         return
     #parse input data
     http_content,_ = format_in( instance_scenario_action_schema )
-    r = af.remove_extra_items(http_content, instance_scenario_action_schema)
+    r = utils.remove_extra_items(http_content, instance_scenario_action_schema)
     if r is not None: print "http_post_instance_scenario_action: Warning: remove extra items ", r
     print "http_post_instance_scenario_action input: ", http_content
     #obtain data

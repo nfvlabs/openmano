@@ -22,7 +22,7 @@
 ##
 
 '''
-auxiliary_functions is a module that implements functions that are used by all openmano modules,
+utils is a module that implements functions that are used by all openmano modules,
 dealing with aspects such as reading/writing files, formatting inputs/outputs for quick translation
 from dictionaries to appropriate database dictionaries, etc.
 '''
