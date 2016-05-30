@@ -47,7 +47,7 @@ function usage(){
     echo -e "     --help   shows this help"
 }
 
-while getopts ":u:p:P:h:-:" o; do
+while getopts ":u:p:P:h:d:-:" o; do
     case "${o}" in
         u)
             DBUSER="$OPTARG"
