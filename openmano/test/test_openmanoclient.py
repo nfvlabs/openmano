@@ -27,8 +27,8 @@ Module to test openmanoclient class
 '''
 __author__="Alfonso Tierno"
 __date__ ="$09-Mar-2016 09:09:48$"
-__version__="0.0.1-r468"
-version_date="Mar 2016"
+__version__="0.0.2"
+version_date="May 2016"
 
 import logging
 import imp 
@@ -59,8 +59,9 @@ if __name__=="__main__":
     -h|--help:    shows this help
     -d|--debug:   set logs to debug level
     -t|--tenant:  set the tenant name to test. By default creates one
-    --datacenter:  set the datacenter name to test. By default creates one at http://localhost:9080/openvim
+    --datacenter: set the datacenter name to test. By default creates one at http://localhost:9080/openvim
     -u|--url:     set the openmano server url. By default 'http://localhost:9090/openmano'
+    --image:      use this image path for testing a VNF. By default a fake one is generated, valid for VIM in test mode'
     """
 
     #import openmanoclient from relative path
@@ -70,9 +71,9 @@ if __name__=="__main__":
     streamformat = "%(asctime)s %(name)s %(levelname)s: %(message)s"
     logging.basicConfig(format=streamformat)
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "t:u:dhv", ["url", "tenant", "debug", "help", "version", "verbose"])
+        opts, args = getopt.getopt(sys.argv[1:], "t:u:dhv", ["url=", "tenant=", "debug", "help", "version", "verbose", "datacenter=", "image="])
     except getopt.GetoptError as err:
-        print ("Error: " + err + "\n Try '{} --help' for more information".format(sys.argv[0]))
+        print ("Error: {}\n Try '{} --help' for more information".format(str(err), sys.argv[0]))
         sys.exit(2)
 
     debug = False
@@ -82,6 +83,7 @@ if __name__=="__main__":
     test_tenant = None
     test_datacenter = None
     test_vim_tenant = None
+    test_image = None
     for o, a in opts:
         if o in ("-v", "--verbose"):
             verbose = True
@@ -90,7 +92,7 @@ if __name__=="__main__":
             print ("(c) Copyright Telefonica")
             sys.exit()
         elif o in ("-h", "--help"):
-            print (usage)
+            print(usage)
             sys.exit()
         elif o in ("-d", "--debug"):
             debug = True
@@ -100,6 +102,8 @@ if __name__=="__main__":
             test_tenant = a 
         elif o in ("--datacenter"):
             test_datacenter = a 
+        elif o in ("--image"):
+            test_image = a 
         else:
             assert False, "Unhandled option"
 
@@ -277,7 +281,10 @@ if __name__=="__main__":
     print("  {}. TEST create_vnf".format(test_number))
     test_number += 1
     test_vnf_name = _get_random_name(255)
-    test_vnf_path = "/random/path/" + "".join(random.choice('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ') for _ in range(20))
+    if test_image:
+        test_vnf_path = test_image
+    else:
+        test_vnf_path = "/random/path/" + "".join(random.choice('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ') for _ in range(20))
     
     vnf_descriptor={'vnf': {'name': test_vnf_name, 
                                 'VNFC': [{'description': _get_random_name(255),

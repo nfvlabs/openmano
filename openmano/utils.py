@@ -167,9 +167,15 @@ def convert_str2boolean(data, items):
 
 def check_valid_uuid(uuid):
     id_schema = {"type" : "string", "pattern": "^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$"}
+    id_schema2 = {"type" : "string", "pattern": "^[a-fA-F0-9]{32}$"}
     try:
         js_v(uuid, id_schema)
         return True
     except js_e.ValidationError:
-        return False
+        try:
+            js_v(uuid, id_schema2)
+            return True
+        except js_e.ValidationError:
+            return False
+    return False
     

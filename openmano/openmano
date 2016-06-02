@@ -1018,7 +1018,7 @@ def datacenter_netmap_action(args):
         elif args.all: 
             force_text="Delete all default netmaps from datacenter '%s' (y/N)? " % (datacenter)
         else:
-            print "you must a netmap name or the option --all"
+            print "you must specify a netmap name or the option --all"
             return 1
         if not args.force:
             r = raw_input(force_text)

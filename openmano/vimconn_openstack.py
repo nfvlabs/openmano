@@ -30,6 +30,7 @@ __date__ ="$22-jun-2014 11:19:29$"
 import vimconn
 import json
 import yaml
+import logging
 
 from novaclient import client as nClient, exceptions as nvExceptions
 import keystoneclient.v2_0.client as ksClient
@@ -54,12 +55,12 @@ netStatus2manoFormat={'ACTIVE':'ACTIVE','PAUSED':'PAUSED','INACTIVE':'INACTIVE',
                      }
 
 class vimconnector(vimconn.vimconnector):
-    def __init__(self, uuid, name, tenant_id, tenant_name, url, url_admin=None, user=None, passwd=None, debug=True, config={}):
+    def __init__(self, uuid, name, tenant_id, tenant_name, url, url_admin=None, user=None, passwd=None, log_level="DEBUG", config={}):
         '''using common constructor parameters. In this case 
         'url' is the keystone authorization url,
         'url_admin' is not use
         '''
-        vimconn.vimconnector.__init__(self, uuid, name, tenant_id, tenant_name, url, url_admin, user, passwd, debug, config)
+        vimconn.vimconnector.__init__(self, uuid, name, tenant_id, tenant_name, url, url_admin, user, passwd, log_level, config)
         
         self.k_creds={}
         self.n_creds={}
@@ -80,6 +81,7 @@ class vimconnector(vimconn.vimconnector):
             self.k_creds['password'] = passwd
             self.n_creds['api_key']  = passwd
         self.reload_client       = True
+        self.logger = logging.getLogger('mano.vim.openstack')
     
     def __setitem__(self,index, value):
         '''Set individuals parameters 
@@ -148,109 +150,7 @@ class vimconnector(vimconn.vimconnector):
             self.ne_endpoint=self.keystone.service_catalog.url_for(service_type='network', endpoint_type='publicURL')
             self.neutron = neClient.Client('2.0', endpoint_url=self.ne_endpoint, token=self.keystone.auth_token, **self.k_creds)
             self.reload_client = False
-    
-    def new_external_port(self, port_data):
-        #TODO openstack if needed
-        '''Adds a external port to VIM'''
-        '''Returns the port identifier'''
-        return -vimconn.HTTP_Internal_Server_Error, "osconnector.new_external_port() not implemented" 
         
-    def connect_port_network(self, port_id, network_id, admin=False):
-        #TODO openstack if needed
-        '''Connects a external port to a network'''
-        '''Returns status code of the VIM response'''
-        return -vimconn.HTTP_Internal_Server_Error, "osconnector.connect_port_network() not implemented" 
-    
-    def new_user(self, user_name, user_passwd, tenant_id=None):
-        '''Adds a new user to openstack VIM'''
-        '''Returns the user identifier'''
-        if self.debug:
-            print "osconnector: Adding a new user to VIM"
-        try:
-            self._reload_connection()
-            user=self.keystone.users.create(user_name, user_passwd, tenant_id=tenant_id)
-            #self.keystone.tenants.add_user(self.k_creds["username"], #role)
-            return 1, user.id
-        except ksExceptions.ConnectionError as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        except ksExceptions.ClientException as e: #TODO remove
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "new_tenant " + error_text
-        return error_value, error_text        
-
-    def delete_user(self, user_id):
-        '''Delete a user from openstack VIM'''
-        '''Returns the user identifier'''
-        if self.debug:
-            print "osconnector: Deleting  a  user from VIM"
-        try:
-            self._reload_connection()
-            self.keystone.users.delete(user_id)
-            return 1, user_id
-        except ksExceptions.ConnectionError as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        except ksExceptions.NotFound as e:
-            error_value=-vimconn.HTTP_Not_Found
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        except ksExceptions.ClientException as e: #TODO remove
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "delete_tenant " + error_text
-        return error_value, error_text
-        
-    def new_tenant(self,tenant_name,tenant_description):
-        '''Adds a new tenant to openstack VIM'''
-        '''Returns the tenant identifier'''
-        if self.debug:
-            print "osconnector: Adding a new tenant to VIM"
-        try:
-            self._reload_connection()
-            tenant=self.keystone.tenants.create(tenant_name, tenant_description)
-            #self.keystone.tenants.add_user(self.k_creds["username"], #role)
-            return 1, tenant.id
-        except ksExceptions.ConnectionError as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        except ksExceptions.ClientException as e: #TODO remove
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "new_tenant " + error_text
-        return error_value, error_text
-
-    def delete_tenant(self,tenant_id):
-        '''Delete a tenant from openstack VIM'''
-        '''Returns the tenant identifier'''
-        if self.debug:
-            print "osconnector: Deleting  a  tenant from VIM"
-        try:
-            self._reload_connection()
-            self.keystone.tenants.delete(tenant_id)
-            #self.keystone.tenants.add_user(self.k_creds["username"], #role)
-            return 1, tenant_id
-        except ksExceptions.ConnectionError as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        except ksExceptions.ClientException as e: #TODO remove
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "delete_tenant " + error_text
-        return error_value, error_text
-
     def __net_os2mano(self, net_list_dict):
         '''Transform the net openstack format to mano format
         net_list_dict can be a list of dict or a single dict'''
@@ -265,24 +165,78 @@ class vimconnector(vimconn.vimconnector):
                 net['type']='data'
             else:
                 net['type']='bridge'
+                
+                
+            
+    def _format_exception(self, exception):
+        '''Transform a keystone, nova, neutron  exception into a vimconn exception'''
+        if isinstance(exception, (HTTPException, gl1Exceptions.HTTPException, gl1Exceptions.CommunicationError,
+                                  ConnectionError, ksExceptions.ConnectionError, neExceptions.ConnectionFailed,
+                                  neClient.exceptions.ConnectionFailed)):
+            raise vimconn.vimconnConnectionException(type(exception).__name__ + ": " + str(exception))            
+        elif isinstance(exception, (nvExceptions.ClientException, ksExceptions.ClientException, 
+                                    neExceptions.NeutronException, nvExceptions.BadRequest)):
+            raise vimconn.vimconnUnexpectedResponse(type(exception).__name__ + ": " + str(exception))
+        elif isinstance(exception, (neExceptions.NetworkNotFoundClient, nvExceptions.NotFound)):
+            raise vimconn.vimconnNotFoundException(type(exception).__name__ + ": " + str(exception))
+        elif isinstance(exception, nvExceptions.Conflict):
+            raise vimconn.vimconnConflictException(type(exception).__name__ + ": " + str(exception))
+        else: # ()
+            raise vimconn.vimconnConnectionException(type(exception).__name__ + ": " + str(exception))
+
+    def get_tenant_list(self, filter_dict={}):
+        '''Obtain tenants of VIM
+        filter_dict can contain the following keys:
+            name: filter by tenant name
+            id: filter by tenant uuid/id
+            <other VIM specific>
+        Returns the tenant list of dictionaries: [{'name':'<name>, 'id':'<id>, ...}, ...]
+        '''
+        self.logger.debug("Getting tenant from VIM filter: '%s'", str(filter_dict))
+        try:
+            self._reload_connection()
+            tenant_class_list=self.keystone.tenants.findall(**filter_dict)
+            tenant_list=[]
+            for tenant in tenant_class_list:
+                tenant_list.append(tenant.to_dict())
+            return tenant_list
+        except (ksExceptions.ConnectionError, ksExceptions.ClientException)  as e:
+            self._format_exception(e)
+
+    def new_tenant(self, tenant_name, tenant_description):
+        '''Adds a new tenant to openstack VIM. Returns the tenant identifier'''
+        self.logger.debug("Adding a new tenant name: %s", tenant_name)
+        try:
+            self._reload_connection()
+            tenant=self.keystone.tenants.create(tenant_name, tenant_description)
+            return tenant.id
+        except (ksExceptions.ConnectionError, ksExceptions.ClientException)  as e:
+            self._format_exception(e)
+
+    def delete_tenant(self, tenant_id):
+        '''Delete a tenant from openstack VIM. Returns the old tenant identifier'''
+        self.logger.debug("Deleting tenant %s from VIM", tenant_id)
+        try:
+            self._reload_connection()
+            self.keystone.tenants.delete(tenant_id)
+            return tenant_id
+        except (ksExceptions.ConnectionError, ksExceptions.ClientException)  as e:
+            self._format_exception(e)
         
-    def new_tenant_network(self,net_name,net_type,public=False,cidr=None,vlan=None):
-        '''Adds a tenant network to VIM'''
-        '''Returns the network identifier'''
-        if self.debug:
-            print "osconnector: Adding a new tenant network to VIM (tenant: " + str(self.tenant_name) + ", type: " + net_type + "): "+ net_name
+    def new_network(self,net_name,net_type, shared=False, cidr=None, vlan=None):
+        '''Adds a tenant network to VIM. Returns the network identifier'''
+        self.logger.debug("Adding a new network to VIM name '%s', type '%s'", net_name, net_type)
         try:
             self._reload_connection()
             network_dict = {'name': net_name, 'admin_state_up': True}
             if net_type=="data" or net_type=="ptp":
                 if self.config.get('dataplane_physical_net') == None:
-                    return -vimconn.HTTP_Bad_Request, "You must provide a 'dataplane_physical_net' at config value before creating sriov network "
-                    
+                    raise vimconn.vimconnConflictException("You must provide a 'dataplane_physical_net' at config value before creating sriov network")
                 network_dict["provider:physical_network"] = self.config['dataplane_physical_net'] #"physnet_sriov" #TODO physical
                 network_dict["provider:network_type"]     = "vlan"
                 if vlan!=None:
                     network_dict["provider:network_type"] = vlan
-            network_dict["shared"]=public
+            network_dict["shared"]=shared
             new_net=self.neutron.create_network({'network':network_dict})
             #print new_net
             #create fake subnetwork
@@ -294,18 +248,9 @@ class vimconnector(vimconn.vimconnector):
                     "cidr": cidr
                     }
             self.neutron.create_subnet({"subnet": subnet} )
-            return 1, new_net["network"]["id"]
-        except neExceptions.ConnectionFailed as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        except (ksExceptions.ClientException, neExceptions.NeutronException) as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "new_tenant_network " + error_text
-        return error_value, error_text
+            return new_net["network"]["id"]
+        except (neExceptions.ConnectionFailed, ksExceptions.ClientException, neExceptions.NeutronException) as e:
+            self._format_exception(e)
 
     def get_network_list(self, filter_dict={}):
         '''Obtain tenant networks of VIM
@@ -318,60 +263,41 @@ class vimconnector(vimconn.vimconnector):
             status: 'ACTIVE'
         Returns the network list of dictionaries
         '''
-        if self.debug:
-            print "osconnector.get_network_list(): Getting network from VIM (filter: " + str(filter_dict) + "): "
+        self.logger.debug("Getting network from VIM filter: '%s'", str(filter_dict))
         try:
             self._reload_connection()
             net_dict=self.neutron.list_networks(**filter_dict)
             net_list=net_dict["networks"]
             self.__net_os2mano(net_list)
-            return 1, net_list
-        except neClient.exceptions.ConnectionFailed as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        except (ksExceptions.ClientException, neExceptions.NeutronException) as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "get_network_list " + error_text
-        return error_value, error_text
+            return net_list
+        except (neExceptions.ConnectionFailed, neClient.exceptions.ConnectionFailed, ksExceptions.ClientException, neExceptions.NeutronException) as e:
+            self._format_exception(e)
 
-    def get_tenant_network(self, net_id, tenant_id=None):
-        '''Obtain tenant networks of VIM'''
-        '''Returns the network information from a network id'''
-        if self.debug:
-            print "osconnector.get_tenant_network(): Getting tenant network %s from VIM" % net_id
+    def get_network(self, net_id):
+        '''Obtain details of network from VIM
+        Returns the network information from a network id'''
+        self.logger.debug(" Getting tenant network %s from VIM", net_id)
         filter_dict={"id": net_id}
-        if tenant_id:
-            filter_dict["tenant_id"] = tenant_id
-        r, net_list = self.get_network_list(filter_dict)
-        if r<0:
-            return r, net_list
+        net_list = self.get_network_list(filter_dict)
         if len(net_list)==0:
-            return -vimconn.HTTP_Not_Found, "Network '%s' not found" % net_id
+            raise vimconn.vimconnNotFoundException("Network '{}' not found".format(net_id))
         elif len(net_list)>1:
-            return -vimconn.HTTP_Conflict, "Found more than one network with this criteria"
+            raise vimconn.vimconnConflictException("Found more than one network with this criteria")
         net = net_list[0]
         subnets=[]
         for subnet_id in net.get("subnets", () ):
             try:
                 subnet = self.neutron.show_subnet(subnet_id)
             except Exception as e:
-                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-                print "osconnector.get_tenant_network(): Error getting subnet %s %s" % (net_id, error_text)
-                subnet = {"id": subnet_id, "fault": error_text}
+                self.logger.error("osconnector.get_network(): Error getting subnet %s %s" % (net_id, str(e)))
+                subnet = {"id": subnet_id, "fault": str(e)}
             subnets.append(subnet)
         net["subnets"] = subnets
-        return 1, net
+        return net
 
-
-    def delete_tenant_network(self, net_id):
-        '''Deletes a tenant network from VIM'''
-        '''Returns the network identifier'''
-        if self.debug:
-            print "osconnector: Deleting a new tenant network from VIM tenant: " + str(self.tenant_name) + ", id: " + net_id
+    def delete_network(self, net_id):
+        '''Deletes a tenant network from VIM. Returns the old network identifier'''
+        self.logger.debug("Deleting network '%s' from VIM", net_id)
         try:
             self._reload_connection()
             #delete VM ports attached to this networks before the network
@@ -380,55 +306,79 @@ class vimconnector(vimconn.vimconnector):
                 try:
                     self.neutron.delete_port(p["id"])
                 except Exception as e:
-                    print "Error deleting port: " + type(e).__name__ + ": "+  str(e)
+                    self.logger.error("Error deleting port %s: %s", p["id"], str(e))
             self.neutron.delete_network(net_id)
-            return 1, net_id
-        except neClient.exceptions.ConnectionFailed as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        except neExceptions.NetworkNotFoundClient as e:
-            error_value=-vimconn.HTTP_Not_Found
-            error_text= type(e).__name__ + ": "+  str(e.args[0])
-        except (ksExceptions.ClientException, neExceptions.NeutronException) as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "delete_tenant_network " + error_text
-        return error_value, error_text
+            return net_id
+        except (neExceptions.ConnectionFailed, neExceptions.NetworkNotFoundClient, neExceptions.NeutronException,
+                neClient.exceptions.ConnectionFailed, ksExceptions.ClientException, neExceptions.NeutronException) as e:
+            self._format_exception(e)
 
-    def get_tenant_flavor(self, flavor_id):
-        '''Obtain flavor details from the  VIM
-            Returns the flavor dict details
-        '''
-        print "VIMConnector: Getting flavor from VIM"
+    def refresh_nets_status(self, net_list):
+        '''Get the status of the networks
+           Params: the list of network identifiers
+           Returns a dictionary with:
+                net_id:         #VIM id of this network
+                    status:     #Mandatory. Text with one of:
+                                #  DELETED (not found at vim)
+                                #  VIM_ERROR (Cannot connect to VIM, VIM response error, ...) 
+                                #  OTHER (Vim reported other status not understood)
+                                #  ERROR (VIM indicates an ERROR status)
+                                #  ACTIVE, INACTIVE, DOWN (admin down), 
+                                #  BUILD (on building process)
+                                #
+                    error_msg:  #Text with VIM error message, if any. Or the VIM connection ERROR 
+                    vim_info:   #Text with plain information obtained from vim (yaml.safe_dump)
+
+        '''        
+        net_dict={}
+        for net_id in net_list:
+            net = {}
+            try:
+                net_vim = self.get_network(net_id)
+                if net_vim['status'] in netStatus2manoFormat:
+                    net["status"] = netStatus2manoFormat[ net_vim['status'] ]
+                else:
+                    net["status"] = "OTHER"
+                    net["error_msg"] = "VIM status reported " + net_vim['status']
+                    
+                if net['status'] == "ACIVE" and not net_vim['admin_state_up']:
+                    net['status'] = 'DOWN'
+                net['vim_info']  = yaml.safe_dump(net_vim)
+                if net_vim.get('fault'):  #TODO
+                    net['error_msg'] = str(net_vim['fault'])
+            except vimconn.vimconnNotFoundException as e:
+                self.logger.error("Exception getting net status: %s", str(e))
+                net['status'] = "DELETED"
+                net['error_msg'] = str(e)
+            except vimconn.vimconnException as e:
+                self.logger.error("Exception getting net status: %s", str(e))
+                net['status'] = "VIM_ERROR"
+                net['error_msg'] = str(e)
+            net_dict[net_id] = net
+        return net_dict
+
+    def get_flavor(self, flavor_id):
+        '''Obtain flavor details from the  VIM. Returns the flavor dict details'''
+        self.logger.debug("Getting flavor '%s'", flavor_id)
         try:
             self._reload_connection()
             flavor = self.nova.flavors.find(id=flavor_id)
             #TODO parse input and translate to VIM format (openmano_schemas.new_vminstance_response_schema)
-            return 1, {"flavor": flavor.to_dict()}
-        except nvExceptions.NotFound as e:
-            error_value=-vimconn.HTTP_Not_Found
-            error_text= "flavor instance %s not found" % flavor_id
-        except (ksExceptions.ClientException, nvExceptions.ClientException) as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "get_tenant_flavor " + error_text
-        return error_value, error_text        
+            return flavor.to_dict()
+        except (nvExceptions.NotFound, nvExceptions.ClientException, ksExceptions.ClientException) as e:
+            self._format_exception(e)
 
-    def new_tenant_flavor(self, flavor_dict, change_name_if_used=True):
+    def new_flavor(self, flavor_data, change_name_if_used=True):
         '''Adds a tenant flavor to openstack VIM
-        if change_name_if_used is True, it will change name in case of conflict
+        if change_name_if_used is True, it will change name in case of conflict, because it is not supported name repetition
         Returns the flavor identifier
         '''
+        self.logger.debug("Adding flavor '%s'", str(flavor_data))
         retry=0
+        max_retries=3
         name_suffix = 0
-        name=flavor_dict['name']
-        while retry<2:
+        name=flavor_data['name']
+        while retry<max_retries:
             retry+=1
             try:
                 self._reload_connection()
@@ -440,13 +390,13 @@ class vimconnector(vimconn.vimconnector):
                         fl_names.append(f.name)
                     while name in fl_names:
                         name_suffix += 1
-                        name = flavor_dict['name']+"-" + str(name_suffix)
+                        name = flavor_data['name']+"-" + str(name_suffix)
                         
-                ram = flavor_dict.get('ram',64)
-                vcpus = flavor_dict.get('vcpus',1)
+                ram = flavor_data.get('ram',64)
+                vcpus = flavor_data.get('vcpus',1)
                 numa_properties=None
 
-                extended=flavor_dict.get("extended")
+                extended = flavor_data.get("extended")
                 if extended:
                     numas=extended.get("numas")
                     if numas:
@@ -471,76 +421,54 @@ class vimconnector(vimconn.vimconnector):
                                 numa_properties["hw:cpu_policy"] = "isolated"
                             for interface in numa.get("interfaces",() ):
                                 if interface["dedicated"]=="yes":
-                                    error_value=-vimconn.HTTP_Bad_Request
-                                    error_text= "Passthrough interfaces are not supported for the openstack connector"
-                                    break
+                                    raise vimconn.HTTP_Service_Unavailable("Passthrough interfaces are not supported for the openstack connector")
                                 #TODO, add the key 'pci_passthrough:alias"="<label at config>:<number ifaces>"' when a way to connect it is available
                                 
                 #create flavor                 
                 new_flavor=self.nova.flavors.create(name, 
                                 ram, 
                                 vcpus, 
-                                flavor_dict.get('disk',1),
-                                is_public=flavor_dict.get('is_public', True)
+                                flavor_data.get('disk',1),
+                                is_public=flavor_data.get('is_public', True)
                             ) 
                 #add metadata
                 if numa_properties:
                     new_flavor.set_keys(numa_properties)
-                return 1, new_flavor.id
+                return new_flavor.id
             except nvExceptions.Conflict as e:
-                error_value=-vimconn.HTTP_Conflict
-                error_text= str(e)
-                if change_name_if_used:
+                if change_name_if_used and retry < max_retries:
                     continue
-                break
+                self._format_exception(e)
             #except nvExceptions.BadRequest as e:
             except (ksExceptions.ClientException, nvExceptions.ClientException, ConnectionError) as e:
-                error_value=-vimconn.HTTP_Bad_Request
-                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-                break
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "new_tenant_flavor " + error_text
-        return error_value, error_text
+                self._format_exception(e)
 
-    def delete_tenant_flavor(self,flavor_id):
-        '''Deletes a tenant flavor from openstack VIM
-           Returns >0,id if ok; or <0,error_text if error
+    def delete_flavor(self,flavor_id):
+        '''Deletes a tenant flavor from openstack VIM. Returns the old flavor_id
         '''
-        retry=0
-        while retry<2:
-            retry+=1
-            try:
-                self._reload_connection()
-                self.nova.flavors.delete(flavor_id)
-                return 1, flavor_id
-            except nvExceptions.NotFound as e:
-                error_value = -vimconn.HTTP_Not_Found
-                error_text  = "flavor '%s' not found" % flavor_id
-                break
-            #except nvExceptions.BadRequest as e:
-            except (ksExceptions.ClientException, nvExceptions.ClientException) as e:
-                error_value=-vimconn.HTTP_Bad_Request
-                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-                break
-        if self.debug:
-            print "delete_tenant_flavor " + error_text
-        #if reaching here is because an exception
-        return error_value, error_text
+        try:
+            self._reload_connection()
+            self.nova.flavors.delete(flavor_id)
+            return flavor_id
+        #except nvExceptions.BadRequest as e:
+        except (nvExceptions.NotFound, ksExceptions.ClientException, nvExceptions.ClientException) as e:
+            self._format_exception(e)
 
-    def new_tenant_image(self,image_dict):
+    def new_image(self,image_dict):
         '''
-        Adds a tenant image to VIM
-        if change_name_if_used is True, it will change name in case of conflict
-        Returns:
-            >1, image-id        if the image is created
-            <0, message          if there is an error
+        Adds a tenant image to VIM. imge_dict is a dictionary with:
+            name: name
+            disk_format: qcow2, vhd, vmdk, raw (by default), ...
+            location: path or URI
+            public: "yes" or "no"
+            metadata: metadata of the image
+        Returns the image_id
         '''
-        retry=0
         #using version 1 of glance client
         glancev1 = gl1Client.Client('1',self.glance_endpoint, token=self.keystone.auth_token, **self.k_creds)  #TODO check k_creds vs n_creds
-        while retry<2:
+        retry=0
+        max_retries=3
+        while retry<max_retries:
             retry+=1
             try:
                 self._reload_connection()
@@ -566,7 +494,7 @@ class vimconnector(vimconn.vimconnector):
                         disk_format="ami"
                     else:
                         disk_format="raw"
-                print "new_tenant_image: '%s' loading from '%s'" % (image_dict['name'], image_dict['location'])
+                self.logger.debug("new_image: '%s' loading from '%s'", image_dict['name'], image_dict['location'])
                 if image_dict['location'][0:4]=="http":
                     new_image = glancev1.images.create(name=image_dict['name'], is_public=image_dict.get('public',"yes")=="yes",
                             container_format="bare", location=image_dict['location'], disk_format=disk_format)
@@ -582,55 +510,41 @@ class vimconnector(vimconn.vimconnector):
                 if metadata_to_load:
                     for k,v in yaml.load(metadata_to_load).iteritems():
                         new_image_nova.metadata.setdefault(k,v)
-                return 1, new_image.id
-            except nvExceptions.Conflict as e:
-                error_value=-vimconn.HTTP_Conflict
-                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-                break
+                return new_image.id
+            except (nvExceptions.Conflict, ksExceptions.ClientException, nvExceptions.ClientException) as e:
+                self._format_exception(e)
             except (HTTPException, gl1Exceptions.HTTPException, gl1Exceptions.CommunicationError) as e:
-                error_value=-vimconn.HTTP_Bad_Request
-                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-                continue
+                if retry==max_retries:
+                    continue
+                self._format_exception(e)
             except IOError as e:  #can not open the file
-                error_value=-vimconn.HTTP_Bad_Request
-                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0])) + " for " + image_dict['location']
-                break
-            except (ksExceptions.ClientException, nvExceptions.ClientException) as e:
-                error_value=-vimconn.HTTP_Bad_Request
-                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-                break
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "new_tenant_image " + error_text
-        return error_value, error_text
+                raise vimconn.vimconnConnectionException(type(e).__name__ + ": " + str(e)+ " for " + image_dict['location'],
+                                                         http_code=vimconn.HTTP_Bad_Request)
      
-    def delete_tenant_image(self, image_id):
-        '''Deletes a tenant image from openstack VIM
-        Returns >0,id if ok; or <0,error_text if error
+    def delete_image(self, image_id):
+        '''Deletes a tenant image from openstack VIM. Returns the old id
         '''
-        retry=0
-        while retry<2:
-            retry+=1
-            try:
-                self._reload_connection()
-                self.nova.images.delete(image_id)
-                return 1, image_id
-            except nvExceptions.NotFound as e:
-                error_value = -vimconn.HTTP_Not_Found
-                error_text  = "flavor '%s' not found" % image_id
-                break
-            #except nvExceptions.BadRequest as e:
-            except (ksExceptions.ClientException, nvExceptions.ClientException) as e: #TODO remove
-                error_value=-vimconn.HTTP_Bad_Request
-                error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-                break
-        if self.debug:
-            print "delete_tenant_image " + error_text
-        #if reaching here is because an exception
-        return error_value, error_text
+        try:
+            self._reload_connection()
+            self.nova.images.delete(image_id)
+            return image_id
+        except (nvExceptions.NotFound, ksExceptions.ClientException, nvExceptions.ClientException, gl1Exceptions.CommunicationError) as e: #TODO remove
+            self._format_exception(e)
+
+    def get_image_id_from_path(self, path):
+        '''Get the image id from image path in the VIM database. Returns the image_id 
+        '''
+        try:
+            self._reload_connection()
+            images = self.nova.images.list()
+            for image in images:
+                if image.metadata.get("location")==path:
+                    return image.id
+            raise vimconn.vimconnNotFoundException("image with location '{}' not found".format( path))
+        except (ksExceptions.ClientException, nvExceptions.ClientException, gl1Exceptions.CommunicationError) as e: 
+            self._format_exception(e)
         
-    def new_tenant_vminstance(self,name,description,start,image_id,flavor_id,net_list):
+    def new_vminstance(self,name,description,start,image_id,flavor_id,net_list):
         '''Adds a VM instance to VIM
         Params:
             start: indicates if VM must start or boot in pause mode. Ignored
@@ -645,17 +559,14 @@ class vimconnector(vimconn.vimconnector):
                 type: 'virtual', 'PF', 'VF', 'VFnotShared'
                 vim_id: filled/added by this function
                 #TODO ip, security groups
-        Returns >=0, the instance identifier
-                <0, error_text
+        Returns the instance identifier
         '''
-        if self.debug:
-            print "osconnector: Creating VM into VIM"
-            print "   image %s  flavor %s   nics=%s" %(image_id, flavor_id,net_list)
+        self.logger.debug("Creating VM image '%s' flavor '%s' nics='%s'",image_id, flavor_id,str(net_list))
         try:
             metadata=[]
             net_list_vim=[]
             self._reload_connection()
-            metadata_vpci={}
+            metadata_vpci={} #For a specific neutron plugin 
             for net in net_list:
                 if not net.get("net_id"): #skip non connected iface
                     continue
@@ -664,7 +575,7 @@ class vimconnector(vimconn.vimconnector):
                     if "vpci" in net:
                         metadata_vpci[ net["net_id"] ] = [[ net["vpci"], "" ]]
                 elif net["type"]=="PF":
-                    print "new_tenant_vminstance: Warning, can not connect a passthrough interface "
+                    self.logger.warn("new_vminstance: Warning, can not connect a passthrough interface ")
                     #TODO insert this when openstack consider passthrough ports as openstack neutron ports
                 else: #VF
                     if "vpci" in net:
@@ -692,8 +603,8 @@ class vimconnector(vimconn.vimconnector):
             if metadata_vpci:
                 metadata = {"pci_assignement": json.dumps(metadata_vpci)}
             
-            print "name '%s' image_id '%s'flavor_id '%s' net_list_vim '%s' description '%s' metadata %s"\
-                 % (name, image_id, flavor_id, str(net_list_vim), description, str(metadata))
+            self.logger.debug("name '%s' image_id '%s'flavor_id '%s' net_list_vim '%s' description '%s' metadata %s",
+                              name, image_id, flavor_id, str(net_list_vim), description, str(metadata))
             
             security_groups   = self.config.get('security_groups')
             if type(security_groups) is str:
@@ -705,7 +616,7 @@ class vimconnector(vimconn.vimconnector):
                                         ) #, description=description)
             
             
-            print "DONE :-)", server
+            #print "DONE :-)", server
             
 #             #TODO   server.add_floating_ip("10.95.87.209")
 #             #To look for a free floating_ip
@@ -718,44 +629,28 @@ class vimconnector(vimconn.vimconnector):
 #                 server.add_floating_ip(free_floating_ip)
                 
             
-            return 1, server.id
+            return server.id
 #        except nvExceptions.NotFound as e:
 #            error_value=-vimconn.HTTP_Not_Found
 #            error_text= "vm instance %s not found" % vm_id
-        except (ksExceptions.ClientException, nvExceptions.ClientException, ConnectionError, TypeError) as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        except neClient.exceptions.ConnectionFailed as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "new_tenant_vminstance Exception",e, error_text
-        return error_value, error_text    
+        except (ksExceptions.ClientException, nvExceptions.ClientException, ConnectionError,
+                neClient.exceptions.ConnectionFailed) as e:
+            self._format_exception(e)
+        except TypeError as e:
+            raise vimconn.vimconnException(type(e).__name__ + ": "+  str(e), http_code=vimconn.HTTP_Bad_Request)
 
-    def get_tenant_vminstance(self,vm_id):
+    def get_vminstance(self,vm_id):
         '''Returns the VM instance information from VIM'''
-        if self.debug:
-            print "osconnector: Getting VM from VIM"
+        #self.logger.debug("Getting VM from VIM")
         try:
             self._reload_connection()
             server = self.nova.servers.find(id=vm_id)
             #TODO parse input and translate to VIM format (openmano_schemas.new_vminstance_response_schema)
-            return 1, {"server": server.to_dict()}
-        except nvExceptions.NotFound as e:
-            error_value=-vimconn.HTTP_Not_Found
-            error_text= "vm instance %s not found" % vm_id
-        except (ksExceptions.ClientException, nvExceptions.ClientException) as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "get_tenant_vminstance " + error_text
-        return error_value, error_text        
-                
-    def get_tenant_vminstance_console(self,vm_id, console_type="vnc"):
+            return server.to_dict()
+        except (ksExceptions.ClientException, nvExceptions.ClientException, nvExceptions.NotFound) as e:
+            self._format_exception(e)
+
+    def get_vminstance_console(self,vm_id, console_type="vnc"):
         '''
         Get a console for the virtual machine
         Params:
@@ -763,11 +658,13 @@ class vimconnector(vimconn.vimconnector):
             console_type, can be:
                 "novnc" (by default), "xvpvnc" for VNC types, 
                 "rdp-html5" for RDP types, "spice-html5" for SPICE types
-        Returns <0, text on error, for example not available
-                1, URL/text with the console parameters
+        Returns dict with the console parameters:
+                protocol: ssh, ftp, http, https, ...
+                server:   usually ip address 
+                port:     the http, ssh, ... port 
+                suffix:   extra text, e.g. the http path and query string   
         '''
-        if self.debug:
-            print "osconnector: Getting VM CONSOLE from VIM"
+        self.logger.debug("Getting VM CONSOLE from VIM")
         try:
             self._reload_connection()
             server = self.nova.servers.find(id=vm_id)
@@ -780,7 +677,7 @@ class vimconnector(vimconn.vimconnector):
             elif console_type == "spice-html5":
                 console_dict = server.get_spice_console(console_type)
             else:
-                return -vimconn.HTTP_Bad_Request, "console type '%s' not allowed" % console_type
+                raise vimconn.vimconnException("console type '{}' not allowed".format(console_type), http_code=vimconn.HTTP_Bad_Request)
             
             console_dict1 = console_dict.get("console")
             if console_dict1:
@@ -798,31 +695,16 @@ class vimconnector(vimconn.vimconnector):
                                   "suffix":   console_url[suffix_index+1:] 
                                   }
                     protocol_index += 2
-                    return 1, console_dict
-            return -vimconn.HTTP_Internal_Server_Error, "Unexpected response from VIM"
+                    return console_dict
+            raise vimconn.vimconnUnexpectedResponse("Unexpected response from VIM")
             
-            #TODO parse input and translate to VIM format (openmano_schemas.new_vminstance_response_schema)
-            return 1, {"server": server.to_dict()}
-        except nvExceptions.NotFound as e:
-            error_value=-vimconn.HTTP_Not_Found
-            error_text= "vm instance %s not found" % vm_id
-        except (ksExceptions.ClientException, nvExceptions.ClientException, nvExceptions.BadRequest) as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        #TODO insert exception vimconn.HTTP_Unauthorized
-        #if reaching here is because an exception
-        if self.debug:
-            print "get_tenant_vminstance " + error_text
-        return error_value, error_text        
+        except (nvExceptions.NotFound, ksExceptions.ClientException, nvExceptions.ClientException, nvExceptions.BadRequest) as e:
+            self._format_exception(e)
 
-
-    def delete_tenant_vminstance(self, vm_id):
-        '''Removes a VM instance from VIM
-        Returns >0, the instance identifier
-                <0, error_text
+    def delete_vminstance(self, vm_id):
+        '''Removes a VM instance from VIM. Returns the old identifier
         '''
-        if self.debug:
-            print "osconnector: Getting VM from VIM"
+        #print "osconnector: Getting VM from VIM"
         try:
             self._reload_connection()
             #delete VM ports attached to this networks before the virtual machine
@@ -831,125 +713,89 @@ class vimconnector(vimconn.vimconnector):
                 try:
                     self.neutron.delete_port(p["id"])
                 except Exception as e:
-                    print "Error deleting port: " + type(e).__name__ + ": "+  str(e)
+                    self.logger.error("Error deleting port: " + type(e).__name__ + ": "+  str(e))
             self.nova.servers.delete(vm_id)
-            return 1, vm_id
-        except nvExceptions.NotFound as e:
-            error_value=-vimconn.HTTP_Not_Found
-            error_text= (str(e) if len(e.args)==0 else str(e.args[0]))
-        except (ksExceptions.ClientException, nvExceptions.ClientException) as e:
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+            return vm_id
+        except (nvExceptions.NotFound, ksExceptions.ClientException, nvExceptions.ClientException) as e:
+            self._format_exception(e)
         #TODO insert exception vimconn.HTTP_Unauthorized
         #if reaching here is because an exception
-        if self.debug:
-            print "get_tenant_vminstance " + error_text
-        return error_value, error_text        
 
-    def refresh_tenant_vms_and_nets(self, vmDict, netDict):
-        '''Refreshes the status of the dictionaries of VM instances and nets passed as arguments. It modifies the dictionaries
-        Returns:
-            - result: 0 if all elements could be refreshed (even if its status didn't change)
-                      n>0, the number of elements that couldn't be refreshed,
-                      <0 if error (foreseen)
-            - error_msg: text with reference to possible errors
+    def refresh_vms_status(self, vm_list):
+        '''Get the status of the virtual machines and their interfaces/ports
+           Params: the list of VM identifiers
+           Returns a dictionary with:
+                vm_id:          #VIM id of this Virtual Machine
+                    status:     #Mandatory. Text with one of:
+                                #  DELETED (not found at vim)
+                                #  VIM_ERROR (Cannot connect to VIM, VIM response error, ...) 
+                                #  OTHER (Vim reported other status not understood)
+                                #  ERROR (VIM indicates an ERROR status)
+                                #  ACTIVE, PAUSED, SUSPENDED, INACTIVE (not running), 
+                                #  CREATING (on building process), ERROR
+                                #  ACTIVE:NoMgmtIP (Active but any of its interface has an IP address
+                                #
+                    error_msg:  #Text with VIM error message, if any. Or the VIM connection ERROR 
+                    vim_info:   #Text with plain information obtained from vim (yaml.safe_dump)
+                    interfaces:
+                     -  vim_info:         #Text with plain information obtained from vim (yaml.safe_dump)
+                        mac_address:      #Text format XX:XX:XX:XX:XX:XX
+                        vim_net_id:       #network id where this interface is connected
+                        vim_interface_id: #interface/port VIM id
+                        ip_address:       #null, or text with IPv4, IPv6 address
         '''
-        #vms_refreshed = []
-        #nets_refreshed = []
-        vms_unrefreshed = []
-        nets_unrefreshed = []
-        if self.debug:
-            print "osconnector refresh_tenant_vms and nets: Getting tenant VM instance information from VIM"
-        for vm_id in vmDict:
-            vmDict[vm_id] = {'error_msg':None, 'vim_info':None}
-            r,c = self.get_tenant_vminstance(vm_id)
-            if r<0:
-                print "osconnector refresh_tenant_vm. Error getting vm_id '%s' status: %s" % (vm_id, c)
-                if r==-vimconn.HTTP_Not_Found:
-                    vmDict[vm_id]['status'] = "DELETED" 
+        vm_dict={}
+        self.logger.debug("refresh_vms status: Getting tenant VM instance information from VIM")
+        for vm_id in vm_list:
+            vm={}
+            try:
+                vm_vim = self.get_vminstance(vm_id)
+                if vm_vim['status'] in vmStatus2manoFormat:
+                    vm['status']    =  vmStatus2manoFormat[ vm_vim['status'] ]
                 else:
-                    vmDict[vm_id]['status'] = "VIM_ERROR"
-                    vmDict[vm_id]['error_msg'] = c
-                    vms_unrefreshed.append(vm_id)
-            else:
+                    vm['status']    = "OTHER"
+                    vm['error_msg'] = "VIM status reported " + vm_vim['status']
+                vm['vim_info']  = yaml.safe_dump(vm_vim)
+                vm["interfaces"] = []
+                if vm_vim.get('fault'):
+                    vm['error_msg'] = str(vm_vim['fault'])
+                #get interfaces
                 try:
-                    vmDict[vm_id]['status']    =  vmStatus2manoFormat[ c['server']['status'] ]
-                    vmDict[vm_id]['vim_info']  = yaml.safe_dump(c['server'])
-                    vmDict[vm_id]["interfaces"] = []
-                    if c['server'].get('fault'):
-                        vmDict[vm_id]['error_msg'] = str(c['server']['fault'])
-                    #get interfaces
-                    try:
-                        self._reload_connection()
-                        port_dict=self.neutron.list_ports(device_id=vm_id)
-                        for port in port_dict["ports"]:
-                            interface={}
-                            interface['vim_info']  = yaml.safe_dump(port)
-                            interface["mac_address"] = port.get("mac_address")
-                            interface["vim_net_id"] = port["network_id"]
-                            interface["vim_interface_id"] = port["id"]
-                            ips=[]
-                            #look for floating ip address
-                            floating_ip_dict = self.neutron.list_floatingips(port_id=port["id"])
-                            if floating_ip_dict.get("floatingips"):
-                                ips.append(floating_ip_dict["floatingips"][0].get("floating_ip_address") )
+                    self._reload_connection()
+                    port_dict=self.neutron.list_ports(device_id=vm_id)
+                    for port in port_dict["ports"]:
+                        interface={}
+                        interface['vim_info']  = yaml.safe_dump(port)
+                        interface["mac_address"] = port.get("mac_address")
+                        interface["vim_net_id"] = port["network_id"]
+                        interface["vim_interface_id"] = port["id"]
+                        ips=[]
+                        #look for floating ip address
+                        floating_ip_dict = self.neutron.list_floatingips(port_id=port["id"])
+                        if floating_ip_dict.get("floatingips"):
+                            ips.append(floating_ip_dict["floatingips"][0].get("floating_ip_address") )
 
-                            for subnet in port["fixed_ips"]:
-                                ips.append(subnet["ip_address"])
-                            interface["ip_address"] = ";".join(ips)
-                            vmDict[vm_id]["interfaces"].append(interface)
-                    except Exception as e:
-                        print type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-                
-                    
-                    #error message at server.fault["message"]
-                except KeyError as e:
-                    print "osconnector refresh_tenant_elements KeyError %s getting vm_id '%s' status  %s" % (str(e), vm_id, c['server']['status'])
-                    vmDict[vm_id]['status'] = "VIM_ERROR"
-                    vmDict[vm_id]['error_msg'] = str(e)
-                    vms_unrefreshed.append(vm_id)
-        
-        #print "VMs refreshed: %s" % str(vms_refreshed)
-        for net_id in netDict:
-            netDict[net_id]={'error_msg':None, 'vim_info':None}
-            r,c = self.get_tenant_network(net_id)
-            if r<0:
-                print "osconnector refresh_tenant_network. Error getting net_id '%s' status: %s" % (net_id, c)
-                if r==-vimconn.HTTP_Not_Found:
-                    netDict[net_id]['status'] = "DELETED" #TODO check exit status
-                else:
-                    netDict[vm_id]['status'] = "VIM_ERROR"
-                    netDict[vm_id]['error_msg'] = c
-                    nets_unrefreshed.append(net_id)
-            else:
-                try:
-                    netDict[net_id]['status'] = netStatus2manoFormat[ c['status'] ]
-                    if c['status'] == "ACIVE" and not c['admin_state_up']:
-                        netDict[net_id]['status'] = 'DOWN'
-                    netDict[net_id]['vim_info']  = yaml.safe_dump(c)
-                    if c.get('fault'):  #TODO
-                        netDict[net_id]['error_msg'] = str(c['fault'])
-                except KeyError as e:
-                    print "osconnector refresh_tenant_elements KeyError %s getting vm_id '%s' status  %s" % (str(e), vm_id, c['network']['status'])
-                    netDict[net_id]['status'] = "VIM_ERROR"
-                    netDict[net_id]['error_msg'] = str(e)
-                    nets_unrefreshed.append(net_id)
-
-        #print "Nets refreshed: %s" % str(nets_refreshed)
-        
-        error_msg=""
-        if len(vms_unrefreshed)+len(nets_unrefreshed)>0:
-            error_msg += "VMs unrefreshed: " + str(vms_unrefreshed) + "; nets unrefreshed: " + str(nets_unrefreshed)
-            print error_msg
-
-        #return len(vms_unrefreshed)+len(nets_unrefreshed), error_msg, vms_refreshed, nets_refreshed
-        return len(vms_unrefreshed)+len(nets_unrefreshed), error_msg
+                        for subnet in port["fixed_ips"]:
+                            ips.append(subnet["ip_address"])
+                        interface["ip_address"] = ";".join(ips)
+                        vm["interfaces"].append(interface)
+                except Exception as e:
+                    self.logger.error("Error getting vm interface information " + type(e).__name__ + ": "+  str(e))
+            except vimconn.vimconnNotFoundException as e:
+                self.logger.error("Exception getting vm status: %s", str(e))
+                vm['status'] = "DELETED"
+                vm['error_msg'] = str(e)
+            except vimconn.vimconnException as e:
+                self.logger.error("Exception getting vm status: %s", str(e))
+                vm['status'] = "VIM_ERROR"
+                vm['error_msg'] = str(e)
+            vm_dict[vm_id] = vm
+        return vm_dict
     
-    def action_tenant_vminstance(self, vm_id, action_dict):
+    def action_vminstance(self, vm_id, action_dict):
         '''Send and action over a VM instance from VIM
-        Returns the status'''
-        if self.debug:
-            print "osconnector: Action over VM instance from VIM " + vm_id
+        Returns the vm_id if the action was successfully sent to the VIM'''
+        self.logger.debug("Action over VM '%s': %s", vm_id, str(action_dict))
         try:
             self._reload_connection()
             server = self.nova.servers.find(id=vm_id)
@@ -996,8 +842,8 @@ class vimconnector(vimconn.vimconnector):
                 elif console_type == "spice-html5":
                     console_dict = server.get_spice_console(console_type)
                 else:
-                    return -vimconn.HTTP_Bad_Request, "console type '%s' not allowed" % console_type
-                
+                    raise vimconn.vimconnException("console type '{}' not allowed".format(console_type), 
+                                                   http_code=vimconn.HTTP_Bad_Request)
                 try:
                     console_url = console_dict["console"]["url"]
                     #parse console_url
@@ -1005,32 +851,80 @@ class vimconnector(vimconn.vimconnector):
                     suffix_index = console_url[protocol_index+2:].find("/") + protocol_index+2
                     port_index = console_url[protocol_index+2:suffix_index].find(":") + protocol_index+2
                     if protocol_index < 0 or port_index<0 or suffix_index<0:
-                        print "action_tenant_vminstance, console: response", str(console_dict)
-                        return -vimconn.HTTP_Internal_Server_Error, "Unexpected response from VIM"
+                        raise vimconn.vimconnException("Unexpected response from VIM " + str(console_dict))
                     console_dict2={"protocol": console_url[0:protocol_index],
                                   "server":   console_url[protocol_index+2 : port_index], 
                                   "port":     int(console_url[port_index+1 : suffix_index]), 
                                   "suffix":   console_url[suffix_index+1:] 
                                   }
-                    protocol_index += 2
-                    return 1, console_dict2               
-                except:
-                    print "action_tenant_vminstance, console: response", str(console_dict)
-                    return -vimconn.HTTP_Internal_Server_Error, "Unexpected response from VIM"
+                    return console_dict2               
+                except Exception as e:
+                    raise vimconn.vimconnException("Unexpected response from VIM " + str(console_dict))
             
-            return 1, vm_id
-        except nvExceptions.NotFound as e:
-            error_value=-vimconn.HTTP_Not_Found
-            error_text= (str(e) if len(e.args)==0 else str(e.args[0]))
-        except (ksExceptions.ClientException, nvExceptions.ClientException) as e:
+            return vm_id
+        except (ksExceptions.ClientException, nvExceptions.ClientException, nvExceptions.NotFound) as e:
+            self._format_exception(e)
+        #TODO insert exception vimconn.HTTP_Unauthorized
+
+#NOT USED FUNCTIONS
+    
+    def new_external_port(self, port_data):
+        #TODO openstack if needed
+        '''Adds a external port to VIM'''
+        '''Returns the port identifier'''
+        return -vimconn.HTTP_Internal_Server_Error, "osconnector.new_external_port() not implemented" 
+        
+    def connect_port_network(self, port_id, network_id, admin=False):
+        #TODO openstack if needed
+        '''Connects a external port to a network'''
+        '''Returns status code of the VIM response'''
+        return -vimconn.HTTP_Internal_Server_Error, "osconnector.connect_port_network() not implemented" 
+    
+    def new_user(self, user_name, user_passwd, tenant_id=None):
+        '''Adds a new user to openstack VIM'''
+        '''Returns the user identifier'''
+        self.logger.debug("osconnector: Adding a new user to VIM")
+        try:
+            self._reload_connection()
+            user=self.keystone.users.create(user_name, user_passwd, tenant_id=tenant_id)
+            #self.keystone.tenants.add_user(self.k_creds["username"], #role)
+            return user.id
+        except ksExceptions.ConnectionError as e:
+            error_value=-vimconn.HTTP_Bad_Request
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+        except ksExceptions.ClientException as e: #TODO remove
             error_value=-vimconn.HTTP_Bad_Request
             error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
         #TODO insert exception vimconn.HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
-            print "action_tenant_vminstance " + error_text
+            self.logger.debug("new_user " + error_text)
         return error_value, error_text        
-        
+
+    def delete_user(self, user_id):
+        '''Delete a user from openstack VIM'''
+        '''Returns the user identifier'''
+        if self.debug:
+            print "osconnector: Deleting  a  user from VIM"
+        try:
+            self._reload_connection()
+            self.keystone.users.delete(user_id)
+            return 1, user_id
+        except ksExceptions.ConnectionError as e:
+            error_value=-vimconn.HTTP_Bad_Request
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+        except ksExceptions.NotFound as e:
+            error_value=-vimconn.HTTP_Not_Found
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+        except ksExceptions.ClientException as e: #TODO remove
+            error_value=-vimconn.HTTP_Bad_Request
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+        #TODO insert exception vimconn.HTTP_Unauthorized
+        #if reaching here is because an exception
+        if self.debug:
+            print "delete_tenant " + error_text
+        return error_value, error_text
+ 
     def get_hosts_info(self):
         '''Get the information of deployed hosts
         Returns the hosts content'''
@@ -1084,26 +978,4 @@ class vimconnector(vimconn.vimconnector):
             print "get_hosts " + error_text
         return error_value, error_text        
   
-    def get_image_id_from_path(self, path):
-        '''Get the image id from image path in the VIM database'''
-        '''Returns:
-             0,"Image not found"   if there are no images with that path
-             1,image-id            if there is one image with that path
-             <0,message            if there was an error (Image not found, error contacting VIM, more than 1 image with that path, etc.) 
-        '''
-        try:
-            self._reload_connection()
-            images = self.nova.images.list()
-            for image in images:
-                if image.metadata.get("location")==path:
-                    return 1, image.id
-            return 0, "image with location '%s' not found" % path
-        except (ksExceptions.ClientException, nvExceptions.ClientException) as e: #TODO remove
-            error_value=-vimconn.HTTP_Bad_Request
-            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
-        if self.debug:
-            print "get_image_id_from_path " + error_text
-        #if reaching here is because an exception
-        return error_value, error_text
-        
 

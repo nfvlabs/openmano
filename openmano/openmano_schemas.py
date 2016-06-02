@@ -51,6 +51,7 @@ ip_schema={"type":"string","pattern":"^([0-9]{1,3}.){3}[0-9]{1,3}$"}
 port_schema={"type":"integer","minimum":1,"maximum":65534}
 object_schema={"type":"object"}
 schema_version_2={"type":"integer","minimum":2,"maximum":2}
+log_level_schema={"type":"string", "enum":["DEBUG", "INFO", "WARNING","ERROR","CRITICAL"]}
 
 metadata_schema={
     "type":"object",
@@ -94,6 +95,9 @@ config_schema = {
                 {"type":"object", "properties":{"from": port_schema, "to": port_schema}, "required": ["from","to"]} 
             ]}
         },
+        "log_level": log_level_schema,
+        "log_level_db": log_level_schema,
+        "log_level_vimconn": log_level_schema
     },
     "required": ['db_host', 'db_user', 'db_passwd', 'db_name'],
     "additionalProperties": False
