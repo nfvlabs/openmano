@@ -421,7 +421,7 @@ class vimconnector(vimconn.vimconnector):
                                 numa_properties["hw:cpu_policy"] = "isolated"
                             for interface in numa.get("interfaces",() ):
                                 if interface["dedicated"]=="yes":
-                                    raise vimconn.HTTP_Service_Unavailable("Passthrough interfaces are not supported for the openstack connector")
+                                    raise vimconn.vimconnException("Passthrough interfaces are not supported for the openstack connector", http_code=vimconn.HTTP_Service_Unavailable)
                                 #TODO, add the key 'pci_passthrough:alias"="<label at config>:<number ifaces>"' when a way to connect it is available
                                 
                 #create flavor                 
