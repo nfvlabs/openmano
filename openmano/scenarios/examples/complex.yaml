@@ -19,59 +19,48 @@
 # contact with: nfvlabs@tid.es
 ##
 ---
-name:            complex
-description:     Complex network scenario consisting of 4 VNFs interconnected
-topology: 
-  nodes: 
+schema_version:  2
+scenario:
+  name:          complex
+  description:   Complex network scenario consisting of 4 VNFs interconnected
+  vnfs: 
     linux1:                   # vnf/net name in the scenario
-      type:      VNF          # VNF, network, external_network (if it is a datacenter network)
-      VNF model: linux        # VNF name as introduced in OPENMANO DB
+      vnf_name:  linux        # VNF name as introduced in OPENMANO DB
     node1:
-      type:      VNF
-      VNF model: dataplaneVNF1
+      vnf_name:  dataplaneVNF1
     node2:
-      type:      VNF
-      VNF model: dataplaneVNF2
+      vnf_name:  dataplaneVNF2
     node3:
-      type:      VNF
-      VNF model: dataplaneVNF2
-    bridge1: 
-      type:      network
-      model:     bridge_net
-    default: 
-      type:      external_network # Datacenter net
-      model:     default
-  connections: 
+      vnf_name:  dataplaneVNF2
+  networks: 
     dataconn1:
-      nodes: 
-      -   node1: xe0
-      -   node2: xe0
+      interfaces: 
+      - node1:   xe0
+      - node2:   xe0
     dataconn2:
-      nodes: 
-      -   node1: xe1
-      -   node2: xe1
+      interfaces: 
+      - node1:   xe1
+      - node2:   xe1
     dataconn3:
-      nodes: 
-      -   node1: xe2
-      -   node3: xe0
+      interfaces: 
+      - node1:   xe2
+      - node3:   xe0
     dataconn4:
-      nodes: 
-      -   node1: xe3
-      -   node3: xe1
+      interfaces: 
+      - node1:   xe3
+      - node3:   xe1
     data-sriov1:
-      nodes: 
-      -   node2: xe2
-      -   node3: xe2
-    bridgeconn1:
-      nodes: 
-      -   bridge1: null
-      -   linux1:  eth0
-      -   node2:   control
-      -   node3:   control
-    mngmt-net:
-      nodes: 
-      -   default: null
-      -   node1:   mgmt
-      -   node2:   mgmt
-      -   node3:   mgmt
+      interfaces: 
+      - node2:   xe2
+      - node3:   xe2
+    bridge1:
+      interfaces: 
+      - linux1:  eth0
+      - node2:   control
+      - node3:   control
+    default:
+      interfaces: 
+      - node1:   mgmt
+      - node2:   mgmt
+      - node3:   mgmt
 
