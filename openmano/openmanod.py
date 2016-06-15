@@ -33,8 +33,8 @@ It loads the configuration file and launches the http_server thread that will li
 '''
 __author__="Alfonso Tierno, Gerardo Garcia, Pablo Montes"
 __date__ ="$26-aug-2014 11:09:29$"
-__version__="0.4.39-r472"
-version_date="May 2016"
+__version__="0.4.40-r476"
+version_date="Jun 2016"
 database_version="0.10"      #expected database schema version
 
 import httpserver
@@ -226,13 +226,15 @@ if __name__=="__main__":
         for thread in global_config["console_thread"]:
             thread.terminate = True
 
-    except (KeyboardInterrupt, SystemExit):
-        logger.info('Exiting openmanod')
+    except KeyboardInterrupt:
+        logger.info('KyboardInterrupt')
+    except SystemExit:
+        pass
     except getopt.GetoptError as e:
-        logger.error("Error:", e) # will print something like "option -a not recognized"
+        logger.error("Error: %s", str(e)) # will print something like "option -a not recognized"
         #usage()
         exit(-1)
     except LoadConfigurationException as e:
-        logger.error("Error:", e)
+        logger.error("Error: %s", str(e))
         exit(-1)
 

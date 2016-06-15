@@ -21,24 +21,26 @@
 # contact with: nfvlabs@tid.es
 ##
 
-#This script can be used as a basic test of openmano deployment over openstack.
-#in order to use you need to set the OS_XXXX bash variables with openstack values
-#    OS_USERNAME     e.g.: admin
-#    OS_PASSWORD     
-#    OS_AUTH_URL     url to access openstack VIM e.g. http:/openstack:35357/v2.0
-#    OS_TENANT_NAME  e.g.: admin
-#    OS_CONFIG       e.g.: "'network_vlan_ranges: sriov_net'"
-#    OS_TEST_IMAGE_PATH_LINUX  image path(location) to use by the VNF linux
-#    OS_TEST_IMAGE_PATH_LINUXDATA image path(location) to use by the VNF dataplaneVNF_2VMs and dataplaneVNF3
+#This script can be used as a basic test of openmano deployment over a vim
+#in order to use you need to set the VIM_XXXX bash variables with a vim values
+#    VIM_TYPE         openstack or openvim
+#    VIM_USERNAME     e.g.: admin
+#    VIM_PASSWORD     
+#    VIM_AUTH_URL     url to access VIM e.g. http:/openstack:35357/v2.0
+#    VIM_AUTH_URL_ADMIN admin url
+#    VIM_TENANT_NAME  e.g.: admin
+#    VIM_CONFIG       e.g.: "'network_vlan_ranges: sriov_net'"
+#    VIM_TEST_IMAGE_PATH_LINUX  image path(location) to use by the VNF linux
+#    VIM_TEST_IMAGE_PATH_NFV image path(location) to use by the VNF dataplaneVNF_2VMs and dataplaneVNF3
 
 #it should be used with source. It can modifies /home/$USER/.bashrc appending the variables
 #you need to delete them manually if desired
 
 function usage(){
-    echo -e "usage: ${BASH_SOURCE[0]} [OPTIONS] <action>\n  test openmano using a openstack VIM"
+    echo -e "usage: ${BASH_SOURCE[0]} [OPTIONS] <action>\n  test VIM managing from openmano"
     echo -e "  <action> is a list of the following items (by default 'reset create')"
     echo -e "    reset     reset the openmano database content"
-    echo -e "    create    creates items at openstack VIM"
+    echo -e "    create    creates items at VIM"
     echo -e "    delete    delete created items"
     echo -e "  OPTIONS:"
     echo -e "    -f --force       does not prompt for confirmation"
@@ -49,6 +51,7 @@ function usage(){
 
 function is_valid_uuid(){
     echo "$1" | grep -q -E '^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$' && return 0
+    echo "$1" | grep -q -E '^[0-9a-f]{32}$' && return 0
     return 1
 }
 
@@ -57,13 +60,14 @@ function is_valid_uuid(){
 
 #detect if environment variables are set
 fail=""
-[[ -z $OS_USERNAME ]] && echo "OS_USERNAME variable not defined" >&2 && fail=1
-[[ -z $OS_PASSWORD ]] && echo "OS_PASSWORD variable not defined" >&2 && fail=1
-[[ -z $OS_AUTH_URL ]] && echo "OS_AUTH_URL variable not defined" >&2 && fail=1
-[[ -z $OS_TENANT_NAME ]] && echo "OS_TENANT_NAME variable not defined" >&2 && fail=1
-[[ -z $OS_CONFIG ]] && echo "OS_CONFIG variable not defined" >&2 && fail=1
-[[ -z $OS_TEST_IMAGE_PATH_LINUX ]] && echo "OS_TEST_IMAGE_PATH_LINUX variable not defined" >&2 && fail=1
-[[ -z $OS_TEST_IMAGE_PATH_LINUXDATA ]] && echo "OS_TEST_IMAGE_PATH_LINUXDATA variable not defined" >&2 && fail=1
+[[ -z $VIM_TYPE ]]     && echo "VIM_TYPE variable not defined" >&2 && fail=1
+[[ -z $VIM_USERNAME ]] && echo "VIM_USERNAME variable not defined" >&2 && fail=1
+[[ -z $VIM_PASSWORD ]] && echo "VIM_PASSWORD variable not defined" >&2 && fail=1
+[[ -z $VIM_AUTH_URL ]] && echo "VIM_AUTH_URL variable not defined" >&2 && fail=1
+[[ -z $VIM_TENANT_NAME ]] && [[ -z $VIM_TENANT_NAME ]] && echo "neither VIM_TENANT_NAME not VIM_TENANT_ID variables are not defined" >&2 && fail=1
+[[ -z $VIM_CONFIG ]] && echo "VIM_CONFIG variable not defined" >&2 && fail=1
+[[ -z $VIM_TEST_IMAGE_PATH_LINUX ]] && echo "VIM_TEST_IMAGE_PATH_LINUX variable not defined" >&2 && fail=1
+[[ -z $VIM_TEST_IMAGE_PATH_NFV ]]   && echo "VIM_TEST_IMAGE_PATH_NFV variable not defined" >&2 && fail=1
 [[ -n $fail ]] && $_exit 1
 
 #check correct arguments
@@ -91,7 +95,7 @@ done
 DIRNAME=$(dirname $(readlink -f ${BASH_SOURCE[0]}))
 DIRmano=$(dirname $DIRNAME)
 DIRscript=$(dirname $DIRmano)/scripts
-#by default action should be reset create
+#by default action should be reset and create
 [[ -z $action_list ]] && action_list="reset create"
 
 for action in $action_list
@@ -112,10 +116,10 @@ then
 
 elif [[ $action == "delete" ]]
 then
-    result=`openmano tenant-list TOS-tenant`
+    result=`openmano tenant-list TESTVIM-tenant`
     nfvotenant=`echo $result |gawk '{print $1}'`
     #check a valid uuid is obtained
-    is_valid_uuid $nfvotenant || ! echo "Tenant TOS-tenant not found. Already delete?" >&2 || $_exit 1
+    is_valid_uuid $nfvotenant || ! echo "Tenant TESTVIM-tenant not found. Already delete?" >&2 || $_exit 1
     export OPENMANO_TENANT=$nfvotenant
     openmano instance-scenario-delete -f simple-instance     || echo "fail"
     openmano instance-scenario-delete -f complex2-instance   || echo "fail"
@@ -124,16 +128,16 @@ then
     openmano vnf-delete -f linux             || echo "fail"
     openmano vnf-delete -f dataplaneVNF_2VMs || echo "fail"
     openmano vnf-delete -f dataplaneVNF3     || echo "fail"
-    openmano vnf-delete -f TOS-VNF1          || echo "fail"
-    openmano datacenter-detach TOS-dc        || echo "fail"
-    openmano datacenter-delete -f TOS-dc     || echo "fail"
-    openmano tenant-delete -f TOS-tenant     || echo "fail"
+    openmano vnf-delete -f TESTVIM-VNF1          || echo "fail"
+    openmano datacenter-detach TESTVIM-dc        || echo "fail"
+    openmano datacenter-delete -f TESTVIM-dc     || echo "fail"
+    openmano tenant-delete -f TESTVIM-tenant     || echo "fail"
 
 elif [[ $action == "create" ]]
 then 
 
-    printf "%-50s" "Creating openmano tenant 'TOS-tenant': "
-    result=`openmano tenant-create TOS-tenant --description="created by test_os.sh"`
+    printf "%-50s" "Creating openmano tenant 'TESTVIM-tenant': "
+    result=`openmano tenant-create TESTVIM-tenant --description="created by test_vimconn.sh"`
     nfvotenant=`echo $result |gawk '{print $1}'`
     #check a valid uuid is obtained
     ! is_valid_uuid $nfvotenant && echo "FAIL" && echo "    $result" && $_exit 1 
@@ -141,8 +145,10 @@ then
     [[ $insert_bashrc == y ]] && echo -e "\nexport OPENMANO_TENANT=$nfvotenant"  >> ~/.bashrc
     echo $nfvotenant
 
-    printf "%-50s" "Creating datacenter 'TOS-dc' in openmano:"
-    result=`openmano datacenter-create TOS-dc "${OS_AUTH_URL}" "--type=openstack" "--config=${OS_CONFIG}"`
+    printf "%-50s" "Creating datacenter 'TESTVIM-dc' in openmano:"
+    URL_ADMIN_PARAM=""
+    [[ -n $VIM_AUTH_URL_ADMIN ]] && URL_ADMIN_PARAM="--url_admin=$VIM_AUTH_URL_ADMIN"
+    result=`openmano datacenter-create TESTVIM-dc "${VIM_AUTH_URL}" "--type=$VIM_TYPE" $URL_ADMIN_PARAM "--config=${VIM_CONFIG}"`
     datacenter=`echo $result |gawk '{print $1}'`
     #check a valid uuid is obtained
     ! is_valid_uuid $datacenter && echo "FAIL" && echo "    $result" && $_exit 1 
@@ -151,7 +157,11 @@ then
     [[ $insert_bashrc == y ]] && echo -e "\nexport OPENMANO_DATACENTER=$datacenter"  >> ~/.bashrc
 
     printf "%-50s" "Attaching openmano tenant to the datacenter:"
-    result=`openmano datacenter-attach TOS-dc "--user=$OS_USERNAME" "--password=$OS_PASSWORD" "--vim-tenant-name=$OS_TENANT_NAME"`
+    [[ -n $VIM_PASSWORD ]]    && passwd_param="--password=$VIM_PASSWORD"                    || passwd_param=""
+    [[ -n $VIM_TENANT_NAME ]] && vim_tenant_name_param="--vim-tenant-name=$VIM_TENANT_NAME" || vim_tenant_name_param=""
+    [[ -n $VIM_TENANT_ID   ]] && vim_tenant_id_param="--vim-tenant-id=$VIM_TENANT_ID"       || vim_tenant_id_param=""
+    [[ -n $VIM_PASSWORD ]] && passwd_param="--password=$VIM_PASSWORD" || passwd_param=""
+    result=`openmano datacenter-attach TESTVIM-dc "--user=$VIM_USERNAME" "$passwd_param" "$vim_tenant_name_param"`
     [[ $? != 0 ]] && echo  "FAIL" && echo "    $result" && $_exit 1
     echo OK
 
@@ -167,31 +177,31 @@ then
     #nova image-meta US1404dpdk set location=/mnt/powervault/virtualization/vnfs/os/US1404dpdk.qcow2
     #glance image-create --file=./US1404user.qcow2 --min-disk=2 --is-public=True --container-format=bare --name=US1404user --disk-format=qcow2
     #nova image-meta US1404user  set location=/mnt/powervault/virtualization/vnfs/os/US1404user.qcow2
-    result=`openmano vnf-create $DIRmano/vnfs/examples/linux.yaml "--image-path=$OS_TEST_IMAGE_PATH_LINUX"`
+    result=`openmano vnf-create $DIRmano/vnfs/examples/linux.yaml "--image-path=$VIM_TEST_IMAGE_PATH_LINUX"`
     vnf=`echo $result |gawk '{print $1}'`
     #check a valid uuid is obtained
     ! is_valid_uuid $vnf && echo FAIL && echo "    $result" &&  $_exit 1
     echo $vnf
     
-    printf "%-50s" "Creating VNF 1PF,1VF,2GHP,4PThreads: "
+    printf "%-50s" "Creating VNF 1PF,1VF,2GB,4PThreads: "
     result=`openmano vnf-create "vnf:
-        name: TOS-VNF1
+        name: TESTVIM-VNF1
         external-connections:
         - name: eth0
           type: mgmt
-          VNFC: TOS-VNF1-VM
+          VNFC: TESTVIM-VNF1-VM
           local_iface_name: eth0
         - name: PF0
           type: data
-          VNFC: TOS-VNF1-VM
+          VNFC: TESTVIM-VNF1-VM
           local_iface_name: PF0
         - name: VF0
           type: data
-          VNFC: TOS-VNF1-VM
+          VNFC: TESTVIM-VNF1-VM
           local_iface_name: VF0
         VNFC: 
-        - name: TOS-VNF1-VM
-          VNFC image: $OS_TEST_IMAGE_PATH_LINUXDATA
+        - name: TESTVIM-VNF1-VM
+          VNFC image: $VIM_TEST_IMAGE_PATH_NFV
           numas:
           - paired-threads: 2
             paired-threads-id: [ [0,2], [1,3] ]
@@ -219,13 +229,13 @@ then
     echo $vnf
  
     printf "%-50s" "Creating VNF 'dataplaneVNF_2VMs': "
-    result=`openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF_2VMs.yaml "--image-path=$OS_TEST_IMAGE_PATH_LINUXDATA,$OS_TEST_IMAGE_PATH_LINUXDATA"`
+    result=`openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF_2VMs.yaml "--image-path=$VIM_TEST_IMAGE_PATH_NFV,$VIM_TEST_IMAGE_PATH_NFV"`
     vnf=`echo $result |gawk '{print $1}'`
     ! is_valid_uuid $vnf && echo FAIL && echo "    $result" && $_exit 1
     echo $vnf
  
     printf "%-50s" "Creating VNF 'dataplaneVNF3.yaml': "
-    result=`openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF3.yaml "--image-path=$OS_TEST_IMAGE_PATH_LINUXDATA"`
+    result=`openmano vnf-create $DIRmano/vnfs/examples/dataplaneVNF3.yaml "--image-path=$VIM_TEST_IMAGE_PATH_NFV"`
     vnf=`echo $result |gawk '{print $1}'`
     ! is_valid_uuid $vnf && echo FAIL && echo "    $result" && $_exit 1
     echo $vnf

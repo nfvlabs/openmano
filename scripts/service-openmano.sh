@@ -76,7 +76,7 @@ done
  
 for om_component in $om_list
 do
-    [ "${om_component}" == "flow" ] && om_cmd="floodlight.jar" && om_name="floodlight" && om_dir=$FLOODLIGHT_PATH
+    [ "${om_component}" == "flow" ] && om_cmd="floodlight.jar" && om_name="floodlight" && om_dir="$FLOODLIGHT_PATH"
     [ "${om_component}" == "vim" ]  && om_cmd="openvimd.py"    && om_name="openvim   " && om_dir=$(readlink -f ${DIR_OM}/openvim)
     [ "${om_component}" == "mano" ] && om_cmd="openmanod.py"   && om_name="openmano  " && om_dir=$(readlink -f ${DIR_OM}/openmano)
     #obtain PID of program
@@ -115,14 +115,14 @@ do
         echo -n "    starting $om_name ... "
         if ! screen -wipe | grep -Fq .${om_component}
         then
-            pushd ${om_dir} > /dev/null
+            pushd "${om_dir}" > /dev/null
             screen -dmS ${om_component}  bash
             sleep 1
             popd > /dev/null
         else
             echo -n " using existing screen '${om_component}' ... "
             screen -S ${om_component} -p 0 -X log off
-            screen -S ${om_component} -p 0 -X stuff "cd ${om_dir}\n"
+            screen -S ${om_component} -p 0 -X stuff "cd '${om_dir}'\n"
             sleep 1
         fi
         #move old log file index one number up and log again in index 0
