@@ -445,7 +445,6 @@ function downgrade_from_7(){
     for table in datacenters datacenter_nets instance_nets instance_scenarios instance_vms instance_vnfs interfaces nets nfvo_tenants scenarios sce_interfaces sce_nets sce_vnfs tenants_datacenters vim_tenants vms vnfs uuids
     do
          echo -en "        $table               \r"
-         echo "ALTER TABLE $table ADD COLUMN created_at_ DOUBLE NOT NULL after created_at;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
          echo "ALTER TABLE $table ADD COLUMN created_at_ TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP after created_at;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
          echo "UPDATE $table SET created_at_=from_unixtime(created_at);" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
          echo "ALTER TABLE $table DROP COLUMN created_at, CHANGE COLUMN created_at_ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;" | $DBCMD || ! echo "ERROR. Aborted!" || exit -1
