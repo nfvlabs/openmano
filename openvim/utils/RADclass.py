@@ -945,7 +945,7 @@ def get_memory_information(ssh_conn, virsh_conn, memory_nodes):
 
             elif entry.get("name") == 'bank_locator':
                 locator = entry.text
-                pos = locator.find("NODE ")
+                pos = max(locator.find("NODE "), locator.find("BANK "), locator.find("CHANNEL "))
                 if pos >= 0 and len(locator)>pos+5:
                     if locator[pos+5] in ("01234567"): #len("NODE ") is 5
                         node_id = int(locator[pos+5])
