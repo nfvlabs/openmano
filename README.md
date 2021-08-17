@@ -2,7 +2,7 @@ _**This page is obsolete.**_
 
 _**The project OpenMANO has been contributed to the open source community project Open Source MANO (OSM), hosted by ETSI.**_
 
-_**Go to the URL [osm.etsi.org](osm.etsi.org) to know more about OSM.**_
+_**Go to the URL [osm.etsi.org](https://osm.etsi.org) to know more about OSM.**_
 
 ***
 
